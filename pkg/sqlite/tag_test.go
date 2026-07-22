@@ -1,0 +1,1880 @@
+//go:build integration
+// +build integration
+
+package sqlite_test
+
+import (
+	"context"
+	"fmt"
+	"math"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/stashapp/stash/pkg/models"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestMarkerFindBySceneMarkerID(t *testing.T) {
+	withTxn(func(ctx context.Context) error {
+		tqb := db.Tag
+
+		markerID := markerIDs[markerIdxWithTag]
+
+		tags, err := tqb.FindBySceneMarkerID(ctx, markerID)
+
+		if err != nil {
+			t.Errorf("Error finding tags: %s", err.Error())
+		}
+
+		assert.Len(t, tags, 1)
+		assert.Equal(t, tagIDs[tagIdxWithMarkers], tags[0].ID)
+
+		tags, err = tqb.FindBySceneMarkerID(ctx, 0)
+
+		if err != nil {
+			t.Errorf("Error finding tags: %s", err.Error())
+		}
+
+		assert.Len(t, tags, 0)
+
+		return nil
+	})
+}
+
+func TestTagFindByGroupID(t *testing.T) {
+	withTxn(func(ctx context.Context) error {
+		tqb := db.Tag
+
+		groupID := groupIDs[groupIdxWithTag]
+
+		tags, err := tqb.FindByGroupID(ctx, groupID)
+
+		if err != nil {
+			t.Errorf("Error finding tags: %s", err.Error())
+		}
+
+		assert.Len(t, tags, 1)
+		assert.Equal(t, tagIDs[tagIdxWithGroup], tags[0].ID)
+
+		tags, err = tqb.FindByGroupID(ctx, 0)
+
+		if err != nil {
+			t.Errorf("Error finding tags: %s", err.Error())
+		}
+
+		assert.Len(t, tags, 0)
+
+		return nil
+	})
+}
+
+func TestTagFindByName(t *testing.T) {
+	withTxn(func(ctx context.Context) error {
+		tqb := db.Tag
+
+		name := tagNames[tagIdxWithScene] // find a tag by name
+
+		tag, err := tqb.FindByName(ctx, name, false)
+
+		if err != nil {
+			t.Errorf("Error finding tags: %s", err.Error())
+		}
+
+		assert.Equal(t, tagNames[tagIdxWithScene], tag.Name)
+
+		name = strings.ToUpper(tagNames[tagIdx2WithNothing]) // find a tag by name nocase
+
+		tag, err = tqb.FindByName(ctx, name, true)
+
+		if err != nil {
+			t.Errorf("Error finding tags: %s", err.Error())
+		}
+		//tag.Name should match with tagIdxWithScene since its ID is before tagIdxWithDupName
+		assert.Equal(t, tagNames[tagIdx2WithNothing], tag.Name)
+
+		return nil
+	})
+}
+
+func TestTagFindByAlias(t *testing.T) {
+	withTxn(func(ctx context.Context) error {
+		tqb := db.Tag
+
+		alias := getTagStringValue(tagIdxWithScene, "Alias")
+
+		tag, err := tqb.FindByAlias(ctx, alias, false)
+
+		if err != nil {
+			t.Errorf("Error finding tags: %s", err.Error())
+		}
+
+		assert.Equal(t, tagIDs[tagIdxWithScene], tag.ID)
+
+		return nil
+	})
+}
+
+func TestTagQueryIgnoreAutoTag(t *testing.T) {
+	withTxn(func(ctx context.Context) error {
+		ignoreAutoTag := true
+		tagFilter := models.TagFilterType{
+			IgnoreAutoTag: &ignoreAutoTag,
+		}
+
+		sqb := db.Tag
+
+		tags := queryTags(ctx, t, sqb, &tagFilter, nil)
+
+		assert.Len(t, tags, int(math.Ceil(float64(totalTags)/5)))
+		for _, s := range tags {
+			assert.True(t, s.IgnoreAutoTag)
+		}
+
+		return nil
+	})
+}
+
+func TestTagQueryForAutoTag(t *testing.T) {
+	withTxn(func(ctx context.Context) error {
+		tqb := db.Tag
+
+		name := tagNames[tagIdx1WithScene] // find a tag by name
+
+		tags, err := tqb.QueryForAutoTag(ctx, []string{name})
+
+		if err != nil {
+			t.Errorf("Error finding tags: %s", err.Error())
+		}
+
+		assert.Len(t, tags, 1)
+		lcName := tagNames[tagIdx1WithScene]
+		assert.Equal(t, strings.ToLower(lcName), strings.ToLower(tags[0].Name))
+
+		// find by alias
+		name = getTagStringValue(tagIdx1WithScene, "Alias")
+		tags, err = tqb.QueryForAutoTag(ctx, []string{name})
+
+		if err != nil {
+			t.Errorf("Error finding tags: %s", err.Error())
+		}
+
+		assert.Len(t, tags, 1)
+		assert.Equal(t, tagIDs[tagIdx1WithScene], tags[0].ID)
+
+		return nil
+	})
+}
+
+func TestTagFindByNames(t *testing.T) {
+	var names []string
+
+	withTxn(func(ctx context.Context) error {
+		tqb := db.Tag
+
+		names = append(names, tagNames[tagIdxWithScene]) // find tags by names
+
+		tags, err := tqb.FindByNames(ctx, names, false)
+		if err != nil {
+			t.Errorf("Error finding tags: %s", err.Error())
+		}
+		assert.Len(t, tags, 1)
+		assert.Equal(t, tagNames[tagIdxWithScene], tags[0].Name)
+
+		tags, err = tqb.FindByNames(ctx, names, true) // find tags by names nocase
+		if err != nil {
+			t.Errorf("Error finding tags: %s", err.Error())
+		}
+		assert.Len(t, tags, 1) // tagIdxWithScene
+		assert.Equal(t, strings.ToLower(tagNames[tagIdxWithScene]), strings.ToLower(tags[0].Name))
+
+		names = append(names, tagNames[tagIdx1WithScene]) // find tags by names ( 2 names )
+
+		tags, err = tqb.FindByNames(ctx, names, false)
+		if err != nil {
+			t.Errorf("Error finding tags: %s", err.Error())
+		}
+		assert.Len(t, tags, 2) // tagIdxWithScene and tagIdx1WithScene
+		assert.Equal(t, tagNames[tagIdxWithScene], tags[0].Name)
+		assert.Equal(t, tagNames[tagIdx1WithScene], tags[1].Name)
+
+		tags, err = tqb.FindByNames(ctx, names, true) // find tags by names ( 2 names nocase)
+		if err != nil {
+			t.Errorf("Error finding tags: %s", err.Error())
+		}
+		assert.Len(t, tags, 2) // tagIdxWithScene and tagIdx1WithScene
+		assert.Equal(t, tagNames[tagIdxWithScene], tags[0].Name)
+		assert.Equal(t, tagNames[tagIdx1WithScene], tags[1].Name)
+
+		return nil
+	})
+}
+
+func TestTagQuerySort(t *testing.T) {
+	withTxn(func(ctx context.Context) error {
+		sqb := db.Tag
+
+		sortBy := "scenes_count"
+		dir := models.SortDirectionEnumDesc
+		findFilter := &models.FindFilterType{
+			Sort:      &sortBy,
+			Direction: &dir,
+		}
+
+		tags := queryTags(ctx, t, sqb, nil, findFilter)
+		assert := assert.New(t)
+		assert.Equal(tagIDs[tagIdx2WithScene], tags[0].ID)
+
+		sortBy = "scene_markers_count"
+		tags = queryTags(ctx, t, sqb, nil, findFilter)
+		assert.Equal(tagIDs[tagIdxWithPrimaryMarkers], tags[0].ID)
+
+		sortBy = "images_count"
+		tags = queryTags(ctx, t, sqb, nil, findFilter)
+		assert.Equal(tagIDs[tagIdx1WithImage], tags[0].ID)
+
+		sortBy = "galleries_count"
+		tags = queryTags(ctx, t, sqb, nil, findFilter)
+		assert.Equal(tagIDs[tagIdx1WithGallery], tags[0].ID)
+
+		sortBy = "performers_count"
+		tags = queryTags(ctx, t, sqb, nil, findFilter)
+		assert.Equal(tagIDs[tagIdx2WithPerformer], tags[0].ID)
+
+		sortBy = "studios_count"
+		tags = queryTags(ctx, t, sqb, nil, findFilter)
+		assert.Equal(tagIDs[tagIdx2WithStudio], tags[0].ID)
+
+		sortBy = "movies_count"
+		tags = queryTags(ctx, t, sqb, nil, findFilter)
+		assert.Equal(tagIDs[tagIdx1WithGroup], tags[0].ID)
+
+		return nil
+	})
+}
+
+func TestTagQueryName(t *testing.T) {
+	const tagIdx = 1
+	tagName := getSceneStringValue(tagIdx, "Name")
+
+	nameCriterion := &models.StringCriterionInput{
+		Value:    tagName,
+		Modifier: models.CriterionModifierEquals,
+	}
+
+	tagFilter := &models.TagFilterType{
+		Name: nameCriterion,
+	}
+
+	verifyFn := func(ctx context.Context, tag *models.Tag) {
+		verifyString(t, tag.Name, *nameCriterion)
+	}
+
+	verifyTagQuery(t, tagFilter, nil, verifyFn)
+
+	nameCriterion.Modifier = models.CriterionModifierNotEquals
+	verifyTagQuery(t, tagFilter, nil, verifyFn)
+
+	nameCriterion.Modifier = models.CriterionModifierMatchesRegex
+	nameCriterion.Value = "tag_.*1_Name"
+	verifyTagQuery(t, tagFilter, nil, verifyFn)
+
+	nameCriterion.Modifier = models.CriterionModifierNotMatchesRegex
+	verifyTagQuery(t, tagFilter, nil, verifyFn)
+}
+
+func TestTagQueryAlias(t *testing.T) {
+	const tagIdx = 1
+	tagName := getSceneStringValue(tagIdx, "Alias")
+
+	aliasCriterion := &models.StringCriterionInput{
+		Value:    tagName,
+		Modifier: models.CriterionModifierEquals,
+	}
+
+	tagFilter := &models.TagFilterType{
+		Aliases: aliasCriterion,
+	}
+
+	verifyFn := func(ctx context.Context, tag *models.Tag) {
+		aliases, err := db.Tag.GetAliases(ctx, tag.ID)
+		if err != nil {
+			t.Errorf("Error querying tags: %s", err.Error())
+		}
+
+		var alias string
+		if len(aliases) > 0 {
+			alias = aliases[0]
+		}
+
+		verifyString(t, alias, *aliasCriterion)
+	}
+
+	verifyTagQuery(t, tagFilter, nil, verifyFn)
+
+	aliasCriterion.Modifier = models.CriterionModifierNotEquals
+	verifyTagQuery(t, tagFilter, nil, verifyFn)
+
+	aliasCriterion.Modifier = models.CriterionModifierMatchesRegex
+	aliasCriterion.Value = "tag_.*1_Alias"
+	verifyTagQuery(t, tagFilter, nil, verifyFn)
+
+	aliasCriterion.Modifier = models.CriterionModifierNotMatchesRegex
+	verifyTagQuery(t, tagFilter, nil, verifyFn)
+
+	aliasCriterion.Modifier = models.CriterionModifierIsNull
+	aliasCriterion.Value = ""
+	verifyTagQuery(t, tagFilter, nil, verifyFn)
+
+	aliasCriterion.Modifier = models.CriterionModifierNotNull
+	verifyTagQuery(t, tagFilter, nil, verifyFn)
+}
+
+func verifyTagQuery(t *testing.T, tagFilter *models.TagFilterType, findFilter *models.FindFilterType, verifyFn func(ctx context.Context, t *models.Tag)) {
+	withTxn(func(ctx context.Context) error {
+		sqb := db.Tag
+
+		tags := queryTags(ctx, t, sqb, tagFilter, findFilter)
+
+		for _, tag := range tags {
+			verifyFn(ctx, tag)
+		}
+
+		return nil
+	})
+}
+
+func queryTags(ctx context.Context, t *testing.T, qb models.TagReader, tagFilter *models.TagFilterType, findFilter *models.FindFilterType) []*models.Tag {
+	t.Helper()
+	tags, _, err := qb.Query(ctx, tagFilter, findFilter)
+	if err != nil {
+		t.Errorf("Error querying tags: %s", err.Error())
+	}
+
+	return tags
+}
+
+func tagsToIDs(i []*models.Tag) []int {
+	ret := make([]int, len(i))
+	for i, v := range i {
+		ret[i] = v.ID
+	}
+
+	return ret
+}
+
+func TestTagQuery(t *testing.T) {
+	var (
+		endpoint = tagStashID(tagIdxWithPerformer).Endpoint
+		stashID  = tagStashID(tagIdxWithPerformer).StashID
+		stashID2 = tagStashID(tagIdx1WithPerformer).StashID
+		stashIDs = []*string{&stashID, &stashID2}
+	)
+
+	tests := []struct {
+		name        string
+		findFilter  *models.FindFilterType
+		filter      *models.TagFilterType
+		includeIdxs []int
+		excludeIdxs []int
+		wantErr     bool
+	}{
+		{
+			"stash id with endpoint",
+			nil,
+			&models.TagFilterType{
+				StashIDEndpoint: &models.StashIDCriterionInput{
+					Endpoint: &endpoint,
+					StashID:  &stashID,
+					Modifier: models.CriterionModifierEquals,
+				},
+			},
+			[]int{tagIdxWithPerformer},
+			nil,
+			false,
+		},
+		{
+			"exclude stash id with endpoint",
+			nil,
+			&models.TagFilterType{
+				StashIDEndpoint: &models.StashIDCriterionInput{
+					Endpoint: &endpoint,
+					StashID:  &stashID,
+					Modifier: models.CriterionModifierNotEquals,
+				},
+			},
+			nil,
+			[]int{tagIdxWithPerformer},
+			false,
+		},
+		{
+			"null stash id with endpoint",
+			nil,
+			&models.TagFilterType{
+				StashIDEndpoint: &models.StashIDCriterionInput{
+					Endpoint: &endpoint,
+					Modifier: models.CriterionModifierIsNull,
+				},
+			},
+			nil,
+			[]int{tagIdxWithPerformer},
+			false,
+		},
+		{
+			"not null stash id with endpoint",
+			nil,
+			&models.TagFilterType{
+				StashIDEndpoint: &models.StashIDCriterionInput{
+					Endpoint: &endpoint,
+					Modifier: models.CriterionModifierNotNull,
+				},
+			},
+			[]int{tagIdxWithPerformer},
+			nil,
+			false,
+		},
+		{
+			"stash ids with endpoint",
+			nil,
+			&models.TagFilterType{
+				StashIDsEndpoint: &models.StashIDsCriterionInput{
+					Endpoint: &endpoint,
+					StashIDs: stashIDs,
+					Modifier: models.CriterionModifierEquals,
+				},
+			},
+			[]int{tagIdxWithPerformer, tagIdx1WithPerformer},
+			nil,
+			false,
+		},
+		{
+			"exclude stash ids with endpoint",
+			nil,
+			&models.TagFilterType{
+				StashIDsEndpoint: &models.StashIDsCriterionInput{
+					Endpoint: &endpoint,
+					StashIDs: stashIDs,
+					Modifier: models.CriterionModifierNotEquals,
+				},
+			},
+			nil,
+			[]int{tagIdxWithPerformer, tagIdx1WithPerformer},
+			false,
+		},
+		{
+			"null stash ids with endpoint",
+			nil,
+			&models.TagFilterType{
+				StashIDsEndpoint: &models.StashIDsCriterionInput{
+					Endpoint: &endpoint,
+					Modifier: models.CriterionModifierIsNull,
+				},
+			},
+			nil,
+			[]int{tagIdxWithPerformer, tagIdx1WithPerformer},
+			false,
+		},
+		{
+			"not null stash ids with endpoint",
+			nil,
+			&models.TagFilterType{
+				StashIDsEndpoint: &models.StashIDsCriterionInput{
+					Endpoint: &endpoint,
+					Modifier: models.CriterionModifierNotNull,
+				},
+			},
+			[]int{tagIdxWithPerformer, tagIdx1WithPerformer},
+			nil,
+			false,
+		},
+		{
+			"match name or alias",
+			nil,
+			&models.TagFilterType{
+				OperatorFilter: models.OperatorFilter[models.TagFilterType]{
+					Or: &models.TagFilterType{
+						Aliases: &models.StringCriterionInput{
+							Value:    getTagStringValue(tagIdxWithChildTag, "Alias"),
+							Modifier: models.CriterionModifierEquals,
+						},
+					},
+				},
+				Name: &models.StringCriterionInput{
+					Value:    getTagStringValue(tagIdxWithScene, "Name"),
+					Modifier: models.CriterionModifierEquals,
+				},
+			},
+			[]int{tagIdxWithScene, tagIdxWithChildTag},
+			[]int{tagIdx2WithNothing},
+			false,
+		},
+	}
+
+	for _, tt := range tests {
+		runWithRollbackTxn(t, tt.name, func(t *testing.T, ctx context.Context) {
+			assert := assert.New(t)
+
+			tags, _, err := db.Tag.Query(ctx, tt.filter, tt.findFilter)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("PerformerStore.Query() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			ids := tagsToIDs(tags)
+			include := indexesToIDs(tagIDs, tt.includeIdxs)
+			exclude := indexesToIDs(tagIDs, tt.excludeIdxs)
+
+			for _, i := range include {
+				assert.Contains(ids, i)
+			}
+			for _, e := range exclude {
+				assert.NotContains(ids, e)
+			}
+		})
+	}
+}
+
+func TestTagQueryIsMissingImage(t *testing.T) {
+	withTxn(func(ctx context.Context) error {
+		qb := db.Tag
+		isMissing := "image"
+		tagFilter := models.TagFilterType{
+			IsMissing: &isMissing,
+		}
+
+		q := getTagStringValue(tagIdxWithCoverImage, "name")
+		findFilter := models.FindFilterType{
+			Q: &q,
+		}
+
+		tags, _, err := qb.Query(ctx, &tagFilter, &findFilter)
+		if err != nil {
+			t.Errorf("Error querying tag: %s", err.Error())
+		}
+
+		assert.Len(t, tags, 0)
+
+		findFilter.Q = nil
+		tags, _, err = qb.Query(ctx, &tagFilter, &findFilter)
+		if err != nil {
+			t.Errorf("Error querying tag: %s", err.Error())
+		}
+
+		// ensure non of the ids equal the one with image
+		for _, tag := range tags {
+			assert.NotEqual(t, tagIDs[tagIdxWithCoverImage], tag.ID)
+		}
+
+		return nil
+	})
+}
+
+func TestTagQueryCounts(t *testing.T) {
+	tests := []struct {
+		name        string
+		buildFilter models.TagFilterType
+		includeIdxs []int
+		excludeIdxs []int
+	}{
+		{
+			name:        "scene_count_equals_1",
+			buildFilter: models.TagFilterType{SceneCount: &models.HierarchicalCountInput{Value: 1, Modifier: models.CriterionModifierEquals}},
+			includeIdxs: []int{tagIdxWithScene},
+			excludeIdxs: []int{tagIdx1WithNothing, tagIdx1WithScene, tagIdx2WithScene, tagIdx3WithScene},
+		},
+		{
+			name: "scene_count_equals_1_depth_1",
+			buildFilter: models.TagFilterType{SceneCount: &models.HierarchicalCountInput{
+				Value:    1,
+				Modifier: models.CriterionModifierEquals,
+				Depth:    ptr(1),
+			}},
+			includeIdxs: []int{tagIdxWithScene, tagIdxWithParentTag, tagIdxWithChildTag, tagIdxWithParentAndChild, tagIdxWithGrandParent},
+			excludeIdxs: []int{tagIdx1WithNothing, tagIdx1WithScene, tagIdx2WithScene, tagIdx3WithScene},
+		},
+		{
+			name:        "marker_count_equals_2",
+			buildFilter: models.TagFilterType{MarkerCount: &models.HierarchicalCountInput{Value: 2, Modifier: models.CriterionModifierEquals}},
+			includeIdxs: []int{tagIdxWithMarkers, tagIdx2WithMarkers},
+			excludeIdxs: []int{tagIdxWithPrimaryMarkers, tagIdx1WithNothing, tagIdx2WithNothing},
+		},
+		{
+			name:        "image_count_equals_1",
+			buildFilter: models.TagFilterType{ImageCount: &models.HierarchicalCountInput{Value: 1, Modifier: models.CriterionModifierEquals}},
+			includeIdxs: []int{tagIdxWithImage, tagIdx3WithImage},
+			excludeIdxs: []int{tagIdx1WithImage, tagIdx2WithImage, tagIdxWithCoverImage, tagIdx1WithNothing, tagIdx2WithNothing},
+		},
+		{
+			name:        "gallery_count_equals_1",
+			buildFilter: models.TagFilterType{GalleryCount: &models.HierarchicalCountInput{Value: 1, Modifier: models.CriterionModifierEquals}},
+			includeIdxs: []int{tagIdxWithGallery, tagIdx3WithGallery},
+			excludeIdxs: []int{tagIdx1WithGallery, tagIdx2WithGallery, tagIdx1WithNothing, tagIdx2WithNothing},
+		},
+		{
+			name:        "performer_count_equals_1",
+			buildFilter: models.TagFilterType{PerformerCount: &models.HierarchicalCountInput{Value: 1, Modifier: models.CriterionModifierEquals}},
+			includeIdxs: []int{tagIdxWithPerformer, tagIdx1WithPerformer, tagIdxWithParentAndChild},
+			excludeIdxs: []int{tagIdx2WithPerformer, tagIdx1WithNothing, tagIdx2WithNothing},
+		},
+		{
+			name:        "studio_count_equals_1",
+			buildFilter: models.TagFilterType{StudioCount: &models.HierarchicalCountInput{Value: 1, Modifier: models.CriterionModifierEquals}},
+			includeIdxs: []int{tagIdxWithStudio, tagIdx1WithStudio},
+			excludeIdxs: []int{tagIdx2WithStudio, tagIdx1WithNothing, tagIdx2WithNothing},
+		},
+		{
+			name:        "parent_count_equals_1",
+			buildFilter: models.TagFilterType{ParentCount: &models.IntCriterionInput{Value: 1, Modifier: models.CriterionModifierEquals}},
+			includeIdxs: []int{tagIdxWithParentTag, tagIdxWithGrandParent, tagIdxWithParentAndChild},
+			excludeIdxs: []int{tagIdx1WithNothing, tagIdx2WithNothing},
+		},
+		{
+			name:        "child_count_equals_1",
+			buildFilter: models.TagFilterType{ChildCount: &models.IntCriterionInput{Value: 1, Modifier: models.CriterionModifierEquals}},
+			includeIdxs: []int{tagIdxWithChildTag, tagIdxWithGrandChild, tagIdxWithParentAndChild},
+			excludeIdxs: []int{tagIdx1WithNothing, tagIdx2WithNothing},
+		},
+		{
+			name: "scene_count_equals_1_depth_-1",
+			buildFilter: models.TagFilterType{SceneCount: &models.HierarchicalCountInput{
+				Value:    1,
+				Modifier: models.CriterionModifierEquals,
+				Depth:    ptr(-1),
+			}},
+			includeIdxs: []int{tagIdxWithScene, tagIdxWithChildTag, tagIdxWithParentTag, tagIdxWithGrandChild, tagIdxWithParentAndChild, tagIdxWithGrandParent},
+			excludeIdxs: []int{tagIdx1WithScene, tagIdx2WithScene, tagIdx3WithScene},
+		},
+		{
+			name: "image_count_equals_1_depth_1",
+			buildFilter: models.TagFilterType{ImageCount: &models.HierarchicalCountInput{
+				Value:    1,
+				Modifier: models.CriterionModifierEquals,
+				Depth:    ptr(1),
+			}},
+			includeIdxs: []int{tagIdxWithImage, tagIdx3WithImage, tagIdxWithParentAndChild, tagIdxWithGrandParent},
+			excludeIdxs: []int{tagIdx1WithImage, tagIdx2WithImage},
+		},
+		{
+			name: "image_count_equals_1_depth_-1",
+			buildFilter: models.TagFilterType{ImageCount: &models.HierarchicalCountInput{
+				Value:    1,
+				Modifier: models.CriterionModifierEquals,
+				Depth:    ptr(-1),
+			}},
+			includeIdxs: []int{tagIdxWithImage, tagIdx3WithImage, tagIdxWithGrandChild, tagIdxWithParentAndChild, tagIdxWithGrandParent},
+			excludeIdxs: []int{tagIdx1WithImage, tagIdx2WithImage},
+		},
+		{
+			name: "gallery_count_equals_1_depth_1",
+			buildFilter: models.TagFilterType{GalleryCount: &models.HierarchicalCountInput{
+				Value:    1,
+				Modifier: models.CriterionModifierEquals,
+				Depth:    ptr(1),
+			}},
+			includeIdxs: []int{tagIdxWithGallery, tagIdx3WithGallery, tagIdxWithParentAndChild, tagIdxWithGrandParent},
+			excludeIdxs: []int{tagIdx1WithGallery, tagIdx2WithGallery},
+		},
+		{
+			name: "gallery_count_equals_1_depth_-1",
+			buildFilter: models.TagFilterType{GalleryCount: &models.HierarchicalCountInput{
+				Value:    1,
+				Modifier: models.CriterionModifierEquals,
+				Depth:    ptr(-1),
+			}},
+			includeIdxs: []int{tagIdxWithGallery, tagIdx3WithGallery, tagIdxWithGrandChild, tagIdxWithParentAndChild, tagIdxWithGrandParent},
+			excludeIdxs: []int{tagIdx1WithGallery, tagIdx2WithGallery},
+		},
+		{
+			name: "performer_count_equals_1_depth_1",
+			buildFilter: models.TagFilterType{PerformerCount: &models.HierarchicalCountInput{
+				Value:    1,
+				Modifier: models.CriterionModifierEquals,
+				Depth:    ptr(1),
+			}},
+			includeIdxs: []int{tagIdxWithPerformer, tagIdx1WithPerformer, tagIdxWithGrandChild, tagIdxWithParentAndChild},
+			excludeIdxs: []int{tagIdx2WithPerformer},
+		},
+		{
+			name: "performer_count_equals_1_depth_-1",
+			buildFilter: models.TagFilterType{PerformerCount: &models.HierarchicalCountInput{
+				Value:    1,
+				Modifier: models.CriterionModifierEquals,
+				Depth:    ptr(-1),
+			}},
+			includeIdxs: []int{tagIdxWithPerformer, tagIdx1WithPerformer, tagIdxWithGrandChild, tagIdxWithParentAndChild},
+			excludeIdxs: []int{tagIdx2WithPerformer},
+		},
+		{
+			name: "marker_count_equals_1_depth_1",
+			buildFilter: models.TagFilterType{MarkerCount: &models.HierarchicalCountInput{
+				Value:    1,
+				Modifier: models.CriterionModifierEquals,
+				Depth:    ptr(1),
+			}},
+			includeIdxs: []int{tagIdxWithParentAndChild, tagIdxWithGrandParent},
+			excludeIdxs: []int{tagIdxWithPrimaryMarkers, tagIdxWithMarkers, tagIdx2WithMarkers},
+		},
+		{
+			name: "marker_count_equals_1_depth_-1",
+			buildFilter: models.TagFilterType{MarkerCount: &models.HierarchicalCountInput{
+				Value:    1,
+				Modifier: models.CriterionModifierEquals,
+				Depth:    ptr(-1),
+			}},
+			includeIdxs: []int{tagIdxWithGrandChild, tagIdxWithParentAndChild, tagIdxWithGrandParent},
+			excludeIdxs: []int{tagIdxWithPrimaryMarkers, tagIdxWithMarkers, tagIdx2WithMarkers},
+		},
+		{
+			name: "group_count_equals_1_depth_1",
+			buildFilter: models.TagFilterType{GroupCount: &models.HierarchicalCountInput{
+				Value:    1,
+				Modifier: models.CriterionModifierEquals,
+				Depth:    ptr(1),
+			}},
+			includeIdxs: []int{tagIdxWithGroup, tagIdx3WithGroup, tagIdxWithParentAndChild, tagIdxWithGrandParent},
+			excludeIdxs: []int{tagIdx1WithGroup, tagIdx2WithGroup},
+		},
+		{
+			name: "group_count_equals_1_depth_-1",
+			buildFilter: models.TagFilterType{GroupCount: &models.HierarchicalCountInput{
+				Value:    1,
+				Modifier: models.CriterionModifierEquals,
+				Depth:    ptr(-1),
+			}},
+			includeIdxs: []int{tagIdxWithGroup, tagIdx3WithGroup, tagIdxWithGrandChild, tagIdxWithParentAndChild, tagIdxWithGrandParent},
+			excludeIdxs: []int{tagIdx1WithGroup, tagIdx2WithGroup},
+		},
+	}
+
+	for _, tt := range tests {
+		runWithRollbackTxn(t, tt.name, func(t *testing.T, ctx context.Context) {
+			qb := db.Tag
+			tagFilter := &tt.buildFilter
+
+			tags, _, err := qb.Query(ctx, tagFilter, nil)
+			if err != nil {
+				t.Fatalf("%s: Error querying tag: %v", tt.name, err)
+			}
+
+			ids := tagsToIDs(tags)
+			include := indexesToIDs(tagIDs, tt.includeIdxs)
+			exclude := indexesToIDs(tagIDs, tt.excludeIdxs)
+
+			for _, id := range include {
+				assert.Contains(t, ids, id, "%s: expected id %d to be included", tt.name, id)
+			}
+
+			for _, id := range exclude {
+				assert.NotContains(t, ids, id, "%s: expected id %d to be excluded", tt.name, id)
+			}
+		})
+	}
+}
+
+func TestTagQueryParent(t *testing.T) {
+	withTxn(func(ctx context.Context) error {
+		const nameField = "Name"
+		sqb := db.Tag
+		tagCriterion := models.HierarchicalMultiCriterionInput{
+			Value: []string{
+				strconv.Itoa(tagIDs[tagIdxWithChildTag]),
+			},
+			Modifier: models.CriterionModifierIncludes,
+		}
+
+		tagFilter := models.TagFilterType{
+			Parents: &tagCriterion,
+		}
+
+		tags := queryTags(ctx, t, sqb, &tagFilter, nil)
+
+		assert.Len(t, tags, 1)
+
+		// ensure id is correct
+		assert.Equal(t, tagIDs[tagIdxWithParentTag], tags[0].ID)
+
+		tagCriterion.Modifier = models.CriterionModifierExcludes
+
+		q := getTagStringValue(tagIdxWithParentTag, nameField)
+		findFilter := models.FindFilterType{
+			Q: &q,
+		}
+
+		tags = queryTags(ctx, t, sqb, &tagFilter, &findFilter)
+		assert.Len(t, tags, 0)
+
+		depth := -1
+
+		tagCriterion = models.HierarchicalMultiCriterionInput{
+			Value: []string{
+				strconv.Itoa(tagIDs[tagIdxWithGrandChild]),
+			},
+			Modifier: models.CriterionModifierIncludes,
+			Depth:    &depth,
+		}
+
+		tags = queryTags(ctx, t, sqb, &tagFilter, nil)
+		assert.Len(t, tags, 2)
+
+		depth = 1
+
+		tags = queryTags(ctx, t, sqb, &tagFilter, nil)
+		assert.Len(t, tags, 2)
+
+		tagCriterion = models.HierarchicalMultiCriterionInput{
+			Modifier: models.CriterionModifierIsNull,
+		}
+		q = getTagStringValue(tagIdxWithGallery, nameField)
+
+		tags = queryTags(ctx, t, sqb, &tagFilter, &findFilter)
+		assert.Len(t, tags, 1)
+		assert.Equal(t, tagIDs[tagIdxWithGallery], tags[0].ID)
+
+		q = getTagStringValue(tagIdxWithParentTag, nameField)
+		tags = queryTags(ctx, t, sqb, &tagFilter, &findFilter)
+		assert.Len(t, tags, 0)
+
+		tagCriterion.Modifier = models.CriterionModifierNotNull
+
+		tags = queryTags(ctx, t, sqb, &tagFilter, &findFilter)
+		assert.Len(t, tags, 1)
+		assert.Equal(t, tagIDs[tagIdxWithParentTag], tags[0].ID)
+
+		q = getTagStringValue(tagIdxWithGallery, nameField)
+		tags = queryTags(ctx, t, sqb, &tagFilter, &findFilter)
+		assert.Len(t, tags, 0)
+
+		return nil
+	})
+}
+
+func TestTagQueryChild(t *testing.T) {
+	withTxn(func(ctx context.Context) error {
+		const nameField = "Name"
+
+		sqb := db.Tag
+		tagCriterion := models.HierarchicalMultiCriterionInput{
+			Value: []string{
+				strconv.Itoa(tagIDs[tagIdxWithParentTag]),
+			},
+			Modifier: models.CriterionModifierIncludes,
+		}
+
+		tagFilter := models.TagFilterType{
+			Children: &tagCriterion,
+		}
+
+		tags := queryTags(ctx, t, sqb, &tagFilter, nil)
+
+		assert.Len(t, tags, 1)
+
+		// ensure id is correct
+		assert.Equal(t, sceneIDs[tagIdxWithChildTag], tags[0].ID)
+
+		tagCriterion.Modifier = models.CriterionModifierExcludes
+
+		q := getTagStringValue(tagIdxWithChildTag, nameField)
+		findFilter := models.FindFilterType{
+			Q: &q,
+		}
+
+		tags = queryTags(ctx, t, sqb, &tagFilter, &findFilter)
+		assert.Len(t, tags, 0)
+
+		depth := -1
+
+		tagCriterion = models.HierarchicalMultiCriterionInput{
+			Value: []string{
+				strconv.Itoa(tagIDs[tagIdxWithGrandParent]),
+			},
+			Modifier: models.CriterionModifierIncludes,
+			Depth:    &depth,
+		}
+
+		tags = queryTags(ctx, t, sqb, &tagFilter, nil)
+		assert.Len(t, tags, 2)
+
+		depth = 1
+
+		tags = queryTags(ctx, t, sqb, &tagFilter, nil)
+		assert.Len(t, tags, 2)
+
+		tagCriterion = models.HierarchicalMultiCriterionInput{
+			Modifier: models.CriterionModifierIsNull,
+		}
+		q = getTagStringValue(tagIdxWithGallery, nameField)
+
+		tags = queryTags(ctx, t, sqb, &tagFilter, &findFilter)
+		assert.Len(t, tags, 1)
+		assert.Equal(t, tagIDs[tagIdxWithGallery], tags[0].ID)
+
+		q = getTagStringValue(tagIdxWithChildTag, nameField)
+		tags = queryTags(ctx, t, sqb, &tagFilter, &findFilter)
+		assert.Len(t, tags, 0)
+
+		tagCriterion.Modifier = models.CriterionModifierNotNull
+
+		tags = queryTags(ctx, t, sqb, &tagFilter, &findFilter)
+		assert.Len(t, tags, 1)
+		assert.Equal(t, tagIDs[tagIdxWithChildTag], tags[0].ID)
+
+		q = getTagStringValue(tagIdxWithGallery, nameField)
+		tags = queryTags(ctx, t, sqb, &tagFilter, &findFilter)
+		assert.Len(t, tags, 0)
+
+		return nil
+	})
+}
+
+func TestTagUpdateTagImage(t *testing.T) {
+	if err := withTxn(func(ctx context.Context) error {
+		qb := db.Tag
+
+		// create tag to test against
+		const name = "TestTagUpdateTagImage"
+		tag := models.CreateTagInput{
+			Tag: &models.Tag{
+				Name: name,
+			},
+		}
+		err := qb.Create(ctx, &tag)
+		if err != nil {
+			return fmt.Errorf("Error creating tag: %s", err.Error())
+		}
+
+		return testUpdateImage(t, ctx, tag.ID, qb.UpdateImage, qb.GetImage)
+	}); err != nil {
+		t.Error(err.Error())
+	}
+}
+
+func TestTagUpdateAlias(t *testing.T) {
+	if err := withTxn(func(ctx context.Context) error {
+		qb := db.Tag
+
+		// create tag to test against
+		const name = "TestTagUpdateAlias"
+		tag := models.CreateTagInput{
+			Tag: &models.Tag{
+				Name: name,
+			},
+		}
+		err := qb.Create(ctx, &tag)
+		if err != nil {
+			return fmt.Errorf("Error creating tag: %s", err.Error())
+		}
+
+		aliases := []string{"updatedAlias1", "updatedAlias2"}
+		err = qb.UpdateAliases(ctx, tag.ID, aliases)
+		if err != nil {
+			return fmt.Errorf("Error updating tag aliases: %s", err.Error())
+		}
+
+		// ensure aliases set
+		storedAliases, err := qb.GetAliases(ctx, tag.ID)
+		if err != nil {
+			return fmt.Errorf("Error getting aliases: %s", err.Error())
+		}
+		assert.Equal(t, aliases, storedAliases)
+
+		return nil
+	}); err != nil {
+		t.Error(err.Error())
+	}
+}
+
+func TestTagStashIDs(t *testing.T) {
+	if err := withTxn(func(ctx context.Context) error {
+		qb := db.Tag
+
+		// create tag to test against
+		const name = "TestTagStashIDs"
+		tag := models.CreateTagInput{
+			Tag: &models.Tag{
+				Name: name,
+			},
+		}
+		err := qb.Create(ctx, &tag)
+		if err != nil {
+			return fmt.Errorf("Error creating tag: %s", err.Error())
+		}
+
+		testStashIDReaderWriter(ctx, t, qb, tag.ID)
+
+		return nil
+	}); err != nil {
+		t.Error(err.Error())
+	}
+}
+
+func TestTagFindByStashID(t *testing.T) {
+	withTxn(func(ctx context.Context) error {
+		qb := db.Tag
+
+		// create tag to test against
+		const name = "TestTagFindByStashID"
+		const stashID = "stashid"
+		const endpoint = "endpoint"
+		tag := models.CreateTagInput{
+			Tag: &models.Tag{
+				Name:     name,
+				StashIDs: models.NewRelatedStashIDs([]models.StashID{{StashID: stashID, Endpoint: endpoint}}),
+			},
+		}
+		err := qb.Create(ctx, &tag)
+		if err != nil {
+			return fmt.Errorf("Error creating tag: %s", err.Error())
+		}
+
+		// find by stash ID
+		tags, err := qb.FindByStashID(ctx, models.StashID{StashID: stashID, Endpoint: endpoint})
+		if err != nil {
+			return fmt.Errorf("Error finding by stash ID: %s", err.Error())
+		}
+
+		assert.Len(t, tags, 1)
+		assert.Equal(t, tag.ID, tags[0].ID)
+
+		// find by non-existent stash ID
+		tags, err = qb.FindByStashID(ctx, models.StashID{StashID: "nonexistent", Endpoint: endpoint})
+		if err != nil {
+			return fmt.Errorf("Error finding by stash ID: %s", err.Error())
+		}
+
+		assert.Len(t, tags, 0)
+
+		return nil
+	})
+}
+
+func TestTagMerge(t *testing.T) {
+	assert := assert.New(t)
+
+	// merge tests - perform these in a transaction that we'll rollback
+	if err := withRollbackTxn(func(ctx context.Context) error {
+		qb := db.Tag
+		mqb := db.SceneMarker
+
+		// try merging into same tag
+		err := qb.Merge(ctx, []int{tagIDs[tagIdx1WithScene]}, tagIDs[tagIdx1WithScene])
+		assert.NotNil(err)
+
+		// merge everything into tagIdxWithScene
+		srcIdxs := []int{
+			tagIdx1WithScene,
+			tagIdx2WithScene,
+			tagIdxWithPrimaryMarkers,
+			tagIdxWithMarkers,
+			tagIdxWithCoverImage,
+			tagIdxWithImage,
+			tagIdx1WithImage,
+			tagIdx2WithImage,
+			tagIdxWithPerformer,
+			tagIdx1WithPerformer,
+			tagIdx2WithPerformer,
+			tagIdxWithStudio,
+			tagIdx1WithStudio,
+			tagIdx2WithStudio,
+			tagIdxWithGallery,
+			tagIdx1WithGallery,
+			tagIdx2WithGallery,
+			tagIdx1WithGroup,
+			tagIdx2WithGroup,
+		}
+		var srcIDs []int
+		for _, idx := range srcIdxs {
+			srcIDs = append(srcIDs, tagIDs[idx])
+		}
+
+		destID := tagIDs[tagIdxWithScene]
+		if err = qb.Merge(ctx, srcIDs, destID); err != nil {
+			return err
+		}
+
+		// ensure other tags are deleted
+		for _, tagId := range srcIDs {
+			t, err := qb.Find(ctx, tagId)
+			if err != nil {
+				return err
+			}
+
+			assert.Nil(t)
+		}
+
+		// ensure aliases are set on the destination
+		destAliases, err := qb.GetAliases(ctx, destID)
+		if err != nil {
+			return err
+		}
+		for _, tagIdx := range srcIdxs {
+			assert.Contains(destAliases, getTagStringValue(tagIdx, "Name"))
+		}
+
+		// ensure scene points to new tag
+		s, err := db.Scene.Find(ctx, sceneIDs[sceneIdxWithTwoTags])
+		if err != nil {
+			return err
+		}
+		if err := s.LoadTagIDs(ctx, db.Scene); err != nil {
+			return err
+		}
+		sceneTagIDs := s.TagIDs.List()
+
+		assert.Contains(sceneTagIDs, destID)
+
+		// ensure marker points to new tag
+		marker, err := mqb.Find(ctx, markerIDs[markerIdxWithTag])
+		if err != nil {
+			return err
+		}
+
+		assert.Equal(destID, marker.PrimaryTagID)
+
+		markerTagIDs, err := mqb.GetTagIDs(ctx, marker.ID)
+		if err != nil {
+			return err
+		}
+
+		assert.Contains(markerTagIDs, destID)
+
+		// ensure image points to new tag
+		imageTagIDs, err := db.Image.GetTagIDs(ctx, imageIDs[imageIdxWithTwoTags])
+		if err != nil {
+			return err
+		}
+
+		assert.Contains(imageTagIDs, destID)
+
+		g, err := db.Gallery.Find(ctx, galleryIDs[galleryIdxWithTwoTags])
+		if err != nil {
+			return err
+		}
+
+		if err := g.LoadTagIDs(ctx, db.Gallery); err != nil {
+			return err
+		}
+
+		// ensure gallery points to new tag
+		assert.Contains(g.TagIDs.List(), destID)
+
+		// ensure performer points to new tag
+		performerTagIDs, err := db.Performer.GetTagIDs(ctx, performerIDs[performerIdxWithTwoTags])
+		if err != nil {
+			return err
+		}
+
+		assert.Contains(performerTagIDs, destID)
+
+		// ensure studio points to new tag
+		studioTagIDs, err := db.Studio.GetTagIDs(ctx, studioIDs[studioIdxWithTwoTags])
+		if err != nil {
+			return err
+		}
+
+		assert.Contains(studioTagIDs, destID)
+
+		// ensure group points to new tag
+		group, err := db.Group.Find(ctx, groupIDs[groupIdxWithTwoTags])
+		if err != nil {
+			return err
+		}
+		if err := group.LoadTagIDs(ctx, db.Group); err != nil {
+			return err
+		}
+		groupTagIDs := group.TagIDs.List()
+
+		assert.Contains(groupTagIDs, destID)
+
+		return nil
+	}); err != nil {
+		t.Error(err.Error())
+	}
+}
+
+func loadTagRelationships(ctx context.Context, expected models.Tag, actual *models.Tag) error {
+	if expected.Aliases.Loaded() {
+		if err := actual.LoadAliases(ctx, db.Tag); err != nil {
+			return err
+		}
+	}
+	if expected.ParentIDs.Loaded() {
+		if err := actual.LoadParentIDs(ctx, db.Tag); err != nil {
+			return err
+		}
+	}
+	if expected.ChildIDs.Loaded() {
+		if err := actual.LoadChildIDs(ctx, db.Tag); err != nil {
+			return err
+		}
+	}
+	if expected.StashIDs.Loaded() {
+		if err := actual.LoadStashIDs(ctx, db.Tag); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func Test_TagStore_Create(t *testing.T) {
+	var (
+		name          = "name"
+		sortName      = "sortName"
+		description   = "description"
+		favorite      = true
+		ignoreAutoTag = true
+		aliases       = []string{"alias1", "alias2"}
+		endpoint1     = "endpoint1"
+		endpoint2     = "endpoint2"
+		stashID1      = "stashid1"
+		stashID2      = "stashid2"
+		createdAt     = epochTime
+		updatedAt     = epochTime
+	)
+
+	tests := []struct {
+		name      string
+		newObject models.CreateTagInput
+		wantErr   bool
+	}{
+		{
+			"full",
+			models.CreateTagInput{
+				Tag: &models.Tag{
+					Name:          name,
+					SortName:      sortName,
+					Description:   description,
+					Favorite:      favorite,
+					IgnoreAutoTag: ignoreAutoTag,
+					Aliases:       models.NewRelatedStrings(aliases),
+					ParentIDs:     models.NewRelatedIDs([]int{tagIDs[tagIdxWithScene]}),
+					ChildIDs:      models.NewRelatedIDs([]int{tagIDs[tagIdx1WithScene]}),
+					StashIDs: models.NewRelatedStashIDs([]models.StashID{
+						{
+							StashID:   stashID1,
+							Endpoint:  endpoint1,
+							UpdatedAt: epochTime,
+						},
+						{
+							StashID:   stashID2,
+							Endpoint:  endpoint2,
+							UpdatedAt: epochTime,
+						},
+					}),
+					CreatedAt: createdAt,
+					UpdatedAt: updatedAt,
+				},
+				CustomFields: testCustomFields,
+			},
+			false,
+		},
+		{
+			"invalid parent id",
+			models.CreateTagInput{
+				Tag: &models.Tag{
+					Name:      name,
+					ParentIDs: models.NewRelatedIDs([]int{invalidID}),
+				},
+			},
+			true,
+		},
+		{
+			"invalid child id",
+			models.CreateTagInput{
+				Tag: &models.Tag{
+					Name:     name,
+					ChildIDs: models.NewRelatedIDs([]int{invalidID}),
+				},
+			},
+			true,
+		},
+	}
+
+	qb := db.Tag
+
+	for _, tt := range tests {
+		runWithRollbackTxn(t, tt.name, func(t *testing.T, ctx context.Context) {
+			assert := assert.New(t)
+
+			p := tt.newObject
+			if err := qb.Create(ctx, &p); (err != nil) != tt.wantErr {
+				t.Errorf("TagStore.Create() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+
+			if tt.wantErr {
+				assert.Zero(p.ID)
+				return
+			}
+
+			assert.NotZero(p.ID)
+
+			copy := *tt.newObject.Tag
+			copy.ID = p.ID
+
+			// load relationships
+			if err := loadTagRelationships(ctx, copy, p.Tag); err != nil {
+				t.Errorf("loadTagRelationships() error = %v", err)
+				return
+			}
+
+			assert.Equal(copy, *p.Tag)
+
+			// ensure can find the tag
+			found, err := qb.Find(ctx, p.ID)
+			if err != nil {
+				t.Errorf("TagStore.Find() error = %v", err)
+			}
+
+			if !assert.NotNil(found) {
+				return
+			}
+
+			// load relationships
+			if err := loadTagRelationships(ctx, copy, found); err != nil {
+				t.Errorf("loadTagRelationships() error = %v", err)
+				return
+			}
+			assert.Equal(copy, *found)
+
+			// ensure custom fields are set
+			cf, err := qb.GetCustomFields(ctx, p.ID)
+			if err != nil {
+				t.Errorf("TagStore.GetCustomFields() error = %v", err)
+				return
+			}
+
+			assert.Equal(tt.newObject.CustomFields, cf)
+
+			return
+		})
+	}
+}
+
+func Test_TagStore_Update(t *testing.T) {
+	var (
+		name          = "name"
+		sortName      = "sortName"
+		description   = "description"
+		favorite      = true
+		ignoreAutoTag = true
+		aliases       = []string{"alias1", "alias2"}
+		endpoint1     = "endpoint1"
+		endpoint2     = "endpoint2"
+		stashID1      = "stashid1"
+		stashID2      = "stashid2"
+		createdAt     = epochTime
+		updatedAt     = epochTime
+	)
+
+	tests := []struct {
+		name          string
+		updatedObject models.UpdateTagInput
+		wantErr       bool
+	}{
+		{
+			"full",
+			models.UpdateTagInput{
+				Tag: &models.Tag{
+					ID:            tagIDs[tagIdxWithGallery],
+					Name:          name,
+					SortName:      sortName,
+					Description:   description,
+					Favorite:      favorite,
+					IgnoreAutoTag: ignoreAutoTag,
+					Aliases:       models.NewRelatedStrings(aliases),
+					ParentIDs:     models.NewRelatedIDs([]int{tagIDs[tagIdxWithScene]}),
+					ChildIDs:      models.NewRelatedIDs([]int{tagIDs[tagIdx1WithScene]}),
+					StashIDs: models.NewRelatedStashIDs([]models.StashID{
+						{
+							StashID:   stashID1,
+							Endpoint:  endpoint1,
+							UpdatedAt: epochTime,
+						},
+						{
+							StashID:   stashID2,
+							Endpoint:  endpoint2,
+							UpdatedAt: epochTime,
+						},
+					}),
+					CreatedAt: createdAt,
+					UpdatedAt: updatedAt,
+				},
+				CustomFields: models.CustomFieldsInput{
+					Full: map[string]interface{}{
+						"string": "updated",
+						"int":    int64(999),
+						"real":   9.99,
+					},
+				},
+			},
+			false,
+		},
+		{
+			"set custom fields",
+			models.UpdateTagInput{
+				Tag: &models.Tag{
+					ID:   tagIDs[tagIdxWithGallery],
+					Name: tagNames[tagIdxWithGallery],
+				},
+				CustomFields: models.CustomFieldsInput{
+					Full: testCustomFields,
+				},
+			},
+			false,
+		},
+		{
+			"clear custom fields",
+			models.UpdateTagInput{
+				Tag: &models.Tag{
+					ID:   tagIDs[tagIdxWithGallery],
+					Name: tagNames[tagIdxWithGallery],
+				},
+				CustomFields: models.CustomFieldsInput{
+					Full: map[string]interface{}{},
+				},
+			},
+			false,
+		},
+		{
+			"invalid parent id",
+			models.UpdateTagInput{
+				Tag: &models.Tag{
+					ID:        tagIDs[tagIdxWithGallery],
+					Name:      tagNames[tagIdxWithGallery],
+					ParentIDs: models.NewRelatedIDs([]int{invalidID}),
+				},
+			},
+			true,
+		},
+		{
+			"invalid child id",
+			models.UpdateTagInput{
+				Tag: &models.Tag{
+					ID:       tagIDs[tagIdxWithGallery],
+					Name:     tagNames[tagIdxWithGallery],
+					ChildIDs: models.NewRelatedIDs([]int{invalidID}),
+				},
+			},
+			true,
+		},
+	}
+
+	qb := db.Tag
+
+	for _, tt := range tests {
+		runWithRollbackTxn(t, tt.name, func(t *testing.T, ctx context.Context) {
+			assert := assert.New(t)
+
+			p := tt.updatedObject
+			if err := qb.Update(ctx, &p); (err != nil) != tt.wantErr {
+				t.Errorf("TagStore.Update() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+
+			if tt.wantErr {
+				return
+			}
+
+			s, err := qb.Find(ctx, tt.updatedObject.ID)
+			if err != nil {
+				t.Errorf("TagStore.Find() error = %v", err)
+				return
+			}
+
+			// load relationships
+			if err := loadTagRelationships(ctx, *tt.updatedObject.Tag, s); err != nil {
+				t.Errorf("loadTagRelationships() error = %v", err)
+				return
+			}
+
+			assert.Equal(*tt.updatedObject.Tag, *s)
+
+			// ensure custom fields are correct
+			if tt.updatedObject.CustomFields.Full != nil {
+				cf, err := qb.GetCustomFields(ctx, tt.updatedObject.ID)
+				if err != nil {
+					t.Errorf("TagStore.GetCustomFields() error = %v", err)
+					return
+				}
+
+				assert.Equal(tt.updatedObject.CustomFields.Full, cf)
+			}
+		})
+	}
+}
+
+func Test_TagStore_UpdatePartialCustomFields(t *testing.T) {
+	tests := []struct {
+		name     string
+		id       int
+		partial  models.TagPartial
+		expected map[string]interface{} // nil to use the partial
+	}{
+		{
+			"set custom fields",
+			tagIDs[tagIdxWithGallery],
+			models.TagPartial{
+				CustomFields: models.CustomFieldsInput{
+					Full: testCustomFields,
+				},
+			},
+			nil,
+		},
+		{
+			"clear custom fields",
+			tagIDs[tagIdxWithGallery],
+			models.TagPartial{
+				CustomFields: models.CustomFieldsInput{
+					Full: map[string]interface{}{},
+				},
+			},
+			nil,
+		},
+		{
+			"partial custom fields",
+			tagIDs[tagIdxWithGallery],
+			models.TagPartial{
+				CustomFields: models.CustomFieldsInput{
+					Partial: map[string]interface{}{
+						"string":    "bbb",
+						"new_field": "new",
+					},
+				},
+			},
+			map[string]interface{}{
+				"int":       int64(2),
+				"real":      float64(1.7),
+				"string":    "bbb",
+				"new_field": "new",
+			},
+		},
+	}
+	for _, tt := range tests {
+		qb := db.Tag
+
+		runWithRollbackTxn(t, tt.name, func(t *testing.T, ctx context.Context) {
+			assert := assert.New(t)
+
+			_, err := qb.UpdatePartial(ctx, tt.id, tt.partial)
+			if err != nil {
+				t.Errorf("TagStore.UpdatePartial() error = %v", err)
+				return
+			}
+
+			// ensure custom fields are correct
+			cf, err := qb.GetCustomFields(ctx, tt.id)
+			if err != nil {
+				t.Errorf("TagStore.GetCustomFields() error = %v", err)
+				return
+			}
+			if tt.expected == nil {
+				assert.Equal(tt.partial.CustomFields.Full, cf)
+			} else {
+				assert.Equal(tt.expected, cf)
+			}
+		})
+	}
+}
+
+func TestTagQueryCustomFields(t *testing.T) {
+	tests := []struct {
+		name        string
+		filter      *models.TagFilterType
+		includeIdxs []int
+		excludeIdxs []int
+		wantErr     bool
+	}{
+		{
+			"equals",
+			&models.TagFilterType{
+				CustomFields: []models.CustomFieldCriterionInput{
+					{
+						Field:    "string",
+						Modifier: models.CriterionModifierEquals,
+						Value:    []any{getTagStringValue(tagIdxWithGallery, "custom")},
+					},
+				},
+			},
+			[]int{tagIdxWithGallery},
+			nil,
+			false,
+		},
+		{
+			"not equals",
+			&models.TagFilterType{
+				Name: &models.StringCriterionInput{
+					Value:    getTagStringValue(tagIdxWithGallery, "Name"),
+					Modifier: models.CriterionModifierEquals,
+				},
+				CustomFields: []models.CustomFieldCriterionInput{
+					{
+						Field:    "string",
+						Modifier: models.CriterionModifierNotEquals,
+						Value:    []any{getTagStringValue(tagIdxWithGallery, "custom")},
+					},
+				},
+			},
+			nil,
+			[]int{tagIdxWithGallery},
+			false,
+		},
+		{
+			"includes",
+			&models.TagFilterType{
+				CustomFields: []models.CustomFieldCriterionInput{
+					{
+						Field:    "string",
+						Modifier: models.CriterionModifierIncludes,
+						Value:    []any{getTagStringValue(tagIdxWithGallery, "custom")[9:]},
+					},
+				},
+			},
+			[]int{tagIdxWithGallery},
+			nil,
+			false,
+		},
+		{
+			"excludes",
+			&models.TagFilterType{
+				Name: &models.StringCriterionInput{
+					Value:    getTagStringValue(tagIdxWithGallery, "Name"),
+					Modifier: models.CriterionModifierEquals,
+				},
+				CustomFields: []models.CustomFieldCriterionInput{
+					{
+						Field:    "string",
+						Modifier: models.CriterionModifierExcludes,
+						Value:    []any{getTagStringValue(tagIdxWithGallery, "custom")[9:]},
+					},
+				},
+			},
+			nil,
+			[]int{tagIdxWithGallery},
+			false,
+		},
+		{
+			"regex",
+			&models.TagFilterType{
+				CustomFields: []models.CustomFieldCriterionInput{
+					{
+						Field:    "string",
+						Modifier: models.CriterionModifierMatchesRegex,
+						Value:    []any{".*17_custom"},
+					},
+				},
+			},
+			[]int{tagIdxWithGallery},
+			nil,
+			false,
+		},
+		{
+			"invalid regex",
+			&models.TagFilterType{
+				CustomFields: []models.CustomFieldCriterionInput{
+					{
+						Field:    "string",
+						Modifier: models.CriterionModifierMatchesRegex,
+						Value:    []any{"["},
+					},
+				},
+			},
+			nil,
+			nil,
+			true,
+		},
+		{
+			"not matches regex",
+			&models.TagFilterType{
+				Name: &models.StringCriterionInput{
+					Value:    getTagStringValue(tagIdxWithGallery, "Name"),
+					Modifier: models.CriterionModifierEquals,
+				},
+				CustomFields: []models.CustomFieldCriterionInput{
+					{
+						Field:    "string",
+						Modifier: models.CriterionModifierNotMatchesRegex,
+						Value:    []any{".*17_custom"},
+					},
+				},
+			},
+			nil,
+			[]int{tagIdxWithGallery},
+			false,
+		},
+		{
+			"invalid not matches regex",
+			&models.TagFilterType{
+				CustomFields: []models.CustomFieldCriterionInput{
+					{
+						Field:    "string",
+						Modifier: models.CriterionModifierNotMatchesRegex,
+						Value:    []any{"["},
+					},
+				},
+			},
+			nil,
+			nil,
+			true,
+		},
+		{
+			"null",
+			&models.TagFilterType{
+				Name: &models.StringCriterionInput{
+					Value:    getTagStringValue(tagIdxWithGallery, "Name"),
+					Modifier: models.CriterionModifierEquals,
+				},
+				CustomFields: []models.CustomFieldCriterionInput{
+					{
+						Field:    "not existing",
+						Modifier: models.CriterionModifierIsNull,
+					},
+				},
+			},
+			[]int{tagIdxWithGallery},
+			nil,
+			false,
+		},
+		{
+			"not null",
+			&models.TagFilterType{
+				Name: &models.StringCriterionInput{
+					Value:    getTagStringValue(tagIdxWithGallery, "Name"),
+					Modifier: models.CriterionModifierEquals,
+				},
+				CustomFields: []models.CustomFieldCriterionInput{
+					{
+						Field:    "string",
+						Modifier: models.CriterionModifierNotNull,
+					},
+				},
+			},
+			[]int{tagIdxWithGallery},
+			nil,
+			false,
+		},
+		{
+			"between",
+			&models.TagFilterType{
+				CustomFields: []models.CustomFieldCriterionInput{
+					{
+						Field:    "real",
+						Modifier: models.CriterionModifierBetween,
+						Value:    []any{0.15, 0.25},
+					},
+				},
+			},
+			[]int{tagIdx2WithScene},
+			nil,
+			false,
+		},
+		{
+			"not between",
+			&models.TagFilterType{
+				Name: &models.StringCriterionInput{
+					Value:    getTagStringValue(tagIdx2WithScene, "Name"),
+					Modifier: models.CriterionModifierEquals,
+				},
+				CustomFields: []models.CustomFieldCriterionInput{
+					{
+						Field:    "real",
+						Modifier: models.CriterionModifierNotBetween,
+						Value:    []any{0.15, 0.25},
+					},
+				},
+			},
+			nil,
+			[]int{tagIdx2WithScene},
+			false,
+		},
+	}
+
+	for _, tt := range tests {
+		runWithRollbackTxn(t, tt.name, func(t *testing.T, ctx context.Context) {
+			assert := assert.New(t)
+
+			tags, _, err := db.Tag.Query(ctx, tt.filter, nil)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("TagStore.Query() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			ids := tagsToIDs(tags)
+			include := indexesToIDs(tagIDs, tt.includeIdxs)
+			exclude := indexesToIDs(tagIDs, tt.excludeIdxs)
+
+			for _, i := range include {
+				assert.Contains(ids, i)
+			}
+			for _, e := range exclude {
+				assert.NotContains(ids, e)
+			}
+		})
+	}
+
+	// Test combining text search (findFilter.Q) with custom field filters.
+	// This verifies that positional args are bound in the correct order
+	// when JOINs (from custom fields) and WHERE (from text search) both
+	// have parameterized placeholders.
+	runWithRollbackTxn(t, "equals with text search", func(t *testing.T, ctx context.Context) {
+		assert := assert.New(t)
+
+		tagName := getTagStringValue(tagIdxWithGallery, "Name")
+		q := tagName
+		findFilter := &models.FindFilterType{Q: &q}
+
+		tagFilter := &models.TagFilterType{
+			CustomFields: []models.CustomFieldCriterionInput{
+				{
+					Field:    "string",
+					Modifier: models.CriterionModifierEquals,
+					Value:    []any{getTagStringValue(tagIdxWithGallery, "custom")},
+				},
+			},
+		}
+
+		tags, _, err := db.Tag.Query(ctx, tagFilter, findFilter)
+		if err != nil {
+			t.Errorf("TagStore.Query() error = %v", err)
+			return
+		}
+
+		ids := tagsToIDs(tags)
+		assert.Contains(ids, tagIDs[tagIdxWithGallery])
+		assert.Len(tags, 1)
+	})
+
+	runWithRollbackTxn(t, "is_null with text search", func(t *testing.T, ctx context.Context) {
+		assert := assert.New(t)
+
+		tagName := getTagStringValue(tagIdxWithGallery, "Name")
+		q := tagName
+		findFilter := &models.FindFilterType{Q: &q}
+
+		tagFilter := &models.TagFilterType{
+			CustomFields: []models.CustomFieldCriterionInput{
+				{
+					Field:    "not existing",
+					Modifier: models.CriterionModifierIsNull,
+				},
+			},
+		}
+
+		tags, _, err := db.Tag.Query(ctx, tagFilter, findFilter)
+		if err != nil {
+			t.Errorf("TagStore.Query() error = %v", err)
+			return
+		}
+
+		ids := tagsToIDs(tags)
+		assert.Contains(ids, tagIDs[tagIdxWithGallery])
+		assert.Len(tags, 1)
+	})
+}
+
+// TODO Destroy
+// TODO Find
+// TODO FindBySceneID
+// TODO FindBySceneMarkerID
+// TODO Count
+// TODO All
+// TODO AllSlim
+// TODO Query

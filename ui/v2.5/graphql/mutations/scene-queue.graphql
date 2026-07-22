@@ -1,0 +1,15 @@
+mutation SceneQueueAdd($scene_id: ID!) {
+  sceneQueueAdd(scene_id: $scene_id)
+}
+
+mutation SceneQueueRemove($scene_id: ID!) {
+  sceneQueueRemove(scene_id: $scene_id)
+}
+
+mutation SceneQueueReorder($scene_id: ID!, $position: Int!) {
+  sceneQueueReorder(scene_id: $scene_id, position: $position)
+}
+
+mutation SceneQueueClear {
+  sceneQueueClear
+}

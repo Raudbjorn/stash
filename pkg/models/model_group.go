@@ -1,0 +1,100 @@
+package models
+
+import (
+	"context"
+	"time"
+)
+
+type Group struct {
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	Duration *int   `json:"duration"`
+	Date     *Date  `json:"date"`
+	// Rating expressed in 1-100 scale
+	Rating    *int      `json:"rating"`
+	StudioID  *int      `json:"studio_id"`
+	Director  string    `json:"director"`
+	Synopsis  string    `json:"synopsis"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	Aliases RelatedStrings `json:"aliases"`
+	URLs    RelatedStrings `json:"urls"`
+	TagIDs  RelatedIDs     `json:"tag_ids"`
+
+	ContainingGroups RelatedGroupDescriptions `json:"containing_groups"`
+	SubGroups        RelatedGroupDescriptions `json:"sub_groups"`
+}
+
+func NewGroup() Group {
+	currentTime := time.Now()
+	return Group{
+		CreatedAt: currentTime,
+		UpdatedAt: currentTime,
+	}
+}
+
+type CreateGroupInput struct {
+	*Group
+
+	CustomFields   map[string]interface{} `json:"custom_fields"`
+	FrontImageData []byte
+	BackImageData  []byte
+}
+
+func (m *Group) LoadAliases(ctx context.Context, l AliasLoader) error {
+	return m.Aliases.load(func() ([]string, error) {
+		return l.GetAliases(ctx, m.ID)
+	})
+}
+
+func (m *Group) LoadURLs(ctx context.Context, l URLLoader) error {
+	return m.URLs.load(func() ([]string, error) {
+		return l.GetURLs(ctx, m.ID)
+	})
+}
+
+func (m *Group) LoadTagIDs(ctx context.Context, l TagIDLoader) error {
+	return m.TagIDs.load(func() ([]int, error) {
+		return l.GetTagIDs(ctx, m.ID)
+	})
+}
+
+func (m *Group) LoadContainingGroupIDs(ctx context.Context, l ContainingGroupLoader) error {
+	return m.ContainingGroups.load(func() ([]GroupIDDescription, error) {
+		return l.GetContainingGroupDescriptions(ctx, m.ID)
+	})
+}
+
+func (m *Group) LoadSubGroupIDs(ctx context.Context, l SubGroupLoader) error {
+	return m.SubGroups.load(func() ([]GroupIDDescription, error) {
+		return l.GetSubGroupDescriptions(ctx, m.ID)
+	})
+}
+
+type GroupPartial struct {
+	Name     OptionalString
+	Duration OptionalInt
+	Date     OptionalDate
+	// Rating expressed in 1-100 scale
+	Rating           OptionalInt
+	StudioID         OptionalInt
+	Director         OptionalString
+	Synopsis         OptionalString
+	Aliases          *UpdateStrings
+	URLs             *UpdateStrings
+	TagIDs           *UpdateIDs
+	ContainingGroups *UpdateGroupDescriptions
+	SubGroups        *UpdateGroupDescriptions
+	CreatedAt        OptionalTime
+	UpdatedAt        OptionalTime
+
+	CustomFields CustomFieldsInput
+}
+
+func NewGroupPartial() GroupPartial {
+	currentTime := time.Now()
+	return GroupPartial{
+		UpdatedAt: NewOptionalTime(currentTime),
+	}
+}

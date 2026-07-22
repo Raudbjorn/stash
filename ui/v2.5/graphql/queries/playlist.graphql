@@ -1,0 +1,67 @@
+query FindPlaylist($id: ID!) {
+  findPlaylist(id: $id) {
+    id
+    name
+    description
+    is_default
+    scene_count
+    created_at
+    updated_at
+    front_image_path
+  }
+}
+
+query FindPlaylists($filter: FindFilterType, $playlist_filter: PlaylistFilterType) {
+  findPlaylists(filter: $filter, playlist_filter: $playlist_filter) {
+    count
+    playlists {
+      id
+      name
+      description
+      is_default
+      scene_count
+      created_at
+      updated_at
+      front_image_path
+    }
+  }
+}
+
+query AllPlaylists {
+  allPlaylists {
+    id
+    name
+    description
+    is_default
+    scene_count
+    front_image_path
+  }
+}
+
+query DefaultPlaylist {
+  defaultPlaylist {
+    id
+    name
+    description
+    is_default
+    scene_count
+    front_image_path
+  }
+}
+
+query PlaylistEntries($playlist_id: ID!) {
+  playlistEntries(playlist_id: $playlist_id) {
+    position
+    scene {
+      ...SlimSceneData
+    }
+  }
+}
+
+query PlaylistsWithScene($scene_id: ID!) {
+  playlistsWithScene(scene_id: $scene_id) {
+    id
+    name
+    is_default
+  }
+}

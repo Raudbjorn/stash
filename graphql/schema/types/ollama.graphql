@@ -1,0 +1,84 @@
+"""
+Ollama Configuration
+"""
+type OllamaConfig {
+  baseUrl: String!
+  model: String!
+  timeout: Int!
+  enabled: Boolean!
+  fallbackToTraditionalDict: Boolean!
+  promptTemplate: String!
+  mistralApiKey: String
+}
+
+"""
+Ollama Configuration Input
+"""
+input OllamaConfigInput {
+  baseUrl: String!
+  model: String!
+  timeout: Int!
+  enabled: Boolean!
+  fallbackToTraditionalDict: Boolean!
+  promptTemplate: String!
+  mistralApiKey: String
+}
+
+"""
+Dictionary Entry from Ollama
+"""
+type OllamaDictionaryEntry {
+  word: String!
+  pronunciation: String
+  definitions: [OllamaDictionaryDefinition!]!
+  morphology: String
+  aiSource: String
+}
+
+"""
+Dictionary Definition
+"""
+type OllamaDictionaryDefinition {
+  partOfSpeech: String!
+  meaning: String!
+  examples: [String!]!
+}
+
+"""
+Ollama Word Explanation Input
+"""
+input OllamaExplainWordInput {
+  word: String!
+  context: String!
+  language: String
+  model: String
+  provider: String
+}
+
+"""
+Ollama Generation Input
+"""
+input OllamaGenerateInput {
+  prompt: String!
+  model: String
+}
+
+"""
+Ollama Generation Result
+"""
+type OllamaGenerateResult {
+  response: String!
+  model: String!
+  totalDuration: Int
+  evalCount: Int
+}
+
+"""
+Ollama Service Status
+"""
+type OllamaStatus {
+  available: Boolean!
+  config: OllamaConfig!
+  models: [String!]!
+  version: String
+}

@@ -1,0 +1,24 @@
+type SceneQueueEntry {
+  scene: Scene!
+  position: Int!
+  created_at: Time!
+}
+
+extend type Query {
+  "Get the scene queue ordered by position (backed by the default playlist)"
+  sceneQueue: [SceneQueueEntry!]!
+}
+
+extend type Mutation {
+  "Add a scene to the queue"
+  sceneQueueAdd(scene_id: ID!): Boolean!
+
+  "Remove a scene from the queue"
+  sceneQueueRemove(scene_id: ID!): Boolean!
+
+  "Reorder a scene in the queue"
+  sceneQueueReorder(scene_id: ID!, position: Int!): Boolean!
+
+  "Clear the entire queue"
+  sceneQueueClear: Boolean!
+}

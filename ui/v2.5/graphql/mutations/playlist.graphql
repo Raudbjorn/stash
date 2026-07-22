@@ -1,0 +1,51 @@
+mutation PlaylistCreate($input: PlaylistCreateInput!) {
+  playlistCreate(input: $input) {
+    id
+    name
+    description
+    is_default
+    scene_count
+    created_at
+    updated_at
+  }
+}
+
+mutation PlaylistUpdate($input: PlaylistUpdateInput!) {
+  playlistUpdate(input: $input) {
+    id
+    name
+    description
+    is_default
+    scene_count
+    created_at
+    updated_at
+  }
+}
+
+mutation PlaylistDestroy($id: ID!) {
+  playlistDestroy(id: $id)
+}
+
+mutation PlaylistAddScenes($input: PlaylistAddScenesInput!) {
+  playlistAddScenes(input: $input)
+}
+
+mutation PlaylistRemoveScene($input: PlaylistRemoveSceneInput!) {
+  playlistRemoveScene(input: $input)
+}
+
+mutation PlaylistReorderScene($input: PlaylistReorderSceneInput!) {
+  playlistReorderScene(input: $input)
+}
+
+mutation PlaylistClearScenes($playlist_id: ID!) {
+  playlistClearScenes(playlist_id: $playlist_id)
+}
+
+mutation PlaylistSetDefault($id: ID!) {
+  playlistSetDefault(id: $id) {
+    id
+    name
+    is_default
+  }
+}

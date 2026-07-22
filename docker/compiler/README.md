@@ -1,0 +1,3 @@
+Modified from https://github.com/bep/dockerfiles/tree/master/ci-goreleaser
+
+When the Dockerfile is changed, the version number should be incremented in [.github/workflows/build-compiler.yml](../../.github/workflows/build-compiler.yml) and the workflow [manually ran](). `env: COMPILER_IMAGE` in [.github/workflows/build.yml](../../.github/workflows/build.yml) also needs to be updated to pull the correct image tag.

@@ -1,0 +1,8 @@
+query SceneQueue {
+  sceneQueue {
+    position
+    scene {
+      ...SlimSceneData
+    }
+  }
+}

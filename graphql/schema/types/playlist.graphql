@@ -1,0 +1,100 @@
+type Playlist {
+  id: ID!
+  name: String!
+  description: String
+  is_default: Boolean!
+  scene_count: Int! # Resolver
+  created_at: Time!
+  updated_at: Time!
+  # First scene's screenshot for thumbnail
+  front_image_path: String # Resolver
+}
+
+type PlaylistEntry {
+  scene: Scene!
+  position: Int!
+  created_at: Time!
+}
+
+type FindPlaylistsResultType {
+  count: Int!
+  playlists: [Playlist!]!
+}
+
+input PlaylistFilterType {
+  name: StringCriterionInput
+  is_default: Boolean
+}
+
+input PlaylistCreateInput {
+  name: String!
+  description: String
+}
+
+input PlaylistUpdateInput {
+  id: ID!
+  name: String
+  description: String
+}
+
+input PlaylistAddScenesInput {
+  playlist_id: ID!
+  scene_ids: [ID!]!
+}
+
+input PlaylistRemoveSceneInput {
+  playlist_id: ID!
+  scene_id: ID!
+}
+
+input PlaylistReorderSceneInput {
+  playlist_id: ID!
+  scene_id: ID!
+  position: Int!
+}
+
+extend type Query {
+  "Find a playlist by ID"
+  findPlaylist(id: ID!): Playlist
+
+  "Query playlists"
+  findPlaylists(filter: FindFilterType, playlist_filter: PlaylistFilterType): FindPlaylistsResultType!
+
+  "Get all playlists"
+  allPlaylists: [Playlist!]!
+
+  "Get the default playlist"
+  defaultPlaylist: Playlist!
+
+  "Get entries for a playlist, ordered by position"
+  playlistEntries(playlist_id: ID!): [PlaylistEntry!]!
+
+  "Get all playlists that contain a specific scene"
+  playlistsWithScene(scene_id: ID!): [Playlist!]!
+}
+
+extend type Mutation {
+  "Create a new playlist"
+  playlistCreate(input: PlaylistCreateInput!): Playlist!
+
+  "Update an existing playlist"
+  playlistUpdate(input: PlaylistUpdateInput!): Playlist!
+
+  "Delete a playlist"
+  playlistDestroy(id: ID!): Boolean!
+
+  "Add scenes to a playlist"
+  playlistAddScenes(input: PlaylistAddScenesInput!): Boolean!
+
+  "Remove a scene from a playlist"
+  playlistRemoveScene(input: PlaylistRemoveSceneInput!): Boolean!
+
+  "Reorder a scene within a playlist"
+  playlistReorderScene(input: PlaylistReorderSceneInput!): Boolean!
+
+  "Clear all scenes from a playlist"
+  playlistClearScenes(playlist_id: ID!): Boolean!
+
+  "Set a playlist as the default playlist"
+  playlistSetDefault(id: ID!): Playlist!
+}
