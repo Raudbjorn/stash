@@ -39,7 +39,7 @@ RUN make flags-release flags-pie stash
 
 # Final Runnable Image
 FROM alpine:latest
-RUN apk add --no-cache ca-certificates vips-tools ffmpeg tzdata
+RUN apk add --no-cache ca-certificates vips-tools ffmpeg tzdata python3
 ENV TZ=Asia/Shanghai
 COPY --from=backend /stash/stash /usr/bin/
 ENV STASH_CONFIG_FILE=/root/.stash/config.yml
