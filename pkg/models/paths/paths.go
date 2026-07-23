@@ -12,6 +12,7 @@ type Paths struct {
 
 	Scene        *scenePaths
 	SceneMarkers *sceneMarkerPaths
+	Clips        *clipPaths
 	Blobs        string
 }
 
@@ -21,6 +22,7 @@ func NewPaths(generatedPath string, blobsPath string) Paths {
 
 	p.Scene = newScenePaths(p)
 	p.SceneMarkers = newSceneMarkerPaths(p)
+	p.Clips = newClipPaths(p)
 	p.Blobs = blobsPath
 
 	return p

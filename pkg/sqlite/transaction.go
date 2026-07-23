@@ -119,6 +119,7 @@ func (db *Database) Repository() models.Repository {
 	return models.Repository{
 		TxnManager:     db,
 		Blob:           db.Blobs,
+		Clip:           db.Clip,
 		File:           db.File,
 		Folder:         db.Folder,
 		Gallery:        db.Gallery,

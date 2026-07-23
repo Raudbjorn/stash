@@ -473,6 +473,24 @@ input GroupFilterType {
   custom_fields: [CustomFieldCriterionInput!]
 }
 
+input ClipFilterType {
+  AND: ClipFilterType
+  OR: ClipFilterType
+  NOT: ClipFilterType
+
+  title: StringCriterionInput
+  "Filter to only include clips with these scenes"
+  scenes: MultiCriterionInput
+  "Filter to only include clips with these tags"
+  tags: HierarchicalMultiCriterionInput
+  # rating expressed as 1-100
+  rating100: IntCriterionInput
+  "Filter by creation time"
+  created_at: TimestampCriterionInput
+  "Filter by last update time"
+  updated_at: TimestampCriterionInput
+}
+
 input StudioFilterType {
   AND: StudioFilterType
   OR: StudioFilterType

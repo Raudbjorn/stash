@@ -34,7 +34,7 @@ const (
 	cacheSizeEnv = "STASH_SQLITE_CACHE_SIZE"
 )
 
-var appSchemaVersion uint = 88
+var appSchemaVersion uint = 90
 
 //go:embed migrations/*.sql
 var migrationsBox embed.FS
@@ -67,6 +67,7 @@ func (e *MismatchedSchemaVersionError) Error() string {
 
 type storeRepository struct {
 	Blobs          *BlobStore
+	Clip           *ClipStore
 	File           *FileStore
 	Folder         *FolderStore
 	Image          *ImageStore
@@ -106,6 +107,7 @@ func NewDatabase() *Database {
 	r := &storeRepository{}
 	*r = storeRepository{
 		Blobs:          blobStore,
+		Clip:           NewClipStore(),
 		File:           fileStore,
 		Folder:         folderStore,
 		Scene:          NewSceneStore(r, blobStore),

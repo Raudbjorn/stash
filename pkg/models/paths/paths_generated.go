@@ -17,6 +17,7 @@ type generatedPaths struct {
 	Thumbnails         string
 	Vtt                string
 	Markers            string
+	Clips              string
 	Transcodes         string
 	Downloads          string
 	Tmp                string
@@ -29,6 +30,7 @@ func newGeneratedPaths(path string) *generatedPaths {
 	gp.Thumbnails = filepath.Join(path, "thumbnails")
 	gp.Vtt = filepath.Join(path, "vtt")
 	gp.Markers = filepath.Join(path, "markers")
+	gp.Clips = filepath.Join(path, "clips")
 	gp.Transcodes = filepath.Join(path, "transcodes")
 	gp.Downloads = filepath.Join(path, "download_stage")
 	gp.Tmp = filepath.Join(path, "tmp")

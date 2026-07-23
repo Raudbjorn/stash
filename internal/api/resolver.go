@@ -104,6 +104,9 @@ func (r *Resolver) Studio() StudioResolver {
 func (r *Resolver) Group() GroupResolver {
 	return &groupResolver{r}
 }
+func (r *Resolver) Clip() ClipResolver {
+	return &clipResolver{r}
+}
 func (r *Resolver) Movie() MovieResolver {
 	return &movieResolver{&groupResolver{r}}
 }
@@ -157,6 +160,8 @@ type studioResolver struct{ *Resolver }
 // movie is group under the hood
 type groupResolver struct{ *Resolver }
 type movieResolver struct{ *groupResolver }
+
+type clipResolver struct{ *Resolver }
 
 type tagResolver struct{ *Resolver }
 type galleryFileResolver struct{ *Resolver }

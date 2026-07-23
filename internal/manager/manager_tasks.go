@@ -16,6 +16,7 @@ import (
 	"github.com/stashapp/stash/pkg/job"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
+	"github.com/stashapp/stash/pkg/scene/generate"
 )
 
 func useAsVideo(pathname string) bool {
@@ -288,6 +289,61 @@ func (s *Manager) generateScreenshot(ctx context.Context, sceneId string, at *fl
 	})
 
 	return s.JobManager.Add(ctx, fmt.Sprintf("Generating screenshot for scene id %s", sceneId), j)
+}
+
+// GenerateClip enqueues a job that generates the bounded video file for a clip
+// from its parent scene, returning the job id.
+func (s *Manager) GenerateClip(ctx context.Context, clipID string) int {
+	if err := instance.Paths.Generated.EnsureTmpDir(); err != nil {
+		logger.Warnf("failure generating clip: %v", err)
+	}
+
+	j := job.MakeJobExec(func(ctx context.Context, progress *job.Progress) error {
+		clipIDInt, err := strconv.Atoi(clipID)
+		if err != nil {
+			return fmt.Errorf("error parsing clip id %s: %w", clipID, err)
+		}
+
+		var clip *models.Clip
+		if err := s.Repository.WithReadTxn(ctx, func(ctx context.Context) error {
+			clip, err = s.Repository.Clip.Find(ctx, clipIDInt)
+			if err != nil {
+				return err
+			}
+			if clip == nil {
+				return fmt.Errorf("clip with id %s not found", clipID)
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("error finding clip for generation: %w", err)
+		}
+
+		g := &generate.Generator{
+			Encoder:      instance.FFMpeg,
+			FFMpegConfig: instance.Config,
+			LockManager:  instance.ReadLockManager,
+			MarkerPaths:  instance.Paths.SceneMarkers,
+			ScenePaths:   instance.Paths.Scene,
+			ClipsPaths:   instance.Paths.Clips,
+			Overwrite:    true,
+		}
+
+		task := GenerateClipTask{
+			repository:          s.Repository,
+			Clip:                clip,
+			Overwrite:           true,
+			fileNamingAlgorithm: instance.Config.GetVideoFileNamingAlgorithm(),
+			generator:           g,
+		}
+
+		task.Start(ctx)
+
+		logger.Infof("Generate clip finished")
+
+		return nil
+	})
+
+	return s.JobManager.Add(ctx, fmt.Sprintf("Generating video for clip id %s", clipID), j)
 }
 
 type AutoTagMetadataInput struct {

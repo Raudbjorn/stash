@@ -144,4 +144,10 @@ models:
     fields:
       career_length:
         resolver: true
-  
+  Clip:
+    fields:
+      scene:
+        resolver: true
+      tags:
+        resolver: true
+
