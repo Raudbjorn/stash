@@ -244,6 +244,8 @@
     },
     "noun_query": "Query",
     "results": {
+      "apply_all": "Apply All",
+      "apply_all_tooltip": "Apply all scraped fields, ignoring the include/exclude toggles",
       "duration_off": "Duration off by at least {number}s",
       "duration_unknown": "Duration unknown",
       "fp_found": "{fpCount, plural, =0 {No new fingerprint matches found} other {# new fingerprint matches found}}",
