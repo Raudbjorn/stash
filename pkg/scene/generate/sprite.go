@@ -19,13 +19,14 @@ import (
 	"github.com/stashapp/stash/pkg/utils"
 )
 
-func (g Generator) SpriteScreenshot(ctx context.Context, input string, seconds float64, size int, isPortrait bool) (image.Image, error) {
+func (g Generator) SpriteScreenshot(ctx context.Context, input string, seconds float64, size int, isPortrait bool, videoCodec string) (image.Image, error) {
 	lockCtx := g.LockManager.ReadLock(ctx, input)
 	defer lockCtx.Cancel()
 
 	ssOptions := transcoder.ScreenshotOptions{
 		OutputPath: "-",
 		OutputType: transcoder.ScreenshotOutputTypeBMP,
+		VideoCodec: videoCodec,
 	}
 
 	if !isPortrait {
@@ -47,7 +48,7 @@ func (g Generator) SpriteScreenshot(ctx context.Context, input string, seconds f
 	return img, nil
 }
 
-func (g Generator) SpriteScreenshotSlow(ctx context.Context, input string, frame int, width int) (image.Image, error) {
+func (g Generator) SpriteScreenshotSlow(ctx context.Context, input string, frame int, width int, videoCodec string) (image.Image, error) {
 	lockCtx := g.LockManager.ReadLock(ctx, input)
 	defer lockCtx.Cancel()
 
@@ -55,6 +56,7 @@ func (g Generator) SpriteScreenshotSlow(ctx context.Context, input string, frame
 		OutputPath: "-",
 		OutputType: transcoder.ScreenshotOutputTypeBMP,
 		Width:      width,
+		VideoCodec: videoCodec,
 	}
 
 	args := transcoder.ScreenshotFrame(input, frame, ssOptions)
