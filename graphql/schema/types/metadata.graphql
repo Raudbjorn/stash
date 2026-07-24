@@ -17,6 +17,8 @@ input GenerateMetadataInput {
   imagePhashes: Boolean
   imageThumbnails: Boolean
   clipPreviews: Boolean
+  "Generate per-gallery contact-sheet cover montages"
+  contactSheets: Boolean
   "Generate subtitles for videos without captions using the configured ASR service"
   subtitles: Boolean
   "Language code for subtitle generation for this run (ASR prompt + caption label). Overrides the configured default."

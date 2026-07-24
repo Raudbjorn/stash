@@ -66,6 +66,7 @@ func Initialize(cfg *config.Config, l *log.Logger) (*Manager, error) {
 		ImageService: imageService,
 		File:         db.File,
 		Folder:       db.Folder,
+		Paths:        mgrPaths,
 	}
 
 	groupService := &group.Service{

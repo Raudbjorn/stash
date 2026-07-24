@@ -74,6 +74,7 @@
     "full_export": "Full export",
     "full_import": "Full import",
     "generate": "Generate",
+    "generate_contact_sheet": "Generate Contact Sheet",
     "generate_thumb_default": "Generate default thumbnail",
     "generate_thumb_from_current": "Generate thumbnail from current",
     "hash_migration": "hash migration",
@@ -1095,6 +1096,8 @@
     },
     "scene_gen": {
       "clip_previews": "Image clip previews",
+      "contact_sheets": "Gallery contact sheets",
+      "contact_sheets_tooltip": "Generate a cover image montage from each gallery's images",
       "covers": "Scene covers",
       "force_transcodes": "Force Transcode generation",
       "force_transcodes_tooltip": "By default, transcodes are only generated when the video file is not supported in the browser. When enabled, transcodes will be generated even when the video file appears to be supported in the browser.",

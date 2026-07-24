@@ -39,8 +39,9 @@ type galleryRow struct {
 	Photographer  zero.String `db:"photographer"`
 	// expressed as 1-100
 	Rating    null.Int  `db:"rating"`
-	Organized bool      `db:"organized"`
-	Favorite  bool      `db:"favorite"`
+	Organized         bool `db:"organized"`
+	Favorite          bool `db:"favorite"`
+	HasGeneratedCover bool `db:"has_generated_cover"`
 	StudioID  null.Int  `db:"studio_id,omitempty"`
 	FolderID  null.Int  `db:"folder_id,omitempty"`
 	CreatedAt Timestamp `db:"created_at"`
@@ -58,6 +59,7 @@ func (r *galleryRow) fromGallery(o models.Gallery) {
 	r.Rating = intFromPtr(o.Rating)
 	r.Organized = o.Organized
 	r.Favorite = o.Favorite
+	r.HasGeneratedCover = o.HasGeneratedCover
 	r.StudioID = intFromPtr(o.StudioID)
 	r.FolderID = nullIntFromFolderIDPtr(o.FolderID)
 	r.CreatedAt = Timestamp{Timestamp: o.CreatedAt}
@@ -82,8 +84,9 @@ func (r *galleryQueryRow) resolve() *models.Gallery {
 		Details:       r.Details.String,
 		Photographer:  r.Photographer.String,
 		Rating:        nullIntPtr(r.Rating),
-		Organized:     r.Organized,
-		Favorite:      r.Favorite,
+		Organized:         r.Organized,
+		Favorite:          r.Favorite,
+		HasGeneratedCover: r.HasGeneratedCover,
 		StudioID:      nullIntPtr(r.StudioID),
 		FolderID:      nullIntFolderIDPtr(r.FolderID),
 		PrimaryFileID: nullIntFileIDPtr(r.PrimaryFileID),
@@ -113,6 +116,7 @@ func (r *galleryRowRecord) fromPartial(o models.GalleryPartial) {
 	r.setNullInt("rating", o.Rating)
 	r.setBool("organized", o.Organized)
 	r.setBool("favorite", o.Favorite)
+	r.setBool("has_generated_cover", o.HasGeneratedCover)
 	r.setNullInt("studio_id", o.StudioID)
 	r.setTimestamp("created_at", o.CreatedAt)
 	r.setTimestamp("updated_at", o.UpdatedAt)
@@ -986,6 +990,10 @@ func (qb *GalleryStore) SetCover(ctx context.Context, galleryID int, coverImageI
 
 func (qb *GalleryStore) ResetCover(ctx context.Context, galleryID int) error {
 	return imageGalleriesTableMgr.resetCover(ctx, galleryID)
+}
+
+func (qb *GalleryStore) SetHasGeneratedCover(ctx context.Context, galleryID int, v bool) error {
+	return qb.tableMgr.updateByID(ctx, galleryID, goqu.Record{"has_generated_cover": v})
 }
 
 func (qb *GalleryStore) GetSceneIDs(ctx context.Context, id int) ([]int, error) {

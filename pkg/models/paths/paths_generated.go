@@ -22,6 +22,7 @@ type generatedPaths struct {
 	Downloads          string
 	Tmp                string
 	InteractiveHeatmap string
+	GalleryCovers      string
 }
 
 func newGeneratedPaths(path string) *generatedPaths {
@@ -35,6 +36,7 @@ func newGeneratedPaths(path string) *generatedPaths {
 	gp.Downloads = filepath.Join(path, "download_stage")
 	gp.Tmp = filepath.Join(path, "tmp")
 	gp.InteractiveHeatmap = filepath.Join(path, "interactive_heatmaps")
+	gp.GalleryCovers = filepath.Join(path, "gallery_covers")
 	return &gp
 }
 
@@ -87,4 +89,9 @@ func (gp *generatedPaths) GetThumbnailPath(checksum string, width int) string {
 func (gp *generatedPaths) GetClipPreviewPath(checksum string, width int) string {
 	fname := fmt.Sprintf("%s_%d.webm", checksum, width)
 	return filepath.Join(gp.Thumbnails, fsutil.GetIntraDir(checksum, thumbDirDepth, thumbDirLength), fname)
+}
+
+func (gp *generatedPaths) GetGalleryContactSheetPath(hash string) string {
+	fname := hash + ".jpg"
+	return filepath.Join(gp.GalleryCovers, fsutil.GetIntraDir(hash, thumbDirDepth, thumbDirLength), fname)
 }

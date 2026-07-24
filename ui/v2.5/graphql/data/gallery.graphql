@@ -11,6 +11,7 @@ fragment GalleryData on Gallery {
   rating100
   organized
   favorite
+  has_generated_cover
 
   paths {
     cover

@@ -739,6 +739,20 @@ func (_m *GalleryReaderWriter) SetCover(ctx context.Context, galleryID int, cove
 	return r0
 }
 
+// SetHasGeneratedCover provides a mock function with given fields: ctx, galleryID, v
+func (_m *GalleryReaderWriter) SetHasGeneratedCover(ctx context.Context, galleryID int, v bool) error {
+	ret := _m.Called(ctx, galleryID, v)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, int, bool) error); ok {
+		r0 = rf(ctx, galleryID, v)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SetCustomFields provides a mock function with given fields: ctx, id, fields
 func (_m *GalleryReaderWriter) SetCustomFields(ctx context.Context, id int, fields models.CustomFieldsInput) error {
 	ret := _m.Called(ctx, id, fields)
