@@ -1,4 +1,4 @@
-import { Button, Tabs, Tab, Form } from "react-bootstrap";
+import { Button, Tab, Form } from "react-bootstrap";
 import React, { useEffect, useMemo, useState } from "react";
 import { useHistory, Redirect, RouteComponentProps } from "react-router-dom";
 import { FormattedMessage, useIntl } from "react-intl";
@@ -38,6 +38,7 @@ import { BackgroundImage } from "src/components/Shared/DetailsPage/BackgroundIma
 import {
   TabTitleCounter,
   useTabKey,
+  StashTabs,
 } from "src/components/Shared/DetailsPage/Tabs";
 import { DetailTitle } from "src/components/Shared/DetailsPage/DetailTitle";
 import { ExpandCollapseButton } from "src/components/Shared/CollapseButton";
@@ -127,7 +128,7 @@ const TagTabs: React.FC<{
     groupCount,
   ]);
 
-  const { activeTabKey, setTabKey } = useTabKey({
+  const { activeTabKey, tabsProps } = useTabKey({
     tabKey,
     validTabs,
     defaultTabKey: populatedDefaultTab,
@@ -153,12 +154,11 @@ const TagTabs: React.FC<{
   }, [showAllDetails, tag.children.length]);
 
   return (
-    <Tabs
+    <StashTabs
       id="tag-tabs"
       mountOnEnter
       unmountOnExit
-      activeKey={activeTabKey}
-      onSelect={setTabKey}
+      {...tabsProps}
     >
       <Tab
         eventKey="scenes"
@@ -279,7 +279,7 @@ const TagTabs: React.FC<{
           showSubTagContent={showAllDetails}
         />
       </Tab>
-    </Tabs>
+    </StashTabs>
   );
 };
 
