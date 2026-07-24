@@ -292,6 +292,8 @@ input SceneFilterType {
   duplicated: DuplicationCriterionInput
   "Filter by resolution"
   resolution: ResolutionCriterionInput
+  "Filter by minimum dimension (pixels, custom value)"
+  min_resolution: IntCriterionInput
   "Filter by orientation"
   orientation: OrientationCriterionInput
   "Filter by frame rate"
@@ -576,6 +578,8 @@ input GalleryFilterType {
   favorite: Boolean
   "Filter by average image resolution"
   average_resolution: ResolutionCriterionInput
+  "Filter by minimum dimension average (pixels, custom value)"
+  average_min_resolution: IntCriterionInput
   "Filter to only include galleries that have chapters. `true` or `false`"
   has_chapters: String
   "Filter to only include galleries with these scenes"
@@ -756,6 +760,8 @@ input ImageFilterType {
   o_counter: IntCriterionInput
   "Filter by resolution"
   resolution: ResolutionCriterionInput
+  "Filter by minimum dimension (pixels, custom value)"
+  min_resolution: IntCriterionInput
   "Filter by orientation"
   orientation: OrientationCriterionInput
   "Filter to only include images missing this property"

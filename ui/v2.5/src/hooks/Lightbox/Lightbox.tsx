@@ -48,6 +48,7 @@ import {
   faImages,
   faTrash,
 } from "@fortawesome/free-solid-svg-icons";
+import { FavoriteIcon } from "src/components/Shared/FavoriteIcon";
 import { RatingSystem } from "src/components/Shared/Rating/RatingSystem";
 import { DeleteImagesDialog } from "src/components/Images/DeleteImagesDialog";
 import { useDebounce } from "../debounce";
@@ -228,6 +229,18 @@ export const LightboxComponent: React.FC<IProps> = ({
       if (currentImage?.id) {
         updateImage({
           variables: { input: { id: currentImage.id, rating100: v } },
+        });
+      }
+    },
+    [images, index, initialIndex, updateImage]
+  );
+
+  const setImageFavorite = useCallback(
+    (v: boolean) => {
+      const currentImage = images[index === null ? initialIndex : index];
+      if (currentImage?.id) {
+        updateImage({
+          variables: { input: { id: currentImage.id, favorite: v } },
         });
       }
     },
@@ -922,6 +935,12 @@ export const LightboxComponent: React.FC<IProps> = ({
                 {renderOptionsForm()}
               </InputGroup>
             </div>
+            {currentImage?.id && (
+              <FavoriteIcon
+                favorite={currentImage?.favorite ?? false}
+                onToggleFavorite={(v) => setImageFavorite(v)}
+              />
+            )}
             {slideshowEnabled && (
               <Button
                 variant="link"
@@ -979,32 +998,43 @@ export const LightboxComponent: React.FC<IProps> = ({
             style={{ left: `${currentIndex * -100}vw` }}
             ref={carouselRef}
           >
-            {images.map((image, i) => (
-              <div className={`${CLASSNAME_IMAGE}`} key={image.paths.image}>
-                {i >= currentIndex - 1 && i <= currentIndex + 1 ? (
-                  <LightboxImage
-                    src={image.paths.image ?? ""}
-                    width={image.visual_files?.[0]?.width ?? 0}
-                    height={image.visual_files?.[0]?.height ?? 0}
-                    displayMode={displayMode}
-                    scaleUp={scaleUp}
-                    scrollMode={scrollMode}
-                    resetPosition={resetPosition}
-                    zoom={i === currentIndex ? zoom : 1}
-                    scrollAttemptsBeforeChange={scrollAttemptsBeforeChange}
-                    firstScroll={firstScroll}
-                    inScrollGroup={inScrollGroup}
-                    current={i === currentIndex}
-                    alignBottom={movingLeft}
-                    setZoom={updateZoom}
-                    debouncedScrollReset={debouncedScrollReset}
-                    onLeft={handleLeft}
-                    onRight={handleRight}
-                    isVideo={isVideo(image.visual_files?.[0] ?? {})}
-                  />
-                ) : undefined}
-              </div>
-            ))}
+            {images.map((image, i) => {
+              const lastIndex = images.length - 1;
+              const loops = !pageCallback;
+              const isWrapNeighbor =
+                loops &&
+                ((currentIndex === 0 && i === lastIndex) ||
+                  (currentIndex === lastIndex && i === 0));
+              const shouldMount =
+                (i >= currentIndex - 1 && i <= currentIndex + 1) ||
+                isWrapNeighbor;
+              return (
+                <div className={`${CLASSNAME_IMAGE}`} key={image.paths.image}>
+                  {shouldMount ? (
+                    <LightboxImage
+                      src={image.paths.image ?? ""}
+                      width={image.visual_files?.[0]?.width ?? 0}
+                      height={image.visual_files?.[0]?.height ?? 0}
+                      displayMode={displayMode}
+                      scaleUp={scaleUp}
+                      scrollMode={scrollMode}
+                      resetPosition={resetPosition}
+                      zoom={i === currentIndex ? zoom : 1}
+                      scrollAttemptsBeforeChange={scrollAttemptsBeforeChange}
+                      firstScroll={firstScroll}
+                      inScrollGroup={inScrollGroup}
+                      current={i === currentIndex}
+                      alignBottom={movingLeft}
+                      setZoom={updateZoom}
+                      debouncedScrollReset={debouncedScrollReset}
+                      onLeft={handleLeft}
+                      onRight={handleRight}
+                      isVideo={isVideo(image.visual_files?.[0] ?? {})}
+                    />
+                  ) : undefined}
+                </div>
+              );
+            })}
           </div>
 
           {allowNavigation && (

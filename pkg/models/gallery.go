@@ -26,6 +26,8 @@ type GalleryFilterType struct {
 	Favorite  *bool `json:"favorite"`
 	// Filter by average image resolution
 	AverageResolution *ResolutionCriterionInput `json:"average_resolution"`
+	// Filter by minimum dimension average (pixels, custom value)
+	AverageMinResolution *IntCriterionInput `json:"average_min_resolution"`
 	// Filter to only include scenes which have chapters. `true` or `false`
 	HasChapters *string `json:"has_chapters"`
 	// Filter to only include galleries with these scenes
