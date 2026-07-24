@@ -99,6 +99,10 @@ const messages = defineMessages({
     id: "statistics",
     defaultMessage: "Statistics",
   },
+  favourites: {
+    id: "favourites",
+    defaultMessage: "Favourites",
+  },
 });
 
 const allMenuItems: IMenuItem[] = [
@@ -165,6 +169,13 @@ const allMenuItems: IMenuItem[] = [
     userCreatable: true,
   },
   {
+    name: "favourites",
+    message: messages.favourites,
+    href: "/favourites",
+    icon: faHeart,
+    hotkey: "g f",
+  },
+  {
     name: "playlists",
     message: messages.playlists,
     href: "/playlists",
@@ -217,6 +228,11 @@ export const MainNavbar: React.FC = () => {
     // Always include playlists even if not in config
     if (!cfgMenuItems.includes("playlists")) {
       cfgMenuItems = [...cfgMenuItems, "playlists"];
+    }
+
+    // Always include favourites even if not in config
+    if (!cfgMenuItems.includes("favourites")) {
+      cfgMenuItems = [...cfgMenuItems, "favourites"];
     }
 
     return allMenuItems.filter((menuItem) =>
