@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Button } from "react-bootstrap";
+import { Link } from "react-router-dom";
 import * as GQL from "src/core/generated-graphql";
 import { useFindClips } from "src/core/StashService";
 import { LoadingIndicator } from "../Shared/LoadingIndicator";
@@ -45,9 +46,16 @@ export const ClipList: React.FC = () => {
     <div className="clip-list-container p-3">
       <div className="d-flex align-items-center justify-content-between mb-3">
         <h4 className="mb-0">Clips ({totalCount})</h4>
-        <Button variant="primary" onClick={() => setShowCreate(true)}>
-          Create Clip
-        </Button>
+        <div className="d-flex" style={{ gap: "0.5rem" }}>
+          {totalCount > 0 && (
+            <Link to="/clips/feed" className="btn btn-secondary">
+              Feed
+            </Link>
+          )}
+          <Button variant="primary" onClick={() => setShowCreate(true)}>
+            Create Clip
+          </Button>
+        </div>
       </div>
 
       {renderContent()}

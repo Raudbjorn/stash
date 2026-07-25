@@ -78,3 +78,127 @@
     margin-top: 1rem;
   }
 }
+
+/* TikTok-style vertical clip feed */
+.clip-feed {
+  position: fixed;
+  inset: 0;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+  background: #000;
+  z-index: 1;
+
+  .clip-feed-back {
+    position: fixed;
+    top: 0.75rem;
+    left: 0.75rem;
+    z-index: 3;
+    color: #fff;
+    font-size: 1.25rem;
+  }
+}
+
+.clip-feed-item {
+  position: relative;
+  height: 100vh;
+  width: 100%;
+  scroll-snap-align: start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+
+  .clip-feed-video {
+    max-height: 100%;
+    max-width: 100%;
+    width: auto;
+    height: 100%;
+    object-fit: contain;
+    cursor: pointer;
+  }
+
+  .clip-feed-missing {
+    color: #ccc;
+    text-align: center;
+    a {
+      color: #4dabf7;
+    }
+  }
+}
+
+.clip-feed-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 1.5rem;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.6) 0%,
+    rgba(0, 0, 0, 0) 35%
+  );
+
+  a,
+  button {
+    pointer-events: auto;
+  }
+
+  .clip-feed-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    max-width: 70%;
+  }
+
+  .clip-feed-title {
+    color: #fff;
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
+
+  .clip-feed-scene,
+  .clip-feed-duration {
+    color: #ddd;
+    font-size: 0.9rem;
+  }
+
+  .clip-feed-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.25rem;
+  }
+
+  .clip-feed-tag {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 1rem;
+    padding: 0.1rem 0.6rem;
+    font-size: 0.8rem;
+  }
+
+  .clip-feed-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .clip-feed-btn {
+    color: #fff;
+    font-size: 1.5rem;
+  }
+
+  .clip-feed-o {
+    color: #fff;
+    font-size: 1rem;
+    white-space: nowrap;
+  }
+}
+
+.clip-feed-empty {
+  text-align: center;
+  padding: 3rem;
+}
