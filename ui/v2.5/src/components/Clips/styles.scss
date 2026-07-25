@@ -1,0 +1,80 @@
+.clip-card {
+  .clip-card-video {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    background-color: #000;
+    display: block;
+  }
+
+  .clip-card__details {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .clip-card__duration {
+    font-size: 0.85rem;
+    opacity: 0.8;
+  }
+}
+
+.clip-duration-badge {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  padding: 0 0.35rem;
+  border-radius: 0.2rem;
+  background-color: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 0.8rem;
+  z-index: 1;
+}
+
+.clip-details {
+  padding: 1rem;
+  max-width: 1200px;
+  margin: 0 auto;
+
+  .clip-details__video {
+    width: 100%;
+    max-height: 70vh;
+    background-color: #000;
+  }
+
+  .clip-details__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  .clip-details__meta {
+    margin: 1rem 0;
+
+    dt {
+      opacity: 0.7;
+    }
+  }
+
+  .clip-details__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0.5rem 0;
+  }
+
+  .clip-details__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    margin: 1rem 0;
+  }
+
+  .clip-edit-form {
+    max-width: 480px;
+    margin-top: 1rem;
+  }
+}

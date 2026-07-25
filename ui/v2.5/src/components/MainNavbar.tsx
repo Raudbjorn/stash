@@ -67,6 +67,10 @@ const messages = defineMessages({
     id: "markers",
     defaultMessage: "Markers",
   },
+  clips: {
+    id: "clips",
+    defaultMessage: "Clips",
+  },
   performers: {
     id: "performers",
     defaultMessage: "Performers",
@@ -135,6 +139,13 @@ const allMenuItems: IMenuItem[] = [
     href: "/scenes/markers",
     icon: faMapMarkerAlt,
     hotkey: "g k",
+  },
+  {
+    name: "clips",
+    message: messages.clips,
+    href: "/clips",
+    icon: faVideo,
+    hotkey: "g c",
   },
   {
     name: "galleries",
@@ -233,6 +244,11 @@ export const MainNavbar: React.FC = () => {
     // Always include favourites even if not in config
     if (!cfgMenuItems.includes("favourites")) {
       cfgMenuItems = [...cfgMenuItems, "favourites"];
+    }
+
+    // Always include clips even if not in config (fork feature)
+    if (!cfgMenuItems.includes("clips")) {
+      cfgMenuItems = [...cfgMenuItems, "clips"];
     }
 
     return allMenuItems.filter((menuItem) =>
