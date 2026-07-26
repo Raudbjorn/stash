@@ -10,6 +10,12 @@ Stash currently identifies files by performing a quick file hash. This means tha
 
 Stash currently ignores duplicate files. If two files contain identical content, only the first one it comes across is used.
 
+### Faster rescans on large libraries
+
+To keep rescans cheap on large libraries, a normal scan skips directories whose modification time has not changed since the last scan. A directory's modification time changes when files are **added, removed, or renamed** inside it, so those are always detected. It does **not** change when an existing file is overwritten or re-encoded **in place** (same path, new contents) — such a change will not be picked up by a normal scan of that directory.
+
+To force stash to re-examine file contents regardless of directory modification times, enable **Rescan** when running the scan (a full rescan). The optimisation is also automatically disabled for library paths on network filesystems or filesystems with coarse/unreliable timestamps (e.g. FAT/exFAT), where directory modification times cannot be trusted.
+
 ### Ignoring files with `.stashignore`
 
 You can create `.stashignore` files to exclude specific files or directories from being scanned. These files use gitignore-style pattern matching syntax.

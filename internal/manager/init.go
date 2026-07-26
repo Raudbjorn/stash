@@ -248,6 +248,8 @@ func (s *Manager) postInit(ctx context.Context) error {
 	s.RefreshImageMagick(ctx)
 	s.RefreshStreamManager()
 
+	s.StartScanScheduler()
+
 	return nil
 }
 

@@ -1,0 +1,46 @@
+type ScanSchedule {
+  id: ID!
+  name: String!
+  "Schedule spec in the form 'day@HH:MM' or 'daily@HH:MM'"
+  spec: String!
+  "Whether the scan fires once or repeats on each occurrence"
+  repeat: Boolean!
+  enabled: Boolean!
+  "Optional paths to scan; null means all configured stash paths"
+  paths: [String!]
+  scanOptions: ScanMetadataOptions!
+  lastRunAt: Timestamp
+  "Computed next scheduled run time"
+  nextRunAt: Timestamp
+}
+
+input ScanScheduleCreateInput {
+  name: String!
+  spec: String!
+  repeat: Boolean!
+  enabled: Boolean!
+  paths: [String!]
+  scanOptions: ScanMetadataOptionsInput!
+}
+
+input ScanScheduleUpdateInput {
+  id: ID!
+  name: String!
+  spec: String!
+  repeat: Boolean!
+  enabled: Boolean!
+  paths: [String!]
+  scanOptions: ScanMetadataOptionsInput!
+}
+
+input ScanMetadataOptionsInput {
+  rescan: Boolean
+  scanGenerateCovers: Boolean
+  scanGeneratePreviews: Boolean
+  scanGenerateImagePreviews: Boolean
+  scanGenerateSprites: Boolean
+  scanGeneratePhashes: Boolean
+  scanGenerateImagePhashes: Boolean
+  scanGenerateThumbnails: Boolean
+  scanGenerateClipPreviews: Boolean
+}
