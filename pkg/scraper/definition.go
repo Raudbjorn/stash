@@ -363,6 +363,23 @@ func (c Definition) supports(ty ScrapeContentType) bool {
 	panic("Unhandled ScrapeContentType")
 }
 
+func (c Definition) hasURLScrapers(ty ScrapeContentType) bool {
+	switch ty {
+	case ScrapeContentTypePerformer:
+		return len(c.PerformerByURL) > 0
+	case ScrapeContentTypeScene:
+		return len(c.SceneByURL) > 0
+	case ScrapeContentTypeGallery:
+		return len(c.GalleryByURL) > 0
+	case ScrapeContentTypeImage:
+		return len(c.ImageByURL) > 0
+	case ScrapeContentTypeMovie, ScrapeContentTypeGroup:
+		return len(c.GroupByURL) > 0 || len(c.MovieByURL) > 0
+	}
+
+	return false
+}
+
 func (c Definition) matchesURL(url string, ty ScrapeContentType) bool {
 	switch ty {
 	case ScrapeContentTypePerformer:
