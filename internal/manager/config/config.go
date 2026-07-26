@@ -151,6 +151,8 @@ const (
 
 	HTTPSPort = "https_port"
 
+	MetricsEnabled = "metrics_enabled"
+
 	ExternalHost = "external_host"
 
 	// http proxy url if required
@@ -1072,6 +1074,12 @@ func (i *Config) GetPort() int {
 // GetPort() as before.
 func (i *Config) GetHTTPSPort() int {
 	return i.getInt(HTTPSPort)
+}
+
+// GetMetricsEnabled reports whether the Prometheus /metrics endpoint and its
+// request-instrumentation middleware should be enabled. Defaults to false.
+func (i *Config) GetMetricsEnabled() bool {
+	return i.getBool(MetricsEnabled)
 }
 
 func (i *Config) GetThemeColor() string {

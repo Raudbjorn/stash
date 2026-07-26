@@ -192,6 +192,7 @@ These options are typically not exposed in the UI and must be changed manually i
 | `public_whitelist` | A list of public IP addresses or subnets (in CIDR range format eg: `192.168.1.0/24`) that are allowed to access the system when no credentials are configured. |
 | `signed_url_expiry` | The expiry time for signed URLs, in seconds. Signed URLs are used when authentication is required. Defaults to 4 hours to accommodate long video playback sessions. |
 | `https_port` | When set (and TLS certificates are configured), stash serves HTTPS on this port while continuing to serve plain HTTP on `port`. When `0`/unset (the default), TLS — if configured — is served on `port` as before. Requires a restart. |
+| `metrics_enabled` | When `true`, exposes a Prometheus metrics endpoint at `/metrics` (auth-gated like the rest of the server) plus HTTP request instrumentation. Defaults to `false`. Requires a restart. |
 
 The following environment variables are also supported:
 

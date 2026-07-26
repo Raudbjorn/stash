@@ -128,6 +128,9 @@ func Initialize() (*Server, error) {
 	}
 
 	r.Use(middleware.Heartbeat("/healthz"))
+	if cfg.GetMetricsEnabled() {
+		r.Use(MetricsMiddleware)
+	}
 	r.Use(cors.AllowAll().Handler)
 	r.Use(RequestIPMiddleware)
 	r.Use(authenticateHandler())
@@ -228,6 +231,11 @@ func Initialize() (*Server, error) {
 	r.Mount("/downloads", server.getDownloadsRoutes())
 	r.Mount("/plugin", server.getPluginRoutes())
 	r.Mount("/tts", server.getTTSRoutes())
+
+	if cfg.GetMetricsEnabled() {
+		// Auth-gated (inherits authenticateHandler); opt-in via metrics_enabled.
+		r.Handle("/metrics", metricsHandler())
+	}
 
 	r.HandleFunc("/css", cssHandler(cfg))
 	r.HandleFunc("/javascript", javascriptHandler(cfg))
