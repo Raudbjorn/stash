@@ -136,7 +136,8 @@ func (s *Manager) Scan(ctx context.Context, input ScanMetadataInput) (int, error
 			},
 			&file.FilteredDecorator{
 				Decorator: &file_image.Decorator{
-					FFProbe: s.FFProbe,
+					FFProbe:   s.FFProbe,
+					IMConvert: s.IMConvert,
 				},
 				Filter: file.FilterFunc(imageFileFilter),
 			},

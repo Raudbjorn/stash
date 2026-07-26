@@ -17,6 +17,7 @@ import (
 	"github.com/stashapp/stash/pkg/ffmpeg"
 	"github.com/stashapp/stash/pkg/file"
 	"github.com/stashapp/stash/pkg/file/video"
+	"github.com/stashapp/stash/pkg/imagemagick"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
 	_ "golang.org/x/image/webp"
@@ -26,7 +27,8 @@ var ErrUnsupportedAVIFInZip = errors.New("AVIF images in zip files is unsupporte
 
 // Decorator adds image specific fields to a File.
 type Decorator struct {
-	FFProbe *ffmpeg.FFProbe
+	FFProbe   *ffmpeg.FFProbe
+	IMConvert imagemagick.IMConvert
 }
 
 func (d *Decorator) Decorate(ctx context.Context, fs models.FS, f models.File) (models.File, error) {
@@ -53,8 +55,8 @@ func (d *Decorator) Decorate(ctx context.Context, fs models.FS, f models.File) (
 
 	probe, err := d.FFProbe.NewVideoFile(base.Path)
 	if err != nil {
-		logger.Warnf("File %q could not be read with ffprobe: %s, assuming ImageFile", base.Path, err)
-		return decorateFallback(fs, f)
+		logger.Warnf("File %q could not be read with ffprobe: %s, trying ImageMagick", base.Path, err)
+		return d.magickFallback(fs, f)
 	}
 
 	// Fallback to catch non-animated avif images that FFProbe detects as video files
@@ -143,6 +145,30 @@ func decorateFallback(fs models.FS, f models.File) (models.File, error) {
 	}
 
 	adjustForOrientation(fs, path, ret)
+
+	return ret, nil
+}
+
+// magickFallback attempts to probe the image with the ImageMagick binary when
+// ffprobe fails. If ImageMagick is unavailable or also fails, it degrades to
+// the Go image.DecodeConfig fallback.
+func (d *Decorator) magickFallback(fs models.FS, f models.File) (models.File, error) {
+	base := f.Base()
+
+	c, err := d.IMConvert.NewImageFile(base.Path)
+	if err != nil {
+		logger.Warnf("File %q could not be read with ImageMagick: %s, assuming ImageFile", base.Path, err)
+		return decorateFallback(fs, f)
+	}
+
+	ret := &models.ImageFile{
+		BaseFile: base,
+		Format:   c.Image.Format,
+		Width:    c.Image.Geometry.Width,
+		Height:   c.Image.Geometry.Height,
+	}
+
+	adjustForOrientation(fs, base.Path, ret)
 
 	return ret, nil
 }
