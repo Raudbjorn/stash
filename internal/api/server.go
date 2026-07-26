@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -52,6 +53,10 @@ const (
 type Server struct {
 	http.Server
 	displayAddress string
+
+	// httpsServer is the secondary TLS listener used when https_port is set;
+	// nil otherwise.
+	httpsServer *http.Server
 
 	manager *manager.Manager
 }
@@ -334,15 +339,51 @@ func (s *Server) Start() error {
 	logger.Infof("stash is listening on " + s.Addr)
 	logger.Infof("stash is running at " + s.displayAddress)
 
-	if s.TLSConfig != nil {
-		return s.ListenAndServeTLS("", "")
-	} else {
+	if s.TLSConfig == nil {
 		return s.ListenAndServe()
 	}
+
+	httpsPort := s.manager.Config.GetHTTPSPort()
+	if httpsPort <= 0 {
+		// Default behaviour: serve TLS on the main port.
+		return s.ListenAndServeTLS("", "")
+	}
+
+	// Dual-listener mode: serve HTTPS on the configured port and plain HTTP on
+	// the main port. Useful behind a reverse proxy that terminates on one port
+	// while exposing TLS directly on another.
+	host, _, err := net.SplitHostPort(s.Addr)
+	if err != nil {
+		return fmt.Errorf("parsing listen address %q: %w", s.Addr, err)
+	}
+	httpsAddr := net.JoinHostPort(host, strconv.Itoa(httpsPort))
+
+	s.httpsServer = &http.Server{
+		Addr:      httpsAddr,
+		Handler:   s.Handler,
+		TLSConfig: s.TLSConfig,
+		// mirror the main server: disable http/2 so streams can be hijacked/closed
+		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
+	}
+
+	go func() {
+		logger.Infof("stash HTTPS is listening on " + httpsAddr)
+		if err := s.httpsServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Errorf("HTTPS server error: %v", err)
+		}
+	}()
+
+	return s.ListenAndServe()
 }
 
 // Shutdown gracefully shuts down the server without interrupting any active connections.
 func (s *Server) Shutdown() {
+	if s.httpsServer != nil {
+		if err := s.httpsServer.Shutdown(context.TODO()); err != nil {
+			logger.Errorf("Error shutting down https server: %v", err)
+		}
+	}
+
 	err := s.Server.Shutdown(context.TODO())
 	if err != nil {
 		logger.Errorf("Error shutting down http server: %v", err)
