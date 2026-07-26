@@ -419,6 +419,16 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 		c.SetInterface(config.StashBoxes, input.StashBoxes)
 	}
 
+	if input.MarkerSync != nil {
+		// Merge onto the current config so a partial mutation (one that omits
+		// fields such as a source api_key) never clobbers stored values.
+		merged := input.MarkerSync.ApplyTo(c.GetMarkerSyncConfig())
+		if err := merged.Validate(); err != nil {
+			return nil, err
+		}
+		c.SetInterface(config.MarkerSync, merged)
+	}
+
 	if input.PythonPath != nil {
 		r.setConfigString(config.PythonPath, input.PythonPath)
 	}

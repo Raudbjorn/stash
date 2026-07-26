@@ -58,6 +58,14 @@ models:
     model: github.com/stashapp/stash/internal/manager/config.StashConfigInput
   StashBoxInput:
     model: github.com/stashapp/stash/internal/manager/config.StashBoxInput
+  MarkerSyncConfig:
+    model: github.com/stashapp/stash/internal/manager/config.MarkerSyncConfig
+  MarkerSyncConfigInput:
+    model: github.com/stashapp/stash/internal/manager/config.MarkerSyncConfigInput
+  MarkerSyncSourceConfig:
+    model: github.com/stashapp/stash/internal/manager/config.MarkerSyncSourceConfig
+  MarkerSyncSourceConfigInput:
+    model: github.com/stashapp/stash/internal/manager/config.MarkerSyncSourceConfigInput
   ConfigImageLightboxResult:
     model: github.com/stashapp/stash/internal/manager/config.ConfigImageLightboxResult
   ImageLightboxDisplayMode:
@@ -98,6 +106,12 @@ models:
     model: github.com/stashapp/stash/internal/manager.AnalyzeSceneMetadataInput
   CleanMetadataInput:
     model: github.com/stashapp/stash/internal/manager.CleanMetadataInput
+  MarkerSyncInput:
+    model: github.com/stashapp/stash/internal/manager.MarkerSyncInput
+  MarkerSyncSubmitInput:
+    model: github.com/stashapp/stash/internal/manager.MarkerSyncSubmitInput
+  MarkerSyncSelectMode:
+    model: github.com/stashapp/stash/internal/manager.MarkerSyncSelectMode
   StashBoxBatchTagInput:
     model: github.com/stashapp/stash/internal/manager.StashBoxBatchTagInput
   SceneStreamEndpoint:

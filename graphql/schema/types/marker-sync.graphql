@@ -1,0 +1,23 @@
+"Selects which scenes a marker sync run operates on."
+enum MarkerSyncSelectMode {
+  "Sync every scene in the library."
+  ALL
+  "Sync only the scenes named in scene_ids."
+  IDS
+  "Sync only scenes that currently have no markers."
+  ONLY_WITHOUT_MARKERS
+}
+
+"Input for the markerSync mutation."
+input MarkerSyncInput {
+  "Scene ids to sync. Required when mode is IDS, ignored otherwise."
+  scene_ids: [ID!]
+  "Which scene set to sync. Defaults to IDS when scene_ids is set, otherwise ALL."
+  mode: MarkerSyncSelectMode
+}
+
+"Input for the markerSyncSubmit mutation."
+input MarkerSyncSubmitInput {
+  "Scene ids to submit. When empty, every scene in the library is considered."
+  scene_ids: [ID!]
+}

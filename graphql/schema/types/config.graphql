@@ -186,6 +186,8 @@ input ConfigGeneralInput {
   customPerformerImageLocation: String
   "Stash-box instances used for tagging"
   stashBoxes: [StashBoxInput!]
+  "Marker sync configuration"
+  markerSync: MarkerSyncConfigInput
   "Python path - resolved using path if unset"
   pythonPath: String
 
@@ -342,6 +344,8 @@ type ConfigGeneralResult {
   customPerformerImageLocation: String
   "Stash-box instances used for tagging"
   stashBoxes: [StashBox!]!
+  "Marker sync configuration"
+  markerSync: MarkerSyncConfig!
   "Python path - resolved using path if unset"
   pythonPath: String!
 
@@ -349,6 +353,52 @@ type ConfigGeneralResult {
   scraperPackageSources: [PackageSource!]!
   "Source of plugin packages"
   pluginPackageSources: [PackageSource!]!
+}
+
+input MarkerSyncSourceConfigInput {
+  enabled: Boolean
+  api_key: String
+  base_url: String
+  requests_per_minute: Int
+}
+
+input MarkerSyncConfigInput {
+  tolerance_seconds: Float
+  mode: String
+  skip_tags: [String!]
+  tag_aware: Boolean
+  fire_hooks: Boolean
+  sync_urls: Boolean
+  sync_galleries: Boolean
+  sync_groups: Boolean
+  funscript_path: String
+  match_funscripts: Boolean
+  submit_funscript_hash: Boolean
+  theporndb: MarkerSyncSourceConfigInput
+  timestamp_trade: MarkerSyncSourceConfigInput
+}
+
+type MarkerSyncSourceConfig {
+  enabled: Boolean!
+  api_key: String!
+  base_url: String!
+  requests_per_minute: Int!
+}
+
+type MarkerSyncConfig {
+  tolerance_seconds: Float!
+  mode: String!
+  skip_tags: [String!]!
+  tag_aware: Boolean!
+  fire_hooks: Boolean!
+  sync_urls: Boolean!
+  sync_galleries: Boolean!
+  sync_groups: Boolean!
+  funscript_path: String!
+  match_funscripts: Boolean!
+  submit_funscript_hash: Boolean!
+  theporndb: MarkerSyncSourceConfig!
+  timestamp_trade: MarkerSyncSourceConfig!
 }
 
 input ConfigDisableDropdownCreateInput {

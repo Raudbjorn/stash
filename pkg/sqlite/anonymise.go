@@ -52,6 +52,7 @@ func (db *Anonymiser) Anonymise(ctx context.Context) error {
 			func() error { return db.anonymiseFolders(ctx) },
 			func() error { return db.anonymiseFiles(ctx) },
 			func() error { return db.anonymiseCaptions(ctx) },
+			func() error { return db.anonymiseFunscriptIndex(ctx) },
 			func() error { return db.anonymiseFingerprints(ctx) },
 			func() error { return db.anonymiseScenes(ctx) },
 			func() error { return db.anonymiseMarkers(ctx) },
@@ -181,6 +182,27 @@ func (db *Anonymiser) anonymiseCaptions(ctx context.Context) error {
 	return txn.WithTxn(ctx, db, func(ctx context.Context) error {
 		table := goqu.T(videoCaptionsTable)
 		stmt := dialect.Update(table).Set(goqu.Record{"filename": goqu.Cast(table.Col("file_id"), "VARCHAR")})
+
+		if _, err := exec(ctx, stmt); err != nil {
+			return fmt.Errorf("anonymising %s: %w", table.GetTable(), err)
+		}
+
+		return nil
+	})
+}
+
+func (db *Anonymiser) anonymiseFunscriptIndex(ctx context.Context) error {
+	logger.Infof("Anonymising funscript index")
+	return txn.WithTxn(ctx, db, func(ctx context.Context) error {
+		table := goqu.T(funscriptIndexTable)
+		// Scrub the absolute filename (there is a UNIQUE index on it, so cast the
+		// row id to keep values distinct, mirroring anonymiseFiles/anonymiseCaptions)
+		// and drop the metadata, which may embed the original path or other
+		// identifying data. The md5 is a content hash and is left intact.
+		stmt := dialect.Update(table).Set(goqu.Record{
+			"filename": goqu.Cast(table.Col(idColumn), "VARCHAR"),
+			"metadata": nil,
+		})
 
 		if _, err := exec(ctx, stmt); err != nil {
 			return fmt.Errorf("anonymising %s: %w", table.GetTable(), err)

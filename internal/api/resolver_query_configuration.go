@@ -78,6 +78,8 @@ func makeConfigGeneralResult() *ConfigGeneralResult {
 
 	customPerformerImageLocation := config.GetCustomPerformerImageLocation()
 
+	markerSync := config.GetMarkerSyncConfig()
+
 	return &ConfigGeneralResult{
 		Stashes:                       config.GetStashPaths(),
 		DatabasePath:                  config.GetDatabasePath(),
@@ -133,6 +135,7 @@ func makeConfigGeneralResult() *ConfigGeneralResult {
 		ImageExcludes:                 config.GetImageExcludes(),
 		CustomPerformerImageLocation:  &customPerformerImageLocation,
 		StashBoxes:                    config.GetStashBoxes(),
+		MarkerSync:                    &markerSync,
 		PythonPath:                    config.GetPythonPath(),
 		TranscodeInputArgs:            config.GetTranscodeInputArgs(),
 		TranscodeOutputArgs:           config.GetTranscodeOutputArgs(),
