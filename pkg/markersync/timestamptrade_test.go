@@ -39,6 +39,25 @@ func newTTStub(t *testing.T, getMarkers map[string]string, scenes map[string]str
 	}))
 }
 
+// TestTimestampTradeSource_FetchMarkers_PropagatesServerError asserts that a
+// genuine failure (a 5xx) is surfaced instead of being silently treated as
+// "scene has no markers" - the fix for swallowing lookup errors.
+func TestTimestampTradeSource_FetchMarkers_PropagatesServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	s := NewTimestampTradeSource(TimestampTradeOptions{Enabled: true})
+	s.baseURL = srv.URL
+
+	id := SceneIdentity{StashIDs: []StashID{{Endpoint: "e", StashID: "stash-abc"}}}
+
+	if _, err := s.FetchMarkers(context.Background(), id); err == nil {
+		t.Fatal("FetchMarkers: expected an error on HTTP 500, got nil (a server error must not be reported as 'no markers')")
+	}
+}
+
 func TestTimestampTradeSource_FetchMarkers_MillisecondsToSeconds(t *testing.T) {
 	srv := newTTStub(t,
 		map[string]string{"stash-abc": "555"},

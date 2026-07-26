@@ -822,12 +822,20 @@ func (s *Manager) markerSyncScenes(ctx context.Context, input MarkerSyncInput) (
 			return nil
 
 		case MarkerSyncSelectModeAll, MarkerSyncSelectModeOnlyWithoutMarkers:
+			// NOTE: this loads the whole library into memory. Adequate for a
+			// background job on typical libraries; a paged Scene.Query with a
+			// server-side no-markers criterion is a follow-up for very large
+			// libraries.
 			all, err := s.Repository.Scene.All(ctx)
 			if err != nil {
 				return fmt.Errorf("loading all scenes: %w", err)
 			}
 
 			for _, sc := range all {
+				// Honour job cancellation while scanning a large library.
+				if err := ctx.Err(); err != nil {
+					return err
+				}
 				if sc == nil {
 					continue
 				}

@@ -23,6 +23,22 @@ const defaultUserAgent = "stash"
 // included in the returned error.
 const errorBodySnippetLen = 512
 
+// HTTPStatusError is returned by the client when a request completes with a
+// non-2xx status. It lets callers distinguish an expected outcome (for example a
+// 404 meaning "no such record") from a genuine failure such as a 5xx. Transport
+// errors (network, timeout, context cancellation) are returned unwrapped and are
+// NOT represented by this type.
+type HTTPStatusError struct {
+	StatusCode int
+	Method     string
+	URL        string
+	Body       string
+}
+
+func (e *HTTPStatusError) Error() string {
+	return fmt.Sprintf("%s %s: unexpected status %d: %s", e.Method, e.URL, e.StatusCode, e.Body)
+}
+
 // restClient is a small JSON-over-HTTP client shared by the marker sync
 // sources. It mirrors the shape of pkg/stashbox/client.go (bearer auth header,
 // User-Agent header, optional per-source rate limiting) but speaks plain REST
@@ -106,7 +122,12 @@ func (c *restClient) do(ctx context.Context, method, url, bearer string, body io
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, errorBodySnippetLen))
-		return fmt.Errorf("%s %s: unexpected status %d: %s", method, url, resp.StatusCode, strings.TrimSpace(string(snippet)))
+		return &HTTPStatusError{
+			StatusCode: resp.StatusCode,
+			Method:     method,
+			URL:        url,
+			Body:       strings.TrimSpace(string(snippet)),
+		}
 	}
 
 	if out == nil {

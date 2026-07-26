@@ -316,6 +316,9 @@ func (s *Manager) markerSyncSubmitScenes(ctx context.Context, input MarkerSyncSu
 			}
 			candidates = found
 		} else {
+			// NOTE: loads the whole library into memory. Adequate for a
+			// background job on typical libraries; a paged query is a follow-up
+			// for very large libraries.
 			all, err := s.Repository.Scene.All(ctx)
 			if err != nil {
 				return fmt.Errorf("loading all scenes: %w", err)
@@ -331,6 +334,10 @@ func (s *Manager) markerSyncSubmitScenes(ctx context.Context, input MarkerSyncSu
 		}
 
 		for _, sc := range candidates {
+			// Honour job cancellation while scanning a large library.
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			if sc == nil {
 				continue
 			}

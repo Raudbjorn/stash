@@ -3,7 +3,9 @@ package markersync
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 )
 
 // timestampTradeBaseURL is the REST API base for timestamp.trade.
@@ -300,18 +302,38 @@ func (s *TimestampTradeSource) fetchSceneData(ctx context.Context, id SceneIdent
 	for _, sid := range id.StashIDs {
 		ttSceneID, err := s.resolveSceneID(ctx, sid.StashID)
 		if err != nil {
-			// This stash id did not resolve; try the next one.
-			continue
+			if isNotFound(err) {
+				// This stash id is genuinely absent from timestamp.trade; try
+				// the next one.
+				continue
+			}
+			// A real failure (network, timeout, 5xx, ...) must not be silently
+			// reported as "scene has no markers".
+			return nil, fmt.Errorf("timestamp.trade: resolving stash id %s: %w", sid.StashID, err)
 		}
 		if ttSceneID == "" {
 			continue
 		}
 
-		return s.fetchScene(ctx, ttSceneID)
+		resp, err := s.fetchScene(ctx, ttSceneID)
+		if err != nil {
+			if isNotFound(err) {
+				continue
+			}
+			return nil, err
+		}
+		return resp, nil
 	}
 
 	// No stash id resolved to a timestamp.trade scene.
 	return nil, nil
+}
+
+// isNotFound reports whether err is an HTTP 404 status error, i.e. an explicit
+// "no such record" rather than a transport or server failure.
+func isNotFound(err error) bool {
+	var se *HTTPStatusError
+	return errors.As(err, &se) && se.StatusCode == http.StatusNotFound
 }
 
 // resolveSceneID performs step one: stash id -> timestamp.trade scene id.

@@ -179,6 +179,58 @@ func TestApply(t *testing.T) {
 	}
 }
 
+func TestApply_MultiCandidateBatch(t *testing.T) {
+	seed := map[string]int{"A": 1}
+
+	t.Run("two near-duplicate candidates dedup against each other (skip)", func(t *testing.T) {
+		w := &fakeMarkerWriter{} // empty DB
+		tags := newFakeTagResolver(seed)
+
+		res, err := Apply(context.Background(), w, tags, 7,
+			[]MarkerCandidate{
+				{Title: "first", PrimaryTag: "A", Seconds: 100},
+				{Title: "second", PrimaryTag: "A", Seconds: 105}, // within tolerance of first
+			},
+			ApplyOptions{Tolerance: 15, Mode: ModeSkip, TagAware: true})
+		if err != nil {
+			t.Fatalf("Apply: %v", err)
+		}
+		if res.Created != 1 || res.Skipped != 1 {
+			t.Errorf("Created=%d Skipped=%d, want 1/1 (second dedups against the first, created earlier in the batch)", res.Created, res.Skipped)
+		}
+		if len(w.created) != 1 {
+			t.Errorf("writer created %d markers, want 1", len(w.created))
+		}
+	})
+
+	t.Run("consecutive overwrite candidates do not double-delete the original", func(t *testing.T) {
+		w := &fakeMarkerWriter{existing: []ExistingMarker{{ID: 42, Seconds: 100, PrimaryTagID: 1}}}
+		tags := newFakeTagResolver(seed)
+
+		res, err := Apply(context.Background(), w, tags, 7,
+			[]MarkerCandidate{
+				{Title: "c1", PrimaryTag: "A", Seconds: 105},
+				{Title: "c2", PrimaryTag: "A", Seconds: 108},
+			},
+			ApplyOptions{Tolerance: 15, Mode: ModeOverwrite, TagAware: true})
+		if err != nil {
+			t.Fatalf("Apply: %v", err)
+		}
+		if res.Overwritten != 2 {
+			t.Errorf("Overwritten = %d, want 2", res.Overwritten)
+		}
+		// c1 deletes original 42 and creates 1001; c2 must match the freshly
+		// created 1001, NOT delete the already-removed 42 a second time.
+		want := []int{42, 1001}
+		if len(w.deleted) != len(want) || w.deleted[0] != want[0] || w.deleted[1] != want[1] {
+			t.Errorf("deleted = %v, want %v (no double-delete of the original)", w.deleted, want)
+		}
+		if len(w.created) != 2 {
+			t.Errorf("writer created %d markers, want 2", len(w.created))
+		}
+	})
+}
+
 func TestApply_SkipTags(t *testing.T) {
 	w := &fakeMarkerWriter{}
 	tags := newFakeTagResolver(nil)

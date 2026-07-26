@@ -279,7 +279,10 @@ func copyFirstFunscript(sources []string, videoPath string) (string, error) {
 		}
 		data, err := os.ReadFile(src)
 		if err != nil {
-			return "", fmt.Errorf("reading funscript %q: %w", src, err)
+			// A stale/unreadable indexed source (moved or deleted since it was
+			// indexed) should not abort the copy: try the next candidate.
+			logger.Warnf("marker sync: skipping unreadable funscript %q: %v", src, err)
+			continue
 		}
 		// O_EXCL guarantees we never clobber an existing destination even under a
 		// race between the Stat above and the create here.

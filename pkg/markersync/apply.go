@@ -32,6 +32,12 @@ type ExistingMarker struct {
 // MarkerWriter is the persistence boundary for the apply engine. The concrete
 // implementation backed by the scene-marker repository lives in the manager
 // layer (Stage 2).
+//
+// Overwrite atomicity: in ModeOverwrite, Apply deletes matched markers and then
+// creates the replacement as separate calls. Callers MUST invoke Apply inside a
+// single transaction (the manager task wraps it in Repository.WithTxn) so that a
+// CreateMarker failure rolls the preceding DeleteMarker calls back and no marker
+// is permanently lost.
 type MarkerWriter interface {
 	// ExistingForScene returns the markers already persisted for the scene.
 	ExistingForScene(ctx context.Context, sceneID int) ([]ExistingMarker, error)
@@ -138,6 +144,9 @@ func Apply(ctx context.Context, w MarkerWriter, tags TagResolver, sceneID int, c
 					return result, fmt.Errorf("deleting marker %d: %w", id, err)
 				}
 			}
+			// Keep the working set current so a later candidate in this same
+			// Apply call does not match a marker just deleted.
+			existing = removeMarkers(existing, dupIDs)
 		}
 
 		createdID, err := w.CreateMarker(ctx, sceneID, c.Title, c.Seconds, c.EndSeconds, primaryTagID, extraTagIDs)
@@ -145,6 +154,10 @@ func Apply(ctx context.Context, w MarkerWriter, tags TagResolver, sceneID int, c
 			return result, fmt.Errorf("creating marker %q: %w", c.Title, err)
 		}
 		result.CreatedIDs = append(result.CreatedIDs, createdID)
+		// Track the freshly created marker so later candidates in this batch
+		// dedup against it (two near-duplicate candidates from the same fetch
+		// must not both be created).
+		existing = append(existing, ExistingMarker{ID: createdID, Seconds: c.Seconds, PrimaryTagID: primaryTagID})
 
 		if len(dupIDs) > 0 {
 			result.Overwritten++
@@ -170,6 +183,25 @@ func findDuplicates(existing []ExistingMarker, seconds float64, primaryTagID int
 		dupIDs = append(dupIDs, e.ID)
 	}
 	return dupIDs
+}
+
+// removeMarkers returns existing without any marker whose id is in ids.
+func removeMarkers(existing []ExistingMarker, ids []int) []ExistingMarker {
+	if len(ids) == 0 {
+		return existing
+	}
+	remove := make(map[int]struct{}, len(ids))
+	for _, id := range ids {
+		remove[id] = struct{}{}
+	}
+	out := make([]ExistingMarker, 0, len(existing))
+	for _, e := range existing {
+		if _, drop := remove[e.ID]; drop {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 // resolveExtraTags resolves extra tag names to ids, excluding the primary tag
