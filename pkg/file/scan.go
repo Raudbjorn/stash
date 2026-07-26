@@ -304,8 +304,10 @@ func (s *Scanner) onExistingFolder(ctx context.Context, f ScannedFile, existing 
 		update = true
 	}
 
-	// backfill birth_time for folders created before migration 86.
+	// backfill birth_time for folders created before migration 93.
 	// Guarded so this fires once when missing rather than on every rescan.
+	// This folds into the existing folder-update write (folders are far fewer
+	// than files, and unchanged folders are skipped by the differential scan).
 	if existing.BirthTime == nil && f.BirthTime != nil {
 		existing.BirthTime = f.BirthTime
 		update = true
@@ -830,16 +832,11 @@ func (s *Scanner) onExistingFile(ctx context.Context, f ScannedFile, existing mo
 	forceRescan := s.Rescan
 
 	if !updated && !forceRescan {
-		// backfill birth_time for files created before migration 86
-		if base.BirthTime == nil && f.BirthTime != nil {
-			base.BirthTime = f.BirthTime
-			base.UpdatedAt = time.Now()
-			if err := s.Repository.WithTxn(ctx, func(ctx context.Context) error {
-				return s.Repository.File.Update(ctx, existing)
-			}); err != nil {
-				return nil, fmt.Errorf("backfilling birth_time for %q: %w", path, err)
-			}
-		}
+		// Intentionally no birth_time backfill here: writing per unchanged file
+		// would turn the zero-write incremental-scan fast path into one
+		// transaction per file on the first scan after the migration-93 upgrade,
+		// defeating the large-library differential-scan optimization. Existing
+		// files' birth_time is populated on a forced Rescan (handled below).
 		return s.onUnchangedFile(ctx, f, existing)
 	}
 

@@ -209,12 +209,20 @@ export function useFilterState(
     setInterfaceLocalForage,
   ] = useInterfaceLocalForage();
 
-  // on mount, restore persisted displayMode if URL doesn't specify one
+  // Restore the persisted displayMode once per view (URL ?disp= takes
+  // precedence). Guarded by a ref so it does not re-fire on later
+  // location.search changes (pagination/sort) — otherwise it could revert a
+  // manual display-mode change whose persisted value hasn't propagated back
+  // through localForage yet.
+  const restoredViewRef = useRef<View | undefined>(undefined);
   useEffect(() => {
     if (interfaceLoading || !interfaceData || !view) return;
+    if (restoredViewRef.current === view) return;
+    restoredViewRef.current = view;
+
+    if (location.search.includes("disp=")) return;
     const persisted = interfaceData.viewConfig?.[view]?.displayMode;
     if (persisted === undefined) return;
-    if (location.search.includes("disp=")) return;
 
     setFilter((cv) => {
       if (cv.displayMode === persisted) return cv;
