@@ -257,6 +257,8 @@ input SceneMarkerFilterType {
   scene_updated_at: TimestampCriterionInput
   "Filter by related scenes that meet this criteria"
   scene_filter: SceneFilterType
+  "Filter by whether the marker was automatically generated"
+  auto_generated: Boolean
 }
 
 input SceneFilterType {

@@ -12,6 +12,7 @@
     "add_to_playlist": "Add to playlist",
     "allow": "Allow",
     "allow_temporarily": "Allow temporarily",
+    "analyze_scene_metadata": "Analyze scene metadata",
     "anonymise": "Anonymise",
     "apply": "Apply",
     "assign_stashid_to_parent_studio": "Assign Stash ID to existing parent studio and update metadata",
@@ -54,6 +55,7 @@
     "delete_file_and_funscript": "Delete file (and funscript)",
     "delete_generated_supporting_files": "Delete generated supporting files",
     "delete_playlist": "Delete playlist",
+    "detect_scene_cuts": "Detect scene cuts",
     "disable": "Disable",
     "disallow": "Disallow",
     "download": "Download",
@@ -537,6 +539,9 @@
     },
     "tasks": {
       "added_job_to_queue": "Added {operation_name} to job queue",
+      "analyze_scene_metadata": {
+        "description": "Analyzes scene titles/filenames (and available container/EXIF metadata) to detect performers and scene date. Attaches matched performers and fills in a blank date; existing dates are never overwritten unless explicitly enabled."
+      },
       "anonymise_and_download": "Makes an anonymised copy of the database and downloads the resulting file.",
       "anonymise_database": "Makes a copy of the database to the backups directory, anonymising all sensitive data. This can then be provided to others for troubleshooting and debugging purposes. The original database is not modified. Anonymised database uses the filename format {filename_format}.",
       "anonymising_database": "Anonymising database",
@@ -581,7 +586,11 @@
       },
       "data_management": "Data management",
       "defaults_set": "Defaults have been set and will be used when clicking the {action} button on the Tasks page.",
+      "detect_scene_cuts": {
+        "description": "Runs ffmpeg scene-change detection on scenes and creates a marker at each detected cut. Markers are tagged as auto-generated so re-running this task doesn't create duplicates."
+      },
       "dont_include_file_extension_as_part_of_the_title": "Don't include file extension as part of the title",
+      "dry_run": "Dry run (log only, don't make changes)",
       "empty_queue": "No tasks are currently running.",
       "export_to_json": "Exports the database content into JSON format in the metadata directory.",
       "generate": {

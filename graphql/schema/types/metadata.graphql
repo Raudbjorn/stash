@@ -191,6 +191,30 @@ input AutoTagMetadataInput {
   tags: [String!]
 }
 
+input DetectSceneCutsInput {
+  "Scene IDs to process. If empty, all scenes are processed."
+  sceneIDs: [ID!]
+  "Scene-change sensitivity, 0-1. Higher values only detect harder cuts. Defaults to 0.4."
+  threshold: Float
+  "Downscale video to this width before analysis, for speed. Defaults to 320. 0 disables downscaling."
+  downscaleWidth: Int
+}
+
+input AnalyzeSceneMetadataInput {
+  "Scene IDs to process. If empty, all scenes are processed."
+  sceneIDs: [ID!]
+  "Compute and log proposed changes without writing anything."
+  dryRun: Boolean
+  "Minimum plausibility score (0-1) for a newly-discovered performer name to be looked up and, if confirmed, created. Defaults to 0.6."
+  performerConfidenceThreshold: Float
+  "Minimum confidence (0-1) for a resolved date to be written to a scene that doesn't already have one. Defaults to 0.6."
+  dateConfidenceThreshold: Float
+  "Allow overwriting a scene's existing date. Only ever applied from a high-confidence, uncontested signal."
+  overwriteExistingDate: Boolean
+  "Also analyze the scene's details/description text (off by default; often noisy marketing copy)."
+  useDetails: Boolean
+}
+
 type AutoTagMetadataOptions {
   """
   IDs of performers to tag files with, or "*" for all

@@ -64,6 +64,7 @@ type videoFileRow struct {
 	BitRate          int64         `db:"bit_rate"`
 	Interactive      bool          `db:"interactive"`
 	InteractiveSpeed null.Int      `db:"interactive_speed"`
+	CreationTime     NullTimestamp `db:"creation_time"`
 }
 
 func (f *videoFileRow) fromVideoFile(ff models.VideoFile) {
@@ -78,6 +79,9 @@ func (f *videoFileRow) fromVideoFile(ff models.VideoFile) {
 	f.BitRate = ff.BitRate
 	f.Interactive = ff.Interactive
 	f.InteractiveSpeed = intFromPtr(ff.InteractiveSpeed)
+	if !ff.CreationTime.IsZero() {
+		f.CreationTime = NullTimestamp{Timestamp: ff.CreationTime, Valid: true}
+	}
 }
 
 type imageFileRow struct {
@@ -97,17 +101,18 @@ func (f *imageFileRow) fromImageFile(ff models.ImageFile) {
 // we redefine this to change the columns around
 // otherwise, we collide with the image file columns
 type videoFileQueryRow struct {
-	FileID           null.Int    `db:"file_id_video"`
-	Format           null.String `db:"video_format"`
-	Width            null.Int    `db:"video_width"`
-	Height           null.Int    `db:"video_height"`
-	Duration         null.Float  `db:"duration"`
-	VideoCodec       null.String `db:"video_codec"`
-	AudioCodec       null.String `db:"audio_codec"`
-	FrameRate        null.Float  `db:"frame_rate"`
-	BitRate          null.Int    `db:"bit_rate"`
-	Interactive      null.Bool   `db:"interactive"`
-	InteractiveSpeed null.Int    `db:"interactive_speed"`
+	FileID           null.Int      `db:"file_id_video"`
+	Format           null.String   `db:"video_format"`
+	Width            null.Int      `db:"video_width"`
+	Height           null.Int      `db:"video_height"`
+	Duration         null.Float    `db:"duration"`
+	VideoCodec       null.String   `db:"video_codec"`
+	AudioCodec       null.String   `db:"audio_codec"`
+	FrameRate        null.Float    `db:"frame_rate"`
+	BitRate          null.Int      `db:"bit_rate"`
+	Interactive      null.Bool     `db:"interactive"`
+	InteractiveSpeed null.Int      `db:"interactive_speed"`
+	CreationTime     NullTimestamp `db:"creation_time"`
 }
 
 func (f *videoFileQueryRow) resolve() *models.VideoFile {
@@ -122,6 +127,7 @@ func (f *videoFileQueryRow) resolve() *models.VideoFile {
 		BitRate:          f.BitRate.Int64,
 		Interactive:      f.Interactive.Bool,
 		InteractiveSpeed: nullIntPtr(f.InteractiveSpeed),
+		CreationTime:     f.CreationTime.Timestamp,
 	}
 }
 
@@ -139,6 +145,7 @@ func videoFileQueryColumns() []interface{} {
 		table.Col("bit_rate"),
 		table.Col("interactive"),
 		table.Col("interactive_speed"),
+		table.Col("creation_time"),
 	}
 }
 
