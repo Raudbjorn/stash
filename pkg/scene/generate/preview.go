@@ -427,6 +427,9 @@ func (g Generator) previewVideoToImageArgs(input string, tmpFn string, hardwareD
 
 	extraInputArgs := g.FFMpegConfig.GetTranscodeInputArgs()
 	if hardwareDecode {
+		// Empty codec is intentional: the input here is the already-generated
+		// h264 video preview (GetVideoPreviewPath), not the original source, so
+		// the AV1 decode-method override must not apply.
 		extraInputArgs = append(extraInputArgs, ffmpeg.HardwareDecodeArgs("", "", "")...)
 	}
 

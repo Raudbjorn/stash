@@ -113,11 +113,16 @@ export function useTabKey(props: {
   return { activeTabKey, setTabKey, tabsProps };
 }
 
+// Entries are the tabs actually rendered by StashTabs (not the static
+// validTabs list): choosing a default that isn't rendered would leave
+// activeTabKey pointing at a non-existent pane — a blank page that persists via
+// localStorage. Labels come from each tab's own title, so we don't misuse the
+// eventKey as an intl message id.
 const DefaultTabDropdown: React.FC<{
-  validTabs: readonly string[];
+  entries: { key: string; title: React.ReactNode }[];
   currentDefault: string;
   onSetDefault: (tab: string) => void;
-}> = ({ validTabs, currentDefault, onSetDefault }) => (
+}> = ({ entries, currentDefault, onSetDefault }) => (
   <Dropdown className="default-tab-dropdown">
     <Dropdown.Toggle variant="link" size="sm" id="default-tab-settings">
       <Icon icon={faCog} />
@@ -126,13 +131,13 @@ const DefaultTabDropdown: React.FC<{
       <Dropdown.Header>
         <FormattedMessage id="default_tab" defaultMessage="Default Tab" />
       </Dropdown.Header>
-      {validTabs.map((tab) => (
+      {entries.map((e) => (
         <Dropdown.Item
-          key={tab}
-          active={currentDefault === tab}
-          onClick={() => onSetDefault(tab)}
+          key={e.key}
+          active={currentDefault === e.key}
+          onClick={() => onSetDefault(e.key)}
         >
-          <FormattedMessage id={tab} />
+          {e.title}
         </Dropdown.Item>
       ))}
     </Dropdown.Menu>
@@ -150,7 +155,6 @@ export const StashTabs: React.FC<
   id,
   activeKey,
   onSelect,
-  validTabs,
   defaultTabKey,
   setDefaultTabKey,
   mountOnEnter,
@@ -176,7 +180,10 @@ export const StashTabs: React.FC<
           </Nav.Item>
         ))}
         <DefaultTabDropdown
-          validTabs={validTabs}
+          entries={tabs.map((t) => ({
+            key: String(t.props.eventKey),
+            title: t.props.title,
+          }))}
           currentDefault={defaultTabKey}
           onSetDefault={setDefaultTabKey}
         />

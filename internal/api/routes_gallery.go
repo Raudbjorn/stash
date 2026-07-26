@@ -11,6 +11,7 @@ import (
 	"github.com/stashapp/stash/internal/manager"
 	"github.com/stashapp/stash/internal/manager/config"
 	"github.com/stashapp/stash/internal/static"
+	"github.com/stashapp/stash/pkg/fsutil"
 	"github.com/stashapp/stash/pkg/gallery"
 	"github.com/stashapp/stash/pkg/image"
 	"github.com/stashapp/stash/pkg/logger"
@@ -55,8 +56,12 @@ func (rs galleryRoutes) Cover(w http.ResponseWriter, r *http.Request) {
 
 	if g.HasGeneratedCover {
 		p := manager.GetInstance().Paths.Generated.GetGalleryContactSheetPath(gallery.ContactSheetHash(g.ID))
-		utils.ServeStaticFileModTime(w, r, p, g.UpdatedAt)
-		return
+		// The generated dir is regenerable and users prune it; if the file is
+		// gone, fall through to the image cover / default rather than 404.
+		if exists, _ := fsutil.FileExists(p); exists {
+			utils.ServeStaticFileModTime(w, r, p, g.UpdatedAt)
+			return
+		}
 	}
 
 	var i *models.Image
