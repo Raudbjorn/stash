@@ -2,6 +2,7 @@ package generate
 
 import (
 	"image"
+	"math"
 	"testing"
 )
 
@@ -124,6 +125,38 @@ func TestComputeCellGeometry(t *testing.T) {
 			// canvasH must equal the sum of per-row heights.
 			if rowHSum != canvasH {
 				t.Fatalf("N=%d: sum(rowH)=%d, canvasH=%d", n, rowHSum, canvasH)
+			}
+		})
+	}
+}
+
+func TestComputeCellGeometryExtremeAspects(t *testing.T) {
+	// Long-strip/webtoon pages (~0.01), ultrawide (100), and degenerate
+	// (0, negative, NaN) inputs must not blow the canvas past the uint16 JPEG
+	// height limit or into hundreds of MB. Clamping keeps canvasH well bounded.
+	const maxSafeCanvasH = 65535
+	cases := map[string][]float64{
+		"all-tall":   {0.01, 0.02, 0.01, 0.03, 0.01, 0.02, 0.01, 0.02, 0.01, 0.02, 0.01, 0.02},
+		"all-wide":   {100, 80, 120, 100, 90, 100, 110, 100, 95, 100, 105, 100},
+		"degenerate": {0, -1, math.NaN(), 0.0001, 5000, 1, 1, 1, 1, 1, 1, 1},
+	}
+	for name, aspects := range cases {
+		aspects := aspects
+		t.Run(name, func(t *testing.T) {
+			cells, canvasH := ComputeCellGeometry(aspects)
+			if len(cells) != len(aspects) {
+				t.Fatalf("%s: got %d cells, want %d", name, len(cells), len(aspects))
+			}
+			if canvasH <= 0 || canvasH > maxSafeCanvasH {
+				t.Fatalf("%s: canvasH=%d out of safe range (0, %d]", name, canvasH, maxSafeCanvasH)
+			}
+			for i, c := range cells {
+				if c.W <= 0 || c.H <= 0 {
+					t.Fatalf("%s cell=%d: non-positive W=%d H=%d", name, i, c.W, c.H)
+				}
+				if c.X < 0 || c.X+c.W > ContactSheetCanvasWidth {
+					t.Fatalf("%s cell=%d: out-of-bounds X=%d W=%d", name, i, c.X, c.W)
+				}
 			}
 		})
 	}

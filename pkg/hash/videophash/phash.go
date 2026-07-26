@@ -44,6 +44,8 @@ func generateSpriteScreenshot(encoder *ffmpeg.FFMpeg, videoFile *models.VideoFil
 		OutputType: transcoder.ScreenshotOutputTypeBMP,
 		SlowSeek:   slowSeek,
 		VideoCodec: videoFile.VideoCodec,
+		// phash must be deterministic across runs/machines — never HW-decode.
+		DisableHWDecode: true,
 	}
 
 	args := transcoder.ScreenshotTime(videoFile.Path, t, options)

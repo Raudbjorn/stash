@@ -25,6 +25,13 @@ type ScreenshotOptions struct {
 
 	// VideoCodec is the codec of the input video. Used to determine if hardware decode should be used.
 	VideoCodec string
+
+	// DisableHWDecode suppresses the opportunistic "-hwaccel auto" input args.
+	// phash generation must stay on the software decoder: hardware decoders are
+	// not guaranteed to be bit-identical (chroma conversion / rounding), and a
+	// drifted frame yields a phash that won't match ones already stored for the
+	// same file, silently degrading duplicate detection.
+	DisableHWDecode bool
 }
 
 func (o *ScreenshotOptions) setDefaults() {
@@ -67,7 +74,9 @@ func ScreenshotTime(input string, t float64, options ScreenshotOptions) ffmpeg.A
 	args = args.LogLevel(options.Verbosity)
 	args = args.Overwrite()
 
-	args = append(args, ffmpeg.HardwareDecodeArgs(options.VideoCodec, "", "")...)
+	if !options.DisableHWDecode {
+		args = append(args, ffmpeg.HardwareDecodeArgs(options.VideoCodec, "", "")...)
+	}
 
 	if !options.SlowSeek {
 		args = args.Seek(t)
@@ -107,7 +116,9 @@ func ScreenshotFrame(input string, frame int, options ScreenshotOptions) ffmpeg.
 	args = args.LogLevel(options.Verbosity)
 	args = args.Overwrite()
 
-	args = append(args, ffmpeg.HardwareDecodeArgs(options.VideoCodec, "", "")...)
+	if !options.DisableHWDecode {
+		args = append(args, ffmpeg.HardwareDecodeArgs(options.VideoCodec, "", "")...)
+	}
 
 	args = args.Input(input)
 	args = args.VideoFrames(1)

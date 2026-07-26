@@ -14,6 +14,14 @@ const (
 	ContactSheetCanvasWidth = 2000
 	ContactSheetJPEGQuality = 85
 	ContactSheetFileExt     = ".jpg"
+
+	// Source aspects (w/h) are clamped into this band before layout. Without a
+	// lower bound a long-strip/webtoon page (aspect ~0.05) drives rowH — and the
+	// total canvas height — into the tens of thousands: a multi-hundred-MB NRGBA
+	// canvas, and past 65535px a silently corrupt JPEG (jpeg.Encode writes frame
+	// height as a uint16). With the band, canvasH stays well under ~8000px.
+	minCellAspect = 0.25
+	maxCellAspect = 4.0
 )
 
 var ContactSheetBG = color.NRGBA{R: 26, G: 26, B: 46, A: 255}
@@ -75,6 +83,20 @@ func ComputeCellGeometry(aspects []float64) (cells []CellRect, canvasH int) {
 	if n == 0 {
 		return nil, 0
 	}
+
+	// Clamp into [minCellAspect, maxCellAspect] before any layout math. This
+	// also folds in non-positive / NaN aspects from a failed decode. Copy so we
+	// never mutate the caller's slice.
+	clamped := make([]float64, n)
+	for i, a := range aspects {
+		if math.IsNaN(a) || a < minCellAspect {
+			a = minCellAspect
+		} else if a > maxCellAspect {
+			a = maxCellAspect
+		}
+		clamped[i] = a
+	}
+	aspects = clamped
 
 	cols, rows := gridFor(n)
 

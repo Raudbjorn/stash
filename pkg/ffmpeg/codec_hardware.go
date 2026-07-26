@@ -527,8 +527,8 @@ func (f *FFMpeg) hwApplyFullHWFilter(args VideoFilter, codec VideoCodec, fullhw 
 			args = args.Append("scale_vt=format=nv12")
 		}
 
-	// AMD AMF codecs - typically don't support full hardware scaling
-	// Legacy codecs - no hardware scaling support
+		// AMD AMF codecs - typically don't support full hardware scaling
+		// Legacy codecs - no hardware scaling support
 	}
 
 	return args
@@ -612,7 +612,7 @@ func (f *FFMpeg) hwCodecMaxRes(codec VideoCodec) (int, int) {
 		VideoCodecA264, VideoCodecM264:
 		return 4096, 4096 // 4K support
 
-	// Other codecs - use default resolution
+		// Other codecs - use default resolution
 	}
 
 	return 0, 0

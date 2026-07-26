@@ -38,14 +38,14 @@ type galleryRow struct {
 	Details       zero.String `db:"details"`
 	Photographer  zero.String `db:"photographer"`
 	// expressed as 1-100
-	Rating    null.Int  `db:"rating"`
-	Organized         bool `db:"organized"`
-	Favorite          bool `db:"favorite"`
-	HasGeneratedCover bool `db:"has_generated_cover"`
-	StudioID  null.Int  `db:"studio_id,omitempty"`
-	FolderID  null.Int  `db:"folder_id,omitempty"`
-	CreatedAt Timestamp `db:"created_at"`
-	UpdatedAt Timestamp `db:"updated_at"`
+	Rating            null.Int  `db:"rating"`
+	Organized         bool      `db:"organized"`
+	Favorite          bool      `db:"favorite"`
+	HasGeneratedCover bool      `db:"has_generated_cover"`
+	StudioID          null.Int  `db:"studio_id,omitempty"`
+	FolderID          null.Int  `db:"folder_id,omitempty"`
+	CreatedAt         Timestamp `db:"created_at"`
+	UpdatedAt         Timestamp `db:"updated_at"`
 }
 
 func (r *galleryRow) fromGallery(o models.Gallery) {
@@ -77,21 +77,21 @@ type galleryQueryRow struct {
 
 func (r *galleryQueryRow) resolve() *models.Gallery {
 	ret := &models.Gallery{
-		ID:            r.ID,
-		Title:         r.Title.String,
-		Code:          r.Code.String,
-		Date:          r.Date.DatePtr(r.DatePrecision),
-		Details:       r.Details.String,
-		Photographer:  r.Photographer.String,
-		Rating:        nullIntPtr(r.Rating),
+		ID:                r.ID,
+		Title:             r.Title.String,
+		Code:              r.Code.String,
+		Date:              r.Date.DatePtr(r.DatePrecision),
+		Details:           r.Details.String,
+		Photographer:      r.Photographer.String,
+		Rating:            nullIntPtr(r.Rating),
 		Organized:         r.Organized,
 		Favorite:          r.Favorite,
 		HasGeneratedCover: r.HasGeneratedCover,
-		StudioID:      nullIntPtr(r.StudioID),
-		FolderID:      nullIntFolderIDPtr(r.FolderID),
-		PrimaryFileID: nullIntFileIDPtr(r.PrimaryFileID),
-		CreatedAt:     r.CreatedAt.Timestamp,
-		UpdatedAt:     r.UpdatedAt.Timestamp,
+		StudioID:          nullIntPtr(r.StudioID),
+		FolderID:          nullIntFolderIDPtr(r.FolderID),
+		PrimaryFileID:     nullIntFileIDPtr(r.PrimaryFileID),
+		CreatedAt:         r.CreatedAt.Timestamp,
+		UpdatedAt:         r.UpdatedAt.Timestamp,
 	}
 
 	if r.PrimaryFileFolderPath.Valid && r.PrimaryFileBasename.Valid {

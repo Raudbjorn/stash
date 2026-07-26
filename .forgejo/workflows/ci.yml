@@ -1,0 +1,45 @@
+# Minimal CI gate for the Forgejo remote, ported after .github/* was removed.
+# Catches the drift a missing gate let through (gofmt, vet, build, tests, UI lint/types).
+# The full release/cross-compile pipeline from the old .github/workflows/build.yml
+# is intentionally NOT reproduced here — this is a correctness gate, not a release job.
+# Requires a Forgejo Actions runner with the github-actions proxy enabled.
+name: CI
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+      - name: gofmt (must be clean)
+        run: |
+          out="$(gofmt -l cmd internal pkg)"
+          if [ -n "$out" ]; then echo "gofmt drift:"; echo "$out"; exit 1; fi
+      - name: go vet
+        run: go vet ./...
+      - name: go build
+        run: go build ./...
+      - name: go test
+        run: go test ./...
+
+  frontend:
+    runs-on: docker
+    defaults:
+      run:
+        working-directory: ui/v2.5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck + lint + format-check
+        run: pnpm run validate

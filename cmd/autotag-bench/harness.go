@@ -220,4 +220,3 @@ func runAutoTag(ctx context.Context, r models.Repository) {
 	progress := &job.Progress{}
 	manager.RunAutoTagFilesForBench(ctx, r, progress, []string{benchRoot}, true, true, true)
 }
-

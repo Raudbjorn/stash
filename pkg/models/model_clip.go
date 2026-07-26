@@ -7,10 +7,10 @@ import (
 
 // Clip represents a frame-accurate time-range within a parent Scene.
 type Clip struct {
-	ID      int      `json:"id"`
-	Title   string   `json:"title"`
-	SceneID int      `json:"scene_id"`
-	Seconds float64  `json:"seconds"`
+	ID      int     `json:"id"`
+	Title   string  `json:"title"`
+	SceneID int     `json:"scene_id"`
+	Seconds float64 `json:"seconds"`
 	// EndSeconds is the optional end time of the clip in seconds.
 	EndSeconds *float64 `json:"end_seconds"`
 	// Rating expressed in 1-100 scale
