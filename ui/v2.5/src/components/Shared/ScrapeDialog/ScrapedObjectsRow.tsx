@@ -15,6 +15,7 @@ import { Badge, Button } from "react-bootstrap";
 import { Icon } from "../Icon";
 import { faLink, faPlus } from "@fortawesome/free-solid-svg-icons";
 import { useIntl } from "react-intl";
+import { ScrapeListMergeMode } from "src/core/config";
 
 interface INewScrapedObjects<T> {
   newValues: T[];
@@ -176,6 +177,8 @@ interface IScrapedObjectsRow<T> {
     onChange?: (value: T[]) => void
   ) => JSX.Element;
   getName: (value: T) => string;
+  mergeMode?: ScrapeListMergeMode;
+  onSetMergeMode?: (mode: ScrapeListMergeMode) => void;
 }
 
 export const ScrapedObjectsRow = <T,>(props: IScrapedObjectsRow<T>) => {
@@ -189,6 +192,8 @@ export const ScrapedObjectsRow = <T,>(props: IScrapedObjectsRow<T>) => {
     onLinkExisting,
     renderObjects,
     getName,
+    mergeMode,
+    onSetMergeMode,
   } = props;
 
   return (
@@ -201,6 +206,8 @@ export const ScrapedObjectsRow = <T,>(props: IScrapedObjectsRow<T>) => {
         onChange(result.cloneWithValue(value))
       )}
       onChange={onChange}
+      mergeMode={mergeMode}
+      onSetMergeMode={onSetMergeMode}
       newValues={
         onCreateNew && newObjects.length > 0 ? (
           <NewScrapedObjects
@@ -231,6 +238,8 @@ export const ScrapedPerformersRow: React.FC<
   onCreateNew,
   ageFromDate,
   onLinkExisting,
+  mergeMode,
+  onSetMergeMode,
 }) => {
   const performersCopy = useMemo(() => {
     return (
@@ -289,6 +298,8 @@ export const ScrapedPerformersRow: React.FC<
       onCreateNew={onCreateNew}
       getName={(value) => value.name ?? ""}
       onLinkExisting={onLinkExisting}
+      mergeMode={mergeMode}
+      onSetMergeMode={onSetMergeMode}
     />
   );
 };
@@ -303,6 +314,8 @@ export const ScrapedGroupsRow: React.FC<
   newObjects,
   onCreateNew,
   onLinkExisting,
+  mergeMode,
+  onSetMergeMode,
 }) => {
   const groupsCopy = useMemo(() => {
     return (
@@ -359,6 +372,8 @@ export const ScrapedGroupsRow: React.FC<
       onCreateNew={onCreateNew}
       getName={(value) => value.name ?? ""}
       onLinkExisting={onLinkExisting}
+      mergeMode={mergeMode}
+      onSetMergeMode={onSetMergeMode}
     />
   );
 };
@@ -373,6 +388,8 @@ export const ScrapedTagsRow: React.FC<
   newObjects,
   onCreateNew,
   onLinkExisting,
+  mergeMode,
+  onSetMergeMode,
 }) => {
   function renderScrapedTags(
     scrapeResult: ScrapeResult<GQL.ScrapedTag[]>,
@@ -421,6 +438,8 @@ export const ScrapedTagsRow: React.FC<
       onCreateNew={onCreateNew}
       onLinkExisting={onLinkExisting}
       getName={getObjectName}
+      mergeMode={mergeMode}
+      onSetMergeMode={onSetMergeMode}
     />
   );
 };

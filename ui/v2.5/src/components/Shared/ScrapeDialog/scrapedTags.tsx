@@ -1,33 +1,42 @@
 import { useState } from "react";
 import { useIntl } from "react-intl";
 import * as GQL from "src/core/generated-graphql";
-import { ObjectListScrapeResult } from "./scrapeResult";
-import { sortStoredIdObjects } from "src/utils/data";
 import { Tag } from "src/components/Tags/TagSelect";
 import { useCreateScrapedTag, useLinkScrapedTag } from "./createObjects";
 import { ScrapedTagsRow } from "./ScrapedObjectsRow";
 import { CreateLinkTagDialog } from "src/components/Shared/ScrapeDialog/CreateLinkTagDialog";
 import { useTagCreate, useTagUpdate } from "src/core/StashService";
 import { toastOperation, useToast } from "src/hooks/Toast";
+import { useMergeModeObjectList } from "./mergeMode";
+
+export interface IUseScrapedTagsOptions {
+  endpoint?: string;
+  // UIConfig key used to persist the merge mode for the tags field
+  mergeModeField?: string;
+}
 
 export function useScrapedTags(
   existingTags: Tag[],
   scrapedTags?: GQL.Maybe<GQL.ScrapedTag[]>,
-  endpoint?: string
+  options?: IUseScrapedTagsOptions
 ) {
   const intl = useIntl();
   const Toast = useToast();
 
-  const [tags, setTags] = useState<ObjectListScrapeResult<GQL.ScrapedTag>>(
-    new ObjectListScrapeResult<GQL.ScrapedTag>(
-      sortStoredIdObjects(
-        existingTags.map((t) => ({
-          stored_id: t.id,
-          name: t.name,
-        }))
-      ),
-      sortStoredIdObjects(scrapedTags ?? undefined)
-    )
+  const { endpoint, mergeModeField } = options ?? {};
+
+  const {
+    result: tags,
+    setResult: setTags,
+    mergeMode,
+    onSetMergeMode,
+  } = useMergeModeObjectList<GQL.ScrapedTag>(
+    mergeModeField ?? "tags",
+    existingTags.map((t) => ({
+      stored_id: t.id,
+      name: t.name,
+    })),
+    scrapedTags
   );
 
   const [newTags, setNewTags] = useState<GQL.ScrapedTag[]>(
@@ -125,6 +134,8 @@ export function useScrapedTags(
       newObjects={newTags}
       onCreateNew={createNewTag}
       onLinkExisting={(l) => setLinkedTag(l)}
+      mergeMode={mergeMode}
+      onSetMergeMode={onSetMergeMode}
     />
   );
 

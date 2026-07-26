@@ -41,6 +41,10 @@ export type FrontPageContent = ISavedFilterRow | ICustomFilter;
 export const defaultMaxOptionsShown = 200;
 export const defaultPreviewVolume = 25;
 
+// determines how existing list values are combined with scraped list values
+// in the scrape dialogs
+export type ScrapeListMergeMode = "merge" | "overwrite";
+
 export interface IUIConfig {
   // unknown to prevent direct access - use getFrontPageContent
   frontPageContent?: unknown;
@@ -120,6 +124,10 @@ export interface IUIConfig {
   advancedMode?: boolean;
 
   taskDefaults?: Record<string, object>;
+
+  // merge modes for list fields in the scrape dialogs,
+  // keyed by {object_type}.{field} - see #1599
+  scrapeDialogMergeModes?: Record<string, ScrapeListMergeMode>;
 
   // if true the auto tag confirmation warning is skipped
   disableAutoTagWarning?: boolean;

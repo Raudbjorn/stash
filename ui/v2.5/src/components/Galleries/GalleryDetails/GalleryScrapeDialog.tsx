@@ -8,7 +8,6 @@ import {
 } from "src/components/Shared/ScrapeDialog/ScrapeDialogRow";
 import { ScrapeDialog } from "src/components/Shared/ScrapeDialog/ScrapeDialog";
 import {
-  ObjectListScrapeResult,
   ObjectScrapeResult,
   ScrapeResult,
 } from "src/components/Shared/ScrapeDialog/scrapeResult";
@@ -16,13 +15,15 @@ import {
   ScrapedPerformersRow,
   ScrapedStudioRow,
 } from "src/components/Shared/ScrapeDialog/ScrapedObjectsRow";
-import { sortStoredIdObjects } from "src/utils/data";
+import {
+  useMergeModeObjectList,
+  useMergeModeStringList,
+} from "src/components/Shared/ScrapeDialog/mergeMode";
 import { Performer } from "src/components/Performers/PerformerSelect";
 import {
   useCreateScrapedPerformer,
   useCreateScrapedStudio,
 } from "src/components/Shared/ScrapeDialog/createObjects";
-import { uniq } from "lodash-es";
 import { Tag } from "src/components/Tags/TagSelect";
 import { Studio } from "src/components/Studios/StudioSelect";
 import { useScrapedTags } from "src/components/Shared/ScrapeDialog/scrapedTags";
@@ -52,14 +53,12 @@ export const GalleryScrapeDialog: React.FC<IGalleryScrapeDialogProps> = ({
   const [code, setCode] = useState<ScrapeResult<string>>(
     new ScrapeResult<string>(gallery.code, scraped.code)
   );
-  const [urls, setURLs] = useState<ScrapeResult<string[]>>(
-    new ScrapeResult<string[]>(
-      gallery.urls,
-      scraped.urls
-        ? uniq((gallery.urls ?? []).concat(scraped.urls ?? []))
-        : undefined
-    )
-  );
+  const {
+    result: urls,
+    setResult: setURLs,
+    mergeMode: urlsMergeMode,
+    onSetMergeMode: onSetURLsMergeMode,
+  } = useMergeModeStringList("gallery.urls", gallery.urls, scraped.urls);
   const [date, setDate] = useState<ScrapeResult<string>>(
     new ScrapeResult<string>(gallery.date, scraped.date)
   );
@@ -81,18 +80,18 @@ export const GalleryScrapeDialog: React.FC<IGalleryScrapeDialogProps> = ({
     scraped.studio && !scraped.studio.stored_id ? scraped.studio : undefined
   );
 
-  const [performers, setPerformers] = useState<
-    ObjectListScrapeResult<GQL.ScrapedPerformer>
-  >(
-    new ObjectListScrapeResult<GQL.ScrapedPerformer>(
-      sortStoredIdObjects(
-        galleryPerformers.map((p) => ({
-          stored_id: p.id,
-          name: p.name,
-        }))
-      ),
-      sortStoredIdObjects(scraped.performers ?? undefined)
-    )
+  const {
+    result: performers,
+    setResult: setPerformers,
+    mergeMode: performersMergeMode,
+    onSetMergeMode: onSetPerformersMergeMode,
+  } = useMergeModeObjectList<GQL.ScrapedPerformer>(
+    "gallery.performers",
+    galleryPerformers.map((p) => ({
+      stored_id: p.id,
+      name: p.name,
+    })),
+    scraped.performers
   );
   const [newPerformers, setNewPerformers] = useState<GQL.ScrapedPerformer[]>(
     scraped.performers?.filter((t) => !t.stored_id) ?? []
@@ -100,7 +99,8 @@ export const GalleryScrapeDialog: React.FC<IGalleryScrapeDialogProps> = ({
 
   const { tags, newTags, scrapedTagsRow, linkDialog } = useScrapedTags(
     galleryTags,
-    scraped.tags
+    scraped.tags,
+    { mergeModeField: "gallery.tags" }
   );
 
   const [details, setDetails] = useState<ScrapeResult<string>>(
@@ -177,6 +177,8 @@ export const GalleryScrapeDialog: React.FC<IGalleryScrapeDialogProps> = ({
           title={intl.formatMessage({ id: "urls" })}
           result={urls}
           onChange={(value) => setURLs(value)}
+          mergeMode={urlsMergeMode}
+          onSetMergeMode={onSetURLsMergeMode}
         />
         <ScrapedInputGroupRow
           field="date"
@@ -207,6 +209,8 @@ export const GalleryScrapeDialog: React.FC<IGalleryScrapeDialogProps> = ({
           newObjects={newPerformers}
           onCreateNew={createNewPerformer}
           ageFromDate={date.useNewValue ? date.newValue : date.originalValue}
+          mergeMode={performersMergeMode}
+          onSetMergeMode={onSetPerformersMergeMode}
         />
         {scrapedTagsRow}
         <ScrapedTextAreaRow
