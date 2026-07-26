@@ -2,7 +2,7 @@
 # In-tree package for the private git.s8n.is/sveinbjorn/stash fork.
 # Builds from the repository this PKGBUILD lives in, not from upstream.
 pkgname=stash
-pkgver=r25.g8ba57c7
+pkgver=r26.g8f325c2
 pkgrel=1
 pkgdesc="Locally hosted web-based app written in Go which organizes and serves your media library (sveinbjorn/stash fork)"
 arch=('x86_64')
@@ -27,10 +27,10 @@ source=("${pkgname}::git+file://${startdir}/../.."
 "stash.env"
 )
 sha256sums=('SKIP'
-            'bf30830e85fd7cf0cc2d0f4e1037b20cd407da80c47c4f33048ddd616bbbbc84'
-            '41f79ebc8d24cb1ae87ba55923d56e6d5c6bff9fa62433070fdf37ff5a52f7fd'
+            '7fc94a87db1e9a379a0d68e165ab0a0f930a8417bb78ff408c1c7995b947b736'
+            '01fd6da12c000e3c756c41cea5b85f899650a1bffdefda146563d48bba27d694'
             'de94761e4a705c6fa7216359d5286c4724c985818b21ed071d3866246fffd870'
-            '7aac9c11831133f271c52bc432bd68a3eeb48afa9f0affa0486e57a693abf862'
+            'd92f76d681c5c9a028340b49782dc46e8e2a3a5262b67ff3c7000f6e08e5a83e'
             '4f6add7bf6d1be8dc5df5f6117b7288a2c9d4ba97fd784bc05c197673353de85')
 
 pkgver() {
