@@ -239,6 +239,11 @@ const (
 
 	PythonPath = "python_path"
 
+	// OnnxRuntimeLibPath overrides the ONNX Runtime shared library path used
+	// by the scene metadata analyzer's embedding-based name-plausibility
+	// scorer. If blank, common install locations are checked instead.
+	OnnxRuntimeLibPath = "onnxruntime_lib_path"
+
 	// plugin options
 	PluginsPath          = "plugins_path"
 	PluginsSetting       = "plugins.settings"
@@ -1026,6 +1031,10 @@ func (i *Config) GetDisabledPlugins() []string {
 
 func (i *Config) GetPythonPath() string {
 	return i.getString(PythonPath)
+}
+
+func (i *Config) GetOnnxRuntimeLibPath() string {
+	return i.getString(OnnxRuntimeLibPath)
 }
 
 func (i *Config) GetHost() string {

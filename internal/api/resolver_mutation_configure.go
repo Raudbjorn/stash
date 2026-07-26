@@ -423,6 +423,10 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 		r.setConfigString(config.PythonPath, input.PythonPath)
 	}
 
+	if input.OnnxRuntimeLibPath != nil {
+		r.setConfigString(config.OnnxRuntimeLibPath, input.OnnxRuntimeLibPath)
+	}
+
 	if input.TranscodeInputArgs != nil {
 		c.SetInterface(config.TranscodeInputArgs, input.TranscodeInputArgs)
 	}

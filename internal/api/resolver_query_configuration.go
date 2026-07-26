@@ -134,6 +134,7 @@ func makeConfigGeneralResult() *ConfigGeneralResult {
 		CustomPerformerImageLocation:  &customPerformerImageLocation,
 		StashBoxes:                    config.GetStashBoxes(),
 		PythonPath:                    config.GetPythonPath(),
+		OnnxRuntimeLibPath:            config.GetOnnxRuntimeLibPath(),
 		TranscodeInputArgs:            config.GetTranscodeInputArgs(),
 		TranscodeOutputArgs:           config.GetTranscodeOutputArgs(),
 		LiveTranscodeInputArgs:        config.GetLiveTranscodeInputArgs(),

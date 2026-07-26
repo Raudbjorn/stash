@@ -9,19 +9,19 @@ import (
 	"github.com/stashapp/stash/pkg/scene/metadata/embedding"
 )
 
-// onnxRuntimeLibraryPaths are checked, in order, for a usable onnxruntime
-// shared library. STASH_ONNXRUNTIME_LIB_PATH lets a deployment point at a
-// nonstandard install; the rest are the common install locations across
-// this fork's actual targets (Alpine's own "onnxruntime" apk package, and a
-// system-wide glibc install on a native Linux dev machine).
+// onnxRuntimeLibraryPaths are the common install locations checked, in
+// order, for a usable onnxruntime shared library, once the configured path
+// (Settings > System, or STASH_ONNXRUNTIME_LIB_PATH as a headless/pre-
+// config fallback) has been checked - see findOnnxRuntimeLibrary. These
+// cover this fork's actual targets: Alpine's own "onnxruntime" apk package,
+// and a system-wide glibc install on a native Linux dev machine.
 //
-// This is a distinct, production-facing knob from the test-only
-// ONNXRUNTIME_LIB_PATH read by embedding_scorer_test.go, which opts that
-// integration test into running locally/in CI environments that happen to
-// have the library installed somewhere nonstandard - the two are not meant
-// to be the same variable.
+// STASH_ONNXRUNTIME_LIB_PATH is a distinct, production-facing knob from the
+// test-only ONNXRUNTIME_LIB_PATH read by embedding_scorer_test.go, which
+// opts that integration test into running locally/in CI environments that
+// happen to have the library installed somewhere nonstandard - the two are
+// not meant to be the same variable.
 var onnxRuntimeLibraryPaths = []string{
-	os.Getenv("STASH_ONNXRUNTIME_LIB_PATH"),
 	"/usr/lib/libonnxruntime.so",
 	"/usr/lib/libonnxruntime.so.1",
 	"/usr/local/lib/libonnxruntime.so",
@@ -77,7 +77,16 @@ func getNamePlausibilityScorer() metadata.NamePlausibilityScorer {
 }
 
 func findOnnxRuntimeLibrary() (string, bool) {
-	for _, path := range onnxRuntimeLibraryPaths {
+	var configuredPath string
+	if instance != nil && instance.Config != nil {
+		configuredPath = instance.Config.GetOnnxRuntimeLibPath()
+	}
+
+	candidates := make([]string, 0, len(onnxRuntimeLibraryPaths)+2)
+	candidates = append(candidates, configuredPath, os.Getenv("STASH_ONNXRUNTIME_LIB_PATH"))
+	candidates = append(candidates, onnxRuntimeLibraryPaths...)
+
+	for _, path := range candidates {
 		if path == "" {
 			continue
 		}
