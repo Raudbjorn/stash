@@ -433,6 +433,13 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 		r.setConfigString(config.PythonPath, input.PythonPath)
 	}
 
+	refreshNamePlausibilityScorer := false
+	existingOnnxRuntimeLibPath := c.GetOnnxRuntimeLibPath()
+	if input.OnnxRuntimeLibPath != nil && *input.OnnxRuntimeLibPath != existingOnnxRuntimeLibPath {
+		r.setConfigString(config.OnnxRuntimeLibPath, input.OnnxRuntimeLibPath)
+		refreshNamePlausibilityScorer = true
+	}
+
 	if input.TranscodeInputArgs != nil {
 		c.SetInterface(config.TranscodeInputArgs, input.TranscodeInputArgs)
 	}
@@ -489,6 +496,9 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 	}
 	if refreshPluginSource {
 		manager.GetInstance().RefreshPluginSourceManager()
+	}
+	if refreshNamePlausibilityScorer {
+		manager.GetInstance().RefreshNamePlausibilityScorer()
 	}
 
 	return makeConfigGeneralResult(), nil

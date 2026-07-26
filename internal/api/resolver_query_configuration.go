@@ -137,6 +137,7 @@ func makeConfigGeneralResult() *ConfigGeneralResult {
 		StashBoxes:                    config.GetStashBoxes(),
 		MarkerSync:                    &markerSync,
 		PythonPath:                    config.GetPythonPath(),
+		OnnxRuntimeLibPath:            config.GetOnnxRuntimeLibPath(),
 		TranscodeInputArgs:            config.GetTranscodeInputArgs(),
 		TranscodeOutputArgs:           config.GetTranscodeOutputArgs(),
 		LiveTranscodeInputArgs:        config.GetLiveTranscodeInputArgs(),

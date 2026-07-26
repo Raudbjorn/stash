@@ -214,6 +214,14 @@ export const SettingsConfigurationPanel: React.FC = () => {
         />
 
         <StringSetting
+          id="onnxruntime-lib-path"
+          headingID="config.general.onnxruntime_lib_path.heading"
+          subHeadingID="config.general.onnxruntime_lib_path.description"
+          value={general.onnxRuntimeLibPath ?? undefined}
+          onChange={(v) => saveGeneral({ onnxRuntimeLibPath: v })}
+        />
+
+        <StringSetting
           id="backup-directory-path"
           headingID="config.general.backup_directory_path.heading"
           subHeadingID="config.general.backup_directory_path.description"

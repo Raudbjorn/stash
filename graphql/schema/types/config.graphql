@@ -190,6 +190,8 @@ input ConfigGeneralInput {
   markerSync: MarkerSyncConfigInput
   "Python path - resolved using path if unset"
   pythonPath: String
+  "ONNX Runtime shared library path, used by the scene metadata analyzer's embedding-based name-plausibility scorer - common install locations are checked if unset"
+  onnxRuntimeLibPath: String
 
   "Source of scraper packages"
   scraperPackageSources: [PackageSourceInput!]
@@ -348,6 +350,8 @@ type ConfigGeneralResult {
   markerSync: MarkerSyncConfig!
   "Python path - resolved using path if unset"
   pythonPath: String!
+  "ONNX Runtime shared library path, used by the scene metadata analyzer's embedding-based name-plausibility scorer - common install locations are checked if unset"
+  onnxRuntimeLibPath: String!
 
   "Source of scraper packages"
   scraperPackageSources: [PackageSource!]!

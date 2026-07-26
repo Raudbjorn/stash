@@ -59,13 +59,11 @@ type analyzeSceneMetadataJob struct {
 	repository   models.Repository
 	input        AnalyzeSceneMetadataInput
 	scraperCache *scraper.Cache
-	scorer       metadata.NamePlausibilityScorer
 }
 
 func (j *analyzeSceneMetadataJob) Execute(ctx context.Context, progress *job.Progress) error {
 	r := j.repository
 	j.scraperCache = instance.ScraperCache
-	j.scorer = getNamePlausibilityScorer()
 
 	sceneIDs, err := stringslice.StringSliceToIntSlice(j.input.SceneIDs)
 	if err != nil {
@@ -319,7 +317,7 @@ func (j *analyzeSceneMetadataJob) identifyPerformers(ctx context.Context, source
 			if _, ok := candidateSet[key]; ok {
 				continue
 			}
-			if j.scorer.Score(c) < minCandidatePlausibility {
+			if getNamePlausibilityScorer().Score(c) < minCandidatePlausibility {
 				continue
 			}
 			candidateSet[key] = struct{}{}
