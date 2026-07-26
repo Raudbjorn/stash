@@ -15,6 +15,7 @@ type SceneMarker struct {
 	Title      string        `json:"title,omitempty"`
 	Seconds    string        `json:"seconds,omitempty"`
 	EndSeconds string        `json:"end_seconds,omitempty"`
+	Rating100  int           `json:"rating100,omitempty"`
 	PrimaryTag string        `json:"primary_tag,omitempty"`
 	Tags       []string      `json:"tags,omitempty"`
 	CreatedAt  json.JSONTime `json:"created_at,omitempty"`

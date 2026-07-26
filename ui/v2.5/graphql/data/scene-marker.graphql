@@ -3,6 +3,7 @@ fragment SceneMarkerData on SceneMarker {
   title
   seconds
   end_seconds
+  rating100
   stream
   preview
   screenshot

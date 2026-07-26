@@ -1,4 +1,5 @@
 import { PerformersCriterionOption } from "./criteria/performers";
+import { RatingCriterionOption } from "./criteria/rating";
 import { MarkersScenesCriterionOption } from "./criteria/scenes";
 import { SceneTagsCriterionOption, TagsCriterionOption } from "./criteria/tags";
 import { ListFilterOptions } from "./filter-options";
@@ -15,6 +16,7 @@ const sortByOptions = [
   "title",
   "seconds",
   "scene_id",
+  "rating",
   "random",
   "scenes_updated_at",
 ].map(ListFilterOptions.createSortBy);
@@ -24,6 +26,7 @@ const criterionOptions = [
   MarkersScenesCriterionOption,
   SceneTagsCriterionOption,
   PerformersCriterionOption,
+  RatingCriterionOption,
   createNullDurationCriterionOption("duration"),
   createMandatoryTimestampCriterionOption("created_at"),
   createMandatoryTimestampCriterionOption("updated_at"),

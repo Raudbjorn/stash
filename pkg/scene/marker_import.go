@@ -42,6 +42,9 @@ func (i *MarkerImporter) PreImport(ctx context.Context) error {
 		CreatedAt:  i.Input.CreatedAt.GetTime(),
 		UpdatedAt:  i.Input.UpdatedAt.GetTime(),
 	}
+	if i.Input.Rating100 != 0 {
+		i.marker.Rating100 = &i.Input.Rating100
+	}
 
 	if err := i.populateTags(ctx); err != nil {
 		return err
