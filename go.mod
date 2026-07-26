@@ -52,6 +52,7 @@ require (
 	github.com/spf13/cast v1.6.0
 	github.com/spf13/pflag v1.0.6
 	github.com/stretchr/testify v1.11.1
+	github.com/syncthing/notify v0.0.0-20250528144937-c7027d4f7465
 	github.com/tidwall/gjson v1.16.0
 	github.com/vearutop/statigz v1.4.0
 	github.com/vektah/dataloaden v0.3.0

@@ -47,6 +47,7 @@ fragment ConfigGeneralData on ConfigGeneralResult {
   maximumSprites
   spriteScreenshotSize
   createGalleriesFromFolders
+  autoScanWatch
   galleryCoverRegex
   videoExtensions
   imageExtensions

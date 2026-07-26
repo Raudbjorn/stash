@@ -71,6 +71,11 @@ type Manager struct {
 	scanScheduleEntries map[string]string
 	scanScheduleMu      sync.Mutex
 
+	// fileWatcherCancel stops the filesystem watcher goroutine; nil when the
+	// watcher is not running. Guarded by fileWatcherMu.
+	fileWatcherCancel context.CancelFunc
+	fileWatcherMu     sync.Mutex
+
 	Database   *sqlite.Database
 	Repository models.Repository
 
@@ -411,6 +416,7 @@ func (s *Manager) Shutdown() {
 	// TODO: Each part of the manager needs to gracefully stop at some point
 
 	s.StopScanScheduler()
+	s.StopFileWatcher()
 
 	if s.StreamManager != nil {
 		s.StreamManager.Shutdown()

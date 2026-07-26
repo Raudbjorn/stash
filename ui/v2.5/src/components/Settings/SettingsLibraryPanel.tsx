@@ -36,6 +36,16 @@ export const SettingsLibraryPanel: React.FC = () => {
         onChange={(v) => saveGeneral({ stashes: v })}
       />
 
+      <SettingSection headingID="config.library.automatic_scanning">
+        <BooleanSetting
+          id="auto-scan-watch"
+          headingID="config.general.auto_scan_watch_label"
+          subHeadingID="config.general.auto_scan_watch_desc"
+          checked={general.autoScanWatch ?? false}
+          onChange={(v) => saveGeneral({ autoScanWatch: v })}
+        />
+      </SettingSection>
+
       <SettingSection headingID="config.library.media_content_extensions">
         <StringSetting
           id="video-extensions"

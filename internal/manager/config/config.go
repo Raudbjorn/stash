@@ -153,6 +153,8 @@ const (
 
 	MetricsEnabled = "metrics_enabled"
 
+	AutoScanWatch = "auto_scan_watch"
+
 	ExternalHost = "external_host"
 
 	// http proxy url if required
@@ -1080,6 +1082,12 @@ func (i *Config) GetHTTPSPort() int {
 // request-instrumentation middleware should be enabled. Defaults to false.
 func (i *Config) GetMetricsEnabled() bool {
 	return i.getBool(MetricsEnabled)
+}
+
+// GetAutoScanWatch reports whether the filesystem watcher should auto-trigger
+// scans when files change under the configured library paths. Defaults to false.
+func (i *Config) GetAutoScanWatch() bool {
+	return i.getBool(AutoScanWatch)
 }
 
 func (i *Config) GetThemeColor() string {
