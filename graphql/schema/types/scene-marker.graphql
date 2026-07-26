@@ -13,6 +13,9 @@ type SceneMarker {
   created_at: Time!
   updated_at: Time!
 
+  "True if this marker was created automatically (e.g. by scene-cut detection) rather than by a user"
+  auto_generated: Boolean!
+
   "The path to stream this marker"
   stream: String! # Resolver
   "The path to the preview image for this marker"

@@ -97,6 +97,9 @@ type VideoFile implements BaseFile {
   frame_rate: Float!
   bit_rate: Int!
 
+  "Creation timestamp embedded in the video container's metadata, if present."
+  creation_time: Time
+
   scenes: [Scene!]!
 
   created_at: Time!
@@ -124,6 +127,9 @@ type ImageFile implements BaseFile {
   format: String!
   width: Int!
   height: Int!
+
+  "EXIF metadata present in the file, if any. Read from disk on demand, not persisted."
+  exif: Map
 
   images: [Image!]!
 

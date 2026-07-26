@@ -2,8 +2,12 @@ package api
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	"github.com/stashapp/stash/internal/api/loaders"
+	"github.com/stashapp/stash/pkg/file"
+	fileimage "github.com/stashapp/stash/pkg/file/image"
 	"github.com/stashapp/stash/pkg/models"
 )
 
@@ -38,6 +42,33 @@ func (r *galleryFileResolver) ParentFolder(ctx context.Context, obj *GalleryFile
 
 func (r *imageFileResolver) ParentFolder(ctx context.Context, obj *ImageFile) (*models.Folder, error) {
 	return loaders.From(ctx).FolderByID.Load(obj.ParentFolderID)
+}
+
+func (r *imageFileResolver) Exif(ctx context.Context, obj *ImageFile) (map[string]interface{}, error) {
+	reader, err := obj.ImageFile.Open(&file.OsFS{})
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+
+	data, err := fileimage.ExtractExifData(reader)
+	if errors.Is(err, fileimage.ErrNoExifData) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
+}
+
+func (r *videoFileResolver) CreationTime(ctx context.Context, obj *VideoFile) (*time.Time, error) {
+	if obj.VideoFile.CreationTime.IsZero() {
+		return nil, nil
+	}
+
+	t := obj.VideoFile.CreationTime
+	return &t, nil
 }
 
 func (r *imageFileResolver) Images(ctx context.Context, obj *ImageFile) ([]*models.Image, error) {

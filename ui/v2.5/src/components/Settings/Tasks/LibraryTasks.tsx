@@ -5,6 +5,8 @@ import {
   mutateMetadataScan,
   mutateMetadataAutoTag,
   mutateMetadataGenerate,
+  mutateMetadataDetectSceneCuts,
+  mutateMetadataAnalyzeScenes,
 } from "src/core/StashService";
 import { withoutTypename } from "src/utils/data";
 import { useConfigurationContext } from "src/hooks/Config";
@@ -128,6 +130,9 @@ export const LibraryTasks: React.FC = () => {
   const [generateOptions, setGenerateOptions] =
     useState<GQL.GenerateMetadataInput>(getDefaultGenerateOptions());
 
+  const [analyzeSceneMetadataDryRun, setAnalyzeSceneMetadataDryRun] =
+    useState(true);
+
   type DialogOpenState = typeof dialogOpen;
 
   const { configuration } = useConfigurationContext();
@@ -229,6 +234,46 @@ export const LibraryTasks: React.FC = () => {
         intl.formatMessage(
           { id: "config.tasks.added_job_to_queue" },
           { operation_name: intl.formatMessage({ id: "actions.scan" }) }
+        )
+      );
+    } catch (e) {
+      Toast.error(e);
+    }
+  }
+
+  async function runDetectSceneCuts() {
+    try {
+      await mutateMetadataDetectSceneCuts({});
+
+      Toast.success(
+        intl.formatMessage(
+          { id: "config.tasks.added_job_to_queue" },
+          {
+            operation_name: intl.formatMessage({
+              id: "actions.detect_scene_cuts",
+            }),
+          }
+        )
+      );
+    } catch (e) {
+      Toast.error(e);
+    }
+  }
+
+  async function runAnalyzeSceneMetadata() {
+    try {
+      await mutateMetadataAnalyzeScenes({
+        dryRun: analyzeSceneMetadataDryRun,
+      });
+
+      Toast.success(
+        intl.formatMessage(
+          { id: "config.tasks.added_job_to_queue" },
+          {
+            operation_name: intl.formatMessage({
+              id: "actions.analyze_scene_metadata",
+            }),
+          }
         )
       );
     } catch (e) {
@@ -465,6 +510,45 @@ export const LibraryTasks: React.FC = () => {
             onChange={(v) => saveUI({ disableAutoTagWarning: v })}
           />
         </SettingGroup>
+      </SettingSection>
+
+      <SettingSection advanced>
+        <Setting
+          heading={<FormattedMessage id="actions.analyze_scene_metadata" />}
+          subHeadingID="config.tasks.analyze_scene_metadata.description"
+        >
+          <Form.Check
+            id="analyze-scene-metadata-dry-run"
+            checked={analyzeSceneMetadataDryRun}
+            label={intl.formatMessage({ id: "config.tasks.dry_run" })}
+            onChange={() =>
+              setAnalyzeSceneMetadataDryRun(!analyzeSceneMetadataDryRun)
+            }
+            className="mb-2"
+          />
+          <Button
+            variant="secondary"
+            type="submit"
+            onClick={runAnalyzeSceneMetadata}
+          >
+            <FormattedMessage id="actions.analyze_scene_metadata" />…
+          </Button>
+        </Setting>
+      </SettingSection>
+
+      <SettingSection advanced>
+        <Setting
+          heading={<FormattedMessage id="actions.detect_scene_cuts" />}
+          subHeadingID="config.tasks.detect_scene_cuts.description"
+        >
+          <Button
+            variant="secondary"
+            type="submit"
+            onClick={runDetectSceneCuts}
+          >
+            <FormattedMessage id="actions.detect_scene_cuts" />…
+          </Button>
+        </Setting>
       </SettingSection>
 
       <SettingSection headingID="config.tasks.generated_content">

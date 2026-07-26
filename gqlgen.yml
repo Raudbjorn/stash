@@ -92,6 +92,10 @@ models:
     model: github.com/stashapp/stash/internal/manager.GeneratePreviewOptionsInput
   AutoTagMetadataInput:
     model: github.com/stashapp/stash/internal/manager.AutoTagMetadataInput
+  DetectSceneCutsInput:
+    model: github.com/stashapp/stash/internal/manager.DetectSceneCutsInput
+  AnalyzeSceneMetadataInput:
+    model: github.com/stashapp/stash/internal/manager.AnalyzeSceneMetadataInput
   CleanMetadataInput:
     model: github.com/stashapp/stash/internal/manager.CleanMetadataInput
   StashBoxBatchTagInput:

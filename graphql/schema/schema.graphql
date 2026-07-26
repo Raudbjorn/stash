@@ -526,6 +526,10 @@ type Mutation {
   metadataGenerate(input: GenerateMetadataInput!): ID!
   "Start auto-tagging. Returns the job ID"
   metadataAutoTag(input: AutoTagMetadataInput!): ID!
+  "Detect scene cuts via ffmpeg and create markers at each. Returns the job ID"
+  metadataDetectSceneCuts(input: DetectSceneCutsInput!): ID!
+  "Analyze scene titles/filenames (and available EXIF/container metadata) to detect performers and scene date. Returns the job ID"
+  metadataAnalyzeScenes(input: AnalyzeSceneMetadataInput!): ID!
   "Clean metadata. Returns the job ID"
   metadataClean(input: CleanMetadataInput!): ID!
   "Clean generated files. Returns the job ID"

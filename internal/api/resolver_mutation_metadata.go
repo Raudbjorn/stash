@@ -87,6 +87,16 @@ func (r *mutationResolver) MetadataAutoTag(ctx context.Context, input manager.Au
 	return strconv.Itoa(jobID), nil
 }
 
+func (r *mutationResolver) MetadataDetectSceneCuts(ctx context.Context, input manager.DetectSceneCutsInput) (string, error) {
+	jobID := manager.GetInstance().DetectSceneCuts(ctx, input)
+	return strconv.Itoa(jobID), nil
+}
+
+func (r *mutationResolver) MetadataAnalyzeScenes(ctx context.Context, input manager.AnalyzeSceneMetadataInput) (string, error) {
+	jobID := manager.GetInstance().AnalyzeSceneMetadata(ctx, input)
+	return strconv.Itoa(jobID), nil
+}
+
 func (r *mutationResolver) MetadataIdentify(ctx context.Context, input identify.Options) (string, error) {
 	t := manager.CreateIdentifyJob(input)
 	jobID := manager.GetInstance().JobManager.Add(ctx, "Identifying...", t)

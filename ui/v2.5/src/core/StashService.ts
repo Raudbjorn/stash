@@ -2971,6 +2971,22 @@ export const mutateMetadataAutoTag = (input: GQL.AutoTagMetadataInput) =>
     variables: { input },
   });
 
+export const mutateMetadataDetectSceneCuts = (
+  input: GQL.DetectSceneCutsInput
+) =>
+  client.mutate<GQL.MetadataDetectSceneCutsMutation>({
+    mutation: GQL.MetadataDetectSceneCutsDocument,
+    variables: { input },
+  });
+
+export const mutateMetadataAnalyzeScenes = (
+  input: GQL.AnalyzeSceneMetadataInput
+) =>
+  client.mutate<GQL.MetadataAnalyzeScenesMutation>({
+    mutation: GQL.MetadataAnalyzeScenesDocument,
+    variables: { input },
+  });
+
 export const mutateMetadataGenerate = (input: GQL.GenerateMetadataInput) =>
   client.mutate<GQL.MetadataGenerateMutation>({
     mutation: GQL.MetadataGenerateDocument,

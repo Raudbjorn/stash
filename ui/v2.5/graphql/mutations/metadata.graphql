@@ -26,6 +26,14 @@ mutation MetadataAutoTag($input: AutoTagMetadataInput!) {
   metadataAutoTag(input: $input)
 }
 
+mutation MetadataDetectSceneCuts($input: DetectSceneCutsInput!) {
+  metadataDetectSceneCuts(input: $input)
+}
+
+mutation MetadataAnalyzeScenes($input: AnalyzeSceneMetadataInput!) {
+  metadataAnalyzeScenes(input: $input)
+}
+
 mutation MetadataIdentify($input: IdentifyMetadataInput!) {
   metadataIdentify(input: $input)
 }
