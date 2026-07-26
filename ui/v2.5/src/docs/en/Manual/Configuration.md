@@ -191,8 +191,8 @@ These options are typically not exposed in the UI and must be changed manually i
 | `trusted_proxies` | A list of trusted proxy IPs or CIDR ranges. If a request comes from a trusted proxy or if the request IP address is a local address, the `X-FORWARDED-FOR` header will be used to determine the client's real IP address. Default is empty (no trusted proxies). |
 | `public_whitelist` | A list of public IP addresses or subnets (in CIDR range format eg: `192.168.1.0/24`) that are allowed to access the system when no credentials are configured. |
 | `signed_url_expiry` | The expiry time for signed URLs, in seconds. Signed URLs are used when authentication is required. Defaults to 4 hours to accommodate long video playback sessions. |
-| `https_port` | When set (and TLS certificates are configured), stash serves HTTPS on this port while continuing to serve plain HTTP on `port`. When `0`/unset (the default), TLS — if configured — is served on `port` as before. Requires a restart. |
-| `metrics_enabled` | When `true`, exposes a Prometheus metrics endpoint at `/metrics` (auth-gated like the rest of the server) plus HTTP request instrumentation. Defaults to `false`. Requires a restart. |
+| `https_port` | When set (and TLS certificates are configured), stash serves HTTPS on this port while **continuing to serve plain, unencrypted HTTP on `port`**. If you enabled TLS for security (not just reverse-proxy convenience), you are responsible for firewalling off the plaintext `port`. Must be a valid port different from `port`, or stash refuses to start. When `0`/unset (the default), TLS — if configured — is served on `port` as before. Requires a restart. |
+| `metrics_enabled` | When `true`, exposes a Prometheus metrics endpoint at `/metrics` plus HTTP request instrumentation. The endpoint is behind the normal authentication middleware — but note that if no credentials are configured, the whole instance (including `/metrics`, which exposes route patterns and request rates) is unauthenticated. Defaults to `false`. Requires a restart. |
 
 The following environment variables are also supported:
 

@@ -364,6 +364,11 @@ func (s *Server) Start() error {
 	if err != nil {
 		return fmt.Errorf("parsing listen address %q: %w", s.Addr, err)
 	}
+	if httpsPort > 65535 || httpsPort == s.manager.Config.GetPort() {
+		// Fail fast on an obvious misconfiguration rather than silently serving
+		// HTTP-only after the HTTPS listener fails to bind.
+		return fmt.Errorf("invalid https_port %d: must be 1-65535 and different from port %d", httpsPort, s.manager.Config.GetPort())
+	}
 	httpsAddr := net.JoinHostPort(host, strconv.Itoa(httpsPort))
 
 	s.httpsServer = &http.Server{
@@ -374,14 +379,36 @@ func (s *Server) Start() error {
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
 	}
 
+	// Run both listeners; the first to fail (or be shut down) wins. A bind
+	// failure on the HTTPS listener must not leave stash silently serving
+	// HTTP-only when the operator asked for TLS — surface it and tear the
+	// other listener down.
+	errCh := make(chan error, 2)
+
 	go func() {
 		logger.Infof("stash HTTPS is listening on " + httpsAddr)
-		if err := s.httpsServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Errorf("HTTPS server error: %v", err)
+		err := s.httpsServer.ListenAndServeTLS("", "")
+		if errors.Is(err, http.ErrServerClosed) {
+			err = nil
 		}
+		errCh <- err
 	}()
 
-	return s.ListenAndServe()
+	go func() {
+		err := s.ListenAndServe()
+		if errors.Is(err, http.ErrServerClosed) {
+			err = nil
+		}
+		errCh <- err
+	}()
+
+	err = <-errCh
+	if err != nil {
+		// One listener failed to serve; stop the other so Start returns and the
+		// process exits instead of running half-configured.
+		s.Shutdown()
+	}
+	return err
 }
 
 // Shutdown gracefully shuts down the server without interrupting any active connections.

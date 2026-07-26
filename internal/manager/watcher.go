@@ -88,41 +88,52 @@ func (s *Manager) watcherScan(p string, fi os.FileInfo) {
 func (s *Manager) StopFileWatcher() {
 	s.fileWatcherMu.Lock()
 	defer s.fileWatcherMu.Unlock()
-	if s.fileWatcherCancel != nil {
-		s.fileWatcherCancel()
-		s.fileWatcherCancel = nil
+	s.stopFileWatcherLocked()
+}
+
+// stopFileWatcherLocked cancels a running watcher and blocks until it has
+// released its watches. Callers must hold fileWatcherMu. runFileWatcher never
+// takes fileWatcherMu, so waiting here cannot deadlock.
+func (s *Manager) stopFileWatcherLocked() {
+	if s.fileWatcherCancel == nil {
+		return
+	}
+	s.fileWatcherCancel()
+	s.fileWatcherCancel = nil
+	if s.fileWatcherDone != nil {
+		<-s.fileWatcherDone
+		s.fileWatcherDone = nil
 	}
 }
 
 // RefreshFileWatcher (re)starts the filesystem watcher for the configured stash
 // library paths. When auto_scan_watch is disabled it simply stops any running
-// watcher. Safe to call repeatedly (e.g. after a config change).
+// watcher. Safe to call repeatedly (e.g. after a config change); the previous
+// watcher is fully torn down before a new one starts, so watches never overlap.
 func (s *Manager) RefreshFileWatcher() {
 	s.fileWatcherMu.Lock()
-	if s.fileWatcherCancel != nil {
-		s.fileWatcherCancel()
-		s.fileWatcherCancel = nil
-	}
+	defer s.fileWatcherMu.Unlock()
+
+	s.stopFileWatcherLocked()
 
 	if !s.Config.GetAutoScanWatch() {
-		s.fileWatcherMu.Unlock()
 		return
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
 	s.fileWatcherCancel = cancel
-	s.fileWatcherMu.Unlock()
+	s.fileWatcherDone = done
 
-	go s.runFileWatcher(ctx)
+	go s.runFileWatcher(ctx, done)
 }
 
-func (s *Manager) runFileWatcher(ctx context.Context) {
-	events := make(chan notify.EventInfo, 1024)
+func (s *Manager) runFileWatcher(ctx context.Context, done chan struct{}) {
+	defer close(done)
 
-	go func() {
-		<-ctx.Done()
-		notify.Stop(events)
-	}()
+	events := make(chan notify.EventInfo, 1024)
+	// Released on every return path, including a partial-setup failure below.
+	defer notify.Stop(events)
 
 	for _, st := range s.Config.GetStashPaths() {
 		if st == nil || st.Path == "" {
@@ -140,6 +151,15 @@ func (s *Manager) runFileWatcher(ctx context.Context) {
 
 	var mu sync.Mutex
 	timers := make(map[string]*time.Timer)
+	// Cancel any pending debounce timers when the watcher stops so they can't
+	// fire a scan after shutdown / after auto_scan_watch is turned off.
+	defer func() {
+		mu.Lock()
+		for _, t := range timers {
+			t.Stop()
+		}
+		mu.Unlock()
+	}()
 
 	for {
 		select {
@@ -162,6 +182,11 @@ func (s *Manager) runFileWatcher(ctx context.Context) {
 				mu.Lock()
 				delete(timers, rawPath)
 				mu.Unlock()
+
+				// Skip if the watcher was stopped between the event and now.
+				if ctx.Err() != nil {
+					return
+				}
 
 				fi, err := os.Stat(rawPath)
 				if err != nil {
