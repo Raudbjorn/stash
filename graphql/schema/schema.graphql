@@ -644,6 +644,15 @@ type Mutation {
   "Run batch tag tag task. Returns the job ID."
   stashBoxBatchTagTag(input: StashBoxBatchTagInput!): String!
 
+  "Run native marker sync task against external databases. Returns the job ID."
+  markerSync(input: MarkerSyncInput!): String!
+
+  "Submit scene markers (and enclosing scene metadata) to external databases. Returns the job ID."
+  markerSyncSubmit(input: MarkerSyncSubmitInput!): String!
+
+  "Index local funscripts and match them to scenes for native marker sync. Returns the job ID."
+  markerSyncFunscriptIndex: String!
+
   "Enables DLNA for an optional duration. Has no effect if DLNA is enabled by default"
   enableDLNA(input: EnableDLNAInput!): Boolean!
   "Disables DLNA for an optional duration. Has no effect if DLNA is disabled by default"

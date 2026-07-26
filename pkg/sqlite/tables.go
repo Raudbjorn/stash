@@ -492,3 +492,10 @@ var (
 		idColumn: goqu.T(playlistTable).Col(idColumn),
 	}
 )
+
+var (
+	funscriptIndexTableMgr = &table{
+		table:    goqu.T(funscriptIndexTable),
+		idColumn: goqu.T(funscriptIndexTable).Col(idColumn),
+	}
+)

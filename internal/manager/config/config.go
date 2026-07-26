@@ -237,6 +237,9 @@ const (
 	// stash-box options
 	StashBoxes = "stash_boxes"
 
+	// marker sync options
+	MarkerSync = "marker_sync"
+
 	PythonPath = "python_path"
 
 	// plugin options

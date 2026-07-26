@@ -29,6 +29,7 @@ type Repository struct {
 	Tag            TagReaderWriter
 	SavedFilter    SavedFilterReaderWriter
 	Playlist       PlaylistReaderWriter
+	FunscriptIndex FunscriptIndexReaderWriter
 }
 
 func (r *Repository) WithTxn(ctx context.Context, fn txn.TxnFunc) error {
