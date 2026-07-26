@@ -294,11 +294,20 @@ func (s *Scanner) handleFolderRename(ctx context.Context, file ScannedFile) (*mo
 func (s *Scanner) onExistingFolder(ctx context.Context, f ScannedFile, existing *models.Folder) (*models.Folder, bool, error) {
 	update := false
 
-	// update if mod time is changed
+	// update if mod time changed
 	entryModTime := f.ModTime
-	if !entryModTime.Equal(existing.ModTime) {
+	updated := !entryModTime.Equal(existing.ModTime)
+	if updated {
 		existing.Path = f.Path
 		existing.ModTime = entryModTime
+		existing.BirthTime = f.BirthTime
+		update = true
+	}
+
+	// backfill birth_time for folders created before migration 86.
+	// Guarded so this fires once when missing rather than on every rescan.
+	if existing.BirthTime == nil && f.BirthTime != nil {
+		existing.BirthTime = f.BirthTime
 		update = true
 	}
 
@@ -821,6 +830,16 @@ func (s *Scanner) onExistingFile(ctx context.Context, f ScannedFile, existing mo
 	forceRescan := s.Rescan
 
 	if !updated && !forceRescan {
+		// backfill birth_time for files created before migration 86
+		if base.BirthTime == nil && f.BirthTime != nil {
+			base.BirthTime = f.BirthTime
+			base.UpdatedAt = time.Now()
+			if err := s.Repository.WithTxn(ctx, func(ctx context.Context) error {
+				return s.Repository.File.Update(ctx, existing)
+			}); err != nil {
+				return nil, fmt.Errorf("backfilling birth_time for %q: %w", path, err)
+			}
+		}
 		return s.onUnchangedFile(ctx, f, existing)
 	}
 
@@ -835,6 +854,7 @@ func (s *Scanner) onExistingFile(ctx context.Context, f ScannedFile, existing mo
 	// #6326 - update basename in case it changed
 	base.Basename = f.Basename
 	base.ModTime = fileModTime
+	base.BirthTime = f.BirthTime
 	base.Size = f.Size
 	base.UpdatedAt = time.Now()
 

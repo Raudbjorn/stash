@@ -78,6 +78,15 @@ export const SceneDetailPanel: React.FC<ISceneDetailProps> = (props) => {
     <>
       <div className="row">
         <div className={`${sceneDetailsWidth} col-12 scene-details`}>
+          {props.scene.files[0]?.birth_time && (
+            <h6>
+              <FormattedMessage id="file_birth_time" />:{" "}
+              {TextUtils.formatDateTime(
+                intl,
+                props.scene.files[0].birth_time
+              )}{" "}
+            </h6>
+          )}
           <h6>
             <FormattedMessage id="created_at" />:{" "}
             {TextUtils.formatDateTime(intl, props.scene.created_at)}{" "}

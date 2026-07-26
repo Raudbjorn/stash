@@ -96,6 +96,10 @@ type DirEntry struct {
 	ZipFile File
 
 	ModTime time.Time `json:"mod_time"`
+
+	// BirthTime is the OS-level file creation/birth time.
+	// Nil when not available (unsupported platform, zip files, etc.)
+	BirthTime *time.Time `json:"birth_time"`
 }
 
 func (e *DirEntry) info(fs FS, path string) (fs.FileInfo, error) {

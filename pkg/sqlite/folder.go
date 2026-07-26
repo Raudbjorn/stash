@@ -25,6 +25,7 @@ type folderRow struct {
 	ZipFileID      null.Int        `db:"zip_file_id"`
 	ParentFolderID null.Int        `db:"parent_folder_id"`
 	ModTime        Timestamp       `db:"mod_time"`
+	BirthTime      NullTimestamp   `db:"birth_time"`
 	CreatedAt      Timestamp       `db:"created_at"`
 	UpdatedAt      Timestamp       `db:"updated_at"`
 }
@@ -37,6 +38,7 @@ func (r *folderRow) fromFolder(o models.Folder) {
 	r.ZipFileID = nullIntFromFileIDPtr(o.ZipFileID)
 	r.ParentFolderID = nullIntFromFolderIDPtr(o.ParentFolderID)
 	r.ModTime = Timestamp{Timestamp: o.ModTime}
+	r.BirthTime = NullTimestampFromTimePtr(o.BirthTime)
 	r.CreatedAt = Timestamp{Timestamp: o.CreatedAt}
 	r.UpdatedAt = Timestamp{Timestamp: o.UpdatedAt}
 }
@@ -55,6 +57,7 @@ func (r *folderQueryRow) resolve() *models.Folder {
 		DirEntry: models.DirEntry{
 			ZipFileID: nullIntFileIDPtr(r.ZipFileID),
 			ModTime:   r.ModTime.Timestamp,
+			BirthTime: r.BirthTime.TimePtr(),
 		},
 		Path:           string(r.Path),
 		ParentFolderID: nullIntFolderIDPtr(r.ParentFolderID),
@@ -192,6 +195,7 @@ func (qb *FolderStore) selectDataset() *goqu.SelectDataset {
 		table.Col("zip_file_id"),
 		table.Col("parent_folder_id"),
 		table.Col("mod_time"),
+		table.Col("birth_time"),
 		table.Col("created_at"),
 		table.Col("updated_at"),
 		zipFileTable.Col("basename").As("zip_basename"),
