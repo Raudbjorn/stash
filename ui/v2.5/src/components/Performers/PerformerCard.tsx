@@ -19,7 +19,7 @@ import GenderIcon from "./GenderIcon";
 import { faLink, faTag } from "@fortawesome/free-solid-svg-icons";
 import { faInstagram, faTwitter } from "@fortawesome/free-brands-svg-icons";
 import { RatingBanner } from "../Shared/RatingBanner";
-import { usePerformerUpdate } from "src/core/StashService";
+import { useFindScenes, usePerformerUpdate } from "src/core/StashService";
 import { ILabeledId } from "src/models/list-filter/types";
 import { FavoriteIcon } from "../Shared/FavoriteIcon";
 import { PatchComponent } from "src/patch";
@@ -49,14 +49,36 @@ interface IPerformerCardProps {
 const PerformerCardPopovers: React.FC<IPerformerCardProps> = PatchComponent(
   "PerformerCard.Popovers",
   ({ performer, extraCriteria }) => {
+    const filteredScenesFilter = React.useMemo(() => {
+      if (!extraCriteria?.scenes?.length && !extraCriteria?.performer) {
+        return;
+      }
+
+      const filter = NavUtils.makePerformerScenesFilter(
+        performer,
+        extraCriteria?.performer,
+        extraCriteria.scenes
+      );
+
+      if (filter) {
+        filter.itemsPerPage = 0;
+      }
+
+      return filter;
+    }, [extraCriteria, performer]);
+    const filteredScenesResult = useFindScenes(filteredScenesFilter);
+    const sceneCount = filteredScenesFilter
+      ? (filteredScenesResult.data?.findScenes.count ?? 0)
+      : performer.scene_count;
+
     function maybeRenderScenesPopoverButton() {
-      if (!performer.scene_count) return;
+      if (!sceneCount) return;
 
       return (
         <PopoverCountButton
           className="scene-count"
           type="scene"
-          count={performer.scene_count}
+          count={sceneCount}
           url={NavUtils.makePerformerScenesUrl(
             performer,
             extraCriteria?.performer,
@@ -141,7 +163,7 @@ const PerformerCardPopovers: React.FC<IPerformerCardProps> = PatchComponent(
     }
 
     if (
-      performer.scene_count ||
+      sceneCount ||
       performer.image_count ||
       performer.gallery_count ||
       performer.tags.length > 0 ||

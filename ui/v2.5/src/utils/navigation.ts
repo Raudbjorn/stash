@@ -40,12 +40,13 @@ function addExtraCriteria(dest: Criterion[], src?: Criterion[]) {
   }
 }
 
-const makePerformerScenesUrl = (
+const makePerformerScenesFilter = (
   performer: Partial<GQL.PerformerDataFragment>,
   extraPerformer?: ILabeledId,
   extraCriteria?: ModifierCriterion<CriterionValue>[]
 ) => {
-  if (!performer.id) return "#";
+  if (!performer.id) return;
+
   const filter = new ListFilterModel(GQL.FilterMode.Scenes, undefined);
   const criterion = new PerformersCriterion();
   criterion.value.items = [
@@ -58,6 +59,22 @@ const makePerformerScenesUrl = (
 
   filter.criteria.push(criterion);
   addExtraCriteria(filter.criteria, extraCriteria);
+  return filter;
+};
+
+const makePerformerScenesUrl = (
+  performer: Partial<GQL.PerformerDataFragment>,
+  extraPerformer?: ILabeledId,
+  extraCriteria?: ModifierCriterion<CriterionValue>[]
+) => {
+  const filter = makePerformerScenesFilter(
+    performer,
+    extraPerformer,
+    extraCriteria
+  );
+
+  if (!filter) return "#";
+
   return `/scenes?${filter.makeQueryParameters()}`;
 };
 
@@ -478,6 +495,7 @@ export function handleUnsavedChanges(
 }
 
 const NavUtils = {
+  makePerformerScenesFilter,
   makePerformerScenesUrl,
   makePerformerImagesUrl,
   makePerformerGalleriesUrl,
