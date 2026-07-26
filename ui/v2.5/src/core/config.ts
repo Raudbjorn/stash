@@ -48,6 +48,7 @@ export interface IUIConfig {
   showChildStudioContent?: boolean;
   showLinksOnPerformerCard?: boolean;
   showTagCardOnHover?: boolean;
+  sortFavoritedTagsFirst?: boolean;
 
   showStudioText?: boolean;
 

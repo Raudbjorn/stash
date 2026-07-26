@@ -500,6 +500,13 @@ export const SettingsInterfacePanel: React.FC = PatchComponent(
             onChange={(v) => saveUI({ showTagCardOnHover: v })}
           />
           <BooleanSetting
+            id="sort-favorited-tags-first"
+            headingID="config.ui.tag_panel.options.sort_favorited_tags_first.heading"
+            subHeadingID="config.ui.tag_panel.options.sort_favorited_tags_first.description"
+            checked={ui.sortFavoritedTagsFirst ?? undefined}
+            onChange={(v) => saveUI({ sortFavoritedTagsFirst: v })}
+          />
+          <BooleanSetting
             id="show-child-tagged-content"
             headingID="config.ui.tag_panel.options.show_child_tagged_content.heading"
             subHeadingID="config.ui.tag_panel.options.show_child_tagged_content.description"
