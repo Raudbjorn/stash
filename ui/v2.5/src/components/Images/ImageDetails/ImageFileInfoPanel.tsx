@@ -67,6 +67,15 @@ const FileInfoPanel: React.FC<IFileInfoPanelProps> = (
             value={props.file.mod_time ?? 0}
           />
         </TextField>
+        {props.file.birth_time && (
+          <TextField id="file_birth_time">
+            <FormattedTime
+              dateStyle="medium"
+              timeStyle="medium"
+              value={props.file.birth_time}
+            />
+          </TextField>
+        )}
         <TextField
           id="dimensions"
           value={`${props.file.width} x ${props.file.height}`}

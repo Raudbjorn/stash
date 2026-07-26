@@ -245,6 +245,10 @@ func GetSceneMarkersJSON(ctx context.Context, markerReader models.SceneMarkerFin
 			sceneMarkerJSON.EndSeconds = getDecimalString(*sceneMarker.EndSeconds)
 		}
 
+		if sceneMarker.Rating100 != nil {
+			sceneMarkerJSON.Rating100 = *sceneMarker.Rating100
+		}
+
 		results = append(results, sceneMarkerJSON)
 	}
 

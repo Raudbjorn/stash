@@ -16,6 +16,7 @@ import { PatchComponent } from "src/patch";
 import { PerformerPopoverButton } from "../Shared/PerformerPopoverButton";
 import { ScenePreview } from "./SceneCard";
 import { TruncatedText } from "../Shared/TruncatedText";
+import { RatingBanner } from "../Shared/RatingBanner";
 
 interface ISceneMarkerCardProps {
   marker: GQL.SceneMarkerDataFragment;
@@ -156,6 +157,7 @@ const SceneMarkerCardImage = PatchComponent(
           soundActive={configuration?.interface?.soundOnPreview ?? false}
           isPortrait={isPortrait()}
         />
+        <RatingBanner rating={props.marker.rating100} />
         {maybeRenderSceneSpecsOverlay()}
       </>
     );

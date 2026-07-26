@@ -946,6 +946,10 @@
           "show_child_tagged_content": {
             "description": "In the tag view, display content from the sub-tags as well.",
             "heading": "Display sub-tag content"
+          },
+          "sort_favorited_tags_first": {
+            "description": "Show favourited tags before other tags in tag filter results while preserving the normal order within each group.",
+            "heading": "Show favourited tags first"
           }
         }
       },
@@ -1146,7 +1150,9 @@
     "scrape_entity_query": "{entity_type} Scrape Query",
     "scrape_entity_title": "{entity_type} Scrape Results",
     "scrape_results_existing": "Existing",
+    "scrape_results_merge_tooltip": "Merge existing values with scraped results",
     "scrape_results_missing": "Missing",
+    "scrape_results_overwrite_tooltip": "Overwrite existing values with scraped results",
     "scrape_results_scraped": "Scraped",
     "set_default_filter_confirm": "Are you sure you want to set this filter as the default?",
     "set_image_url_title": "Image URL",
@@ -1244,6 +1250,7 @@
   "file": "file",
   "file_count": "File Count",
   "file_info": "File Info",
+  "file_birth_time": "File Birth Time",
   "file_mod_time": "File Modification Time",
   "files": "files",
   "files_amount": "{value} files",

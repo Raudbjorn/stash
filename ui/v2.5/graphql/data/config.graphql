@@ -102,15 +102,6 @@ fragment ConfigInterfaceData on ConfigInterfaceResult {
   customLocalesEnabled
   disableCustomizations
   language
-  imageLightbox {
-    slideshowDelay
-    displayMode
-    scaleUp
-    resetZoomOnNav
-    scrollMode
-    scrollAttemptsBeforeChange
-    disableAnimation
-  }
   disableDropdownCreate {
     performer
     tag

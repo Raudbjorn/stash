@@ -243,6 +243,8 @@ input SceneMarkerFilterType {
   scenes: MultiCriterionInput
   "Filter by duration (in seconds)"
   duration: FloatCriterionInput
+  # rating expressed as 1-100
+  rating100: IntCriterionInput
   "Filter by creation time"
   created_at: TimestampCriterionInput
   "Filter by last update time"

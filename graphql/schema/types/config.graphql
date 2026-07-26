@@ -359,37 +359,6 @@ input ConfigDisableDropdownCreateInput {
   gallery: Boolean
 }
 
-enum ImageLightboxDisplayMode {
-  ORIGINAL
-  FIT_XY
-  FIT_X
-}
-
-enum ImageLightboxScrollMode {
-  ZOOM
-  PAN_Y
-}
-
-input ConfigImageLightboxInput {
-  slideshowDelay: Int
-  displayMode: ImageLightboxDisplayMode
-  scaleUp: Boolean
-  resetZoomOnNav: Boolean
-  scrollMode: ImageLightboxScrollMode
-  scrollAttemptsBeforeChange: Int
-  disableAnimation: Boolean
-}
-
-type ConfigImageLightboxResult {
-  slideshowDelay: Int
-  displayMode: ImageLightboxDisplayMode
-  scaleUp: Boolean
-  resetZoomOnNav: Boolean
-  scrollMode: ImageLightboxScrollMode
-  scrollAttemptsBeforeChange: Int!
-  disableAnimation: Boolean
-}
-
 input ConfigInterfaceInput {
   "True if SFW content mode is enabled"
   sfwContentMode: Boolean
@@ -437,8 +406,6 @@ input ConfigInterfaceInput {
 
   "Interface language"
   language: String
-
-  imageLightbox: ConfigImageLightboxInput
 
   "Set to true to disable creating new objects via the dropdown menus"
   disableDropdownCreate: ConfigDisableDropdownCreateInput
@@ -514,8 +481,6 @@ type ConfigInterfaceResult {
 
   "Interface language"
   language: String
-
-  imageLightbox: ConfigImageLightboxResult!
 
   "Fields are true if creating via dropdown menus are disabled"
   disableDropdownCreate: ConfigDisableDropdownCreate!

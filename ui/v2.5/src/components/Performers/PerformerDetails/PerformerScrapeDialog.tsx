@@ -24,8 +24,11 @@ import {
 import { IStashBox } from "./PerformerStashBoxModal";
 import { ScrapeResult } from "src/components/Shared/ScrapeDialog/scrapeResult";
 import { Tag } from "src/components/Tags/TagSelect";
-import { uniq } from "lodash-es";
 import { useScrapedTags } from "src/components/Shared/ScrapeDialog/scrapedTags";
+import {
+  useMergeModeDelimitedString,
+  useMergeModeStringList,
+} from "src/components/Shared/ScrapeDialog/mergeMode";
 
 function renderScrapedGender(
   result: ScrapeResult<string>,
@@ -215,11 +218,15 @@ export const PerformerScrapeDialog: React.FC<IPerformerScrapeDialogProps> = (
       props.scraped.disambiguation
     )
   );
-  const [aliases, setAliases] = useState<ScrapeResult<string>>(
-    new ScrapeResult<string>(
-      props.performer.alias_list?.join(", "),
-      props.scraped.aliases
-    )
+  const {
+    result: aliases,
+    setResult: setAliases,
+    mergeMode: aliasesMergeMode,
+    onSetMergeMode: onSetAliasesMergeMode,
+  } = useMergeModeDelimitedString(
+    "performer.aliases",
+    props.performer.alias_list?.join(", "),
+    props.scraped.aliases
   );
   const [birthdate, setBirthdate] = useState<ScrapeResult<string>>(
     new ScrapeResult<string>(props.performer.birthdate, props.scraped.birthdate)
@@ -290,13 +297,15 @@ export const PerformerScrapeDialog: React.FC<IPerformerScrapeDialogProps> = (
   const [piercings, setPiercings] = useState<ScrapeResult<string>>(
     new ScrapeResult<string>(props.performer.piercings, props.scraped.piercings)
   );
-  const [urls, setURLs] = useState<ScrapeResult<string[]>>(
-    new ScrapeResult<string[]>(
-      props.performer.urls,
-      props.scraped.urls
-        ? uniq((props.performer.urls ?? []).concat(props.scraped.urls ?? []))
-        : undefined
-    )
+  const {
+    result: urls,
+    setResult: setURLs,
+    mergeMode: urlsMergeMode,
+    onSetMergeMode: onSetURLsMergeMode,
+  } = useMergeModeStringList(
+    "performer.urls",
+    props.performer.urls,
+    props.scraped.urls
   );
   const [gender, setGender] = useState<ScrapeResult<string>>(
     new ScrapeResult<string>(
@@ -323,7 +332,7 @@ export const PerformerScrapeDialog: React.FC<IPerformerScrapeDialogProps> = (
   const { tags, newTags, scrapedTagsRow, linkDialog } = useScrapedTags(
     props.performerTags,
     props.scraped.tags,
-    endpoint
+    { endpoint, mergeModeField: "performer.tags" }
   );
 
   const [image, setImage] = useState<ScrapeResult<string>>(
@@ -424,6 +433,8 @@ export const PerformerScrapeDialog: React.FC<IPerformerScrapeDialogProps> = (
           title={intl.formatMessage({ id: "aliases" })}
           result={aliases}
           onChange={(value) => setAliases(value)}
+          mergeMode={aliasesMergeMode}
+          onSetMergeMode={onSetAliasesMergeMode}
         />
         {renderScrapedGenderRow(
           intl.formatMessage({ id: "gender" }),
@@ -530,6 +541,8 @@ export const PerformerScrapeDialog: React.FC<IPerformerScrapeDialogProps> = (
           title={intl.formatMessage({ id: "urls" })}
           result={urls}
           onChange={(value) => setURLs(value)}
+          mergeMode={urlsMergeMode}
+          onSetMergeMode={onSetURLsMergeMode}
         />
         <ScrapedTextAreaRow
           field="details"

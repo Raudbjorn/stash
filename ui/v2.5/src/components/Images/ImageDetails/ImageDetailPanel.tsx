@@ -99,6 +99,15 @@ export const ImageDetailPanel: React.FC<IImageDetailProps> = PatchComponent(
         <div className="row">
           <div className={`${imageDetailsWidth} col-12 image-details`}>
             {renderGalleries()}
+            {props.image.visual_files[0]?.birth_time && (
+              <h6>
+                <FormattedMessage id="file_birth_time" />:{" "}
+                {TextUtils.formatDateTime(
+                  intl,
+                  props.image.visual_files[0].birth_time
+                )}{" "}
+              </h6>
+            )}
             {
               <h6>
                 {" "}

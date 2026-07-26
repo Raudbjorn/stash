@@ -147,26 +147,43 @@ type xpathFragmentScraper struct {
 }
 
 func (s *xpathFragmentScraper) scrapeSceneByScene(ctx context.Context, scene *models.Scene) (*models.ScrapedScene, error) {
-	// construct the URL
-	queryURL := queryURLParametersFromScene(scene)
-	if s.definition.QueryURLReplacements != nil {
-		queryURL.applyReplacements(s.definition.QueryURLReplacements)
+	queryURLs, err := queryURLParameterCandidatesFromScene(scene, s.definition.QueryURL, ScrapeContentTypeScene, s.xpathScraper.definition)
+	if err != nil {
+		return nil, err
 	}
-	url := queryURL.constructURL(s.definition.QueryURL)
 
 	scraper, err := s.getXpathScraper(s.definition.Scraper)
 	if err != nil {
 		return nil, err
 	}
 
-	doc, err := s.loadURL(ctx, url)
+	var lastErr error
+	for _, queryURL := range queryURLs {
+		if s.definition.QueryURLReplacements != nil {
+			queryURL.applyReplacements(s.definition.QueryURLReplacements)
+		}
+		url, err := queryURL.constructURLOrError(s.definition.QueryURL)
+		if err != nil {
+			lastErr = err
+			continue
+		}
 
-	if err != nil {
-		return nil, err
+		doc, err := s.loadURL(ctx, url)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		q := s.getXPathQuery(doc, url)
+		ret, err := scraper.scrapeScene(ctx, q)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		return ret, nil
 	}
 
-	q := s.getXPathQuery(doc, url)
-	return scraper.scrapeScene(ctx, q)
+	return nil, lastErr
 }
 
 func (s *xpathFragmentScraper) scrapeByFragment(ctx context.Context, input Input) (ScrapedContent, error) {
@@ -186,7 +203,10 @@ func (s *xpathFragmentScraper) scrapeByFragment(ctx context.Context, input Input
 	if s.definition.QueryURLReplacements != nil {
 		queryURL.applyReplacements(s.definition.QueryURLReplacements)
 	}
-	url := queryURL.constructURL(s.definition.QueryURL)
+	url, err := queryURL.constructURLOrError(s.definition.QueryURL)
+	if err != nil {
+		return nil, err
+	}
 
 	scraper, err := s.getXpathScraper(s.definition.Scraper)
 	if err != nil {
@@ -204,49 +224,81 @@ func (s *xpathFragmentScraper) scrapeByFragment(ctx context.Context, input Input
 }
 
 func (s *xpathFragmentScraper) scrapeGalleryByGallery(ctx context.Context, gallery *models.Gallery) (*models.ScrapedGallery, error) {
-	// construct the URL
-	queryURL := queryURLParametersFromGallery(gallery)
-	if s.definition.QueryURLReplacements != nil {
-		queryURL.applyReplacements(s.definition.QueryURLReplacements)
+	queryURLs, err := queryURLParameterCandidatesFromGallery(gallery, s.definition.QueryURL, ScrapeContentTypeGallery, s.xpathScraper.definition)
+	if err != nil {
+		return nil, err
 	}
-	url := queryURL.constructURL(s.definition.QueryURL)
 
 	scraper, err := s.getXpathScraper(s.definition.Scraper)
 	if err != nil {
 		return nil, err
 	}
 
-	doc, err := s.loadURL(ctx, url)
+	var lastErr error
+	for _, queryURL := range queryURLs {
+		if s.definition.QueryURLReplacements != nil {
+			queryURL.applyReplacements(s.definition.QueryURLReplacements)
+		}
+		url, err := queryURL.constructURLOrError(s.definition.QueryURL)
+		if err != nil {
+			return nil, err
+		}
 
-	if err != nil {
-		return nil, err
+		doc, err := s.loadURL(ctx, url)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		q := s.getXPathQuery(doc, url)
+		ret, err := scraper.scrapeGallery(ctx, q)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		return ret, nil
 	}
 
-	q := s.getXPathQuery(doc, url)
-	return scraper.scrapeGallery(ctx, q)
+	return nil, lastErr
 }
 
 func (s *xpathFragmentScraper) scrapeImageByImage(ctx context.Context, image *models.Image) (*models.ScrapedImage, error) {
-	// construct the URL
-	queryURL := queryURLParametersFromImage(image)
-	if s.definition.QueryURLReplacements != nil {
-		queryURL.applyReplacements(s.definition.QueryURLReplacements)
+	queryURLs, err := queryURLParameterCandidatesFromImage(image, s.definition.QueryURL, ScrapeContentTypeImage, s.xpathScraper.definition)
+	if err != nil {
+		return nil, err
 	}
-	url := queryURL.constructURL(s.definition.QueryURL)
 
 	scraper, err := s.getXpathScraper(s.definition.Scraper)
 	if err != nil {
 		return nil, err
 	}
 
-	doc, err := s.loadURL(ctx, url)
+	var lastErr error
+	for _, queryURL := range queryURLs {
+		if s.definition.QueryURLReplacements != nil {
+			queryURL.applyReplacements(s.definition.QueryURLReplacements)
+		}
+		url, err := queryURL.constructURLOrError(s.definition.QueryURL)
+		if err != nil {
+			return nil, err
+		}
 
-	if err != nil {
-		return nil, err
+		doc, err := s.loadURL(ctx, url)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		q := s.getXPathQuery(doc, url)
+		ret, err := scraper.scrapeImage(ctx, q)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		return ret, nil
 	}
 
-	q := s.getXPathQuery(doc, url)
-	return scraper.scrapeImage(ctx, q)
+	return nil, lastErr
 }
 
 func (s *xpathScraper) loadURL(ctx context.Context, url string) (*html.Node, error) {

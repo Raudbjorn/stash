@@ -20,6 +20,7 @@ import {
   TagsCriterion,
   TagsCriterionOption,
 } from "src/models/list-filter/criteria/tags";
+import { useConfigurationContext } from "src/hooks/Config";
 import { FormattedMessage } from "react-intl";
 
 interface ITagsFilter {
@@ -57,14 +58,23 @@ function queryVariables(query: string, f?: ListFilterModel) {
 
 function sortResults(
   query: string,
-  tags: Pick<TagDataFragment, "id" | "name" | "aliases">[]
+  tags: Pick<TagDataFragment, "id" | "name" | "aliases" | "favorite">[],
+  sortFavoritesFirst: boolean
 ) {
-  return sortByRelevance(
+  let sortedTags = sortByRelevance(
     query,
     tags ?? [],
     (t) => t.name,
     (t) => t.aliases
-  ).map((p) => {
+  );
+
+  if (sortFavoritesFirst) {
+    sortedTags = [...sortedTags].sort(
+      (a, b) => Number(!!b.favorite) - Number(!!a.favorite)
+    );
+  }
+
+  return sortedTags.map((p) => {
     return {
       id: p.id,
       label: p.name,
@@ -73,6 +83,7 @@ function sortResults(
 }
 
 function useTagQueryFilter(props: IUseQueryHookProps) {
+  const { configuration } = useConfigurationContext();
   const { q: query, filter: f, skip, filterHook } = props;
   const appliedFilter = filterHook && f ? filterHook(f.clone()) : f;
 
@@ -82,8 +93,13 @@ function useTagQueryFilter(props: IUseQueryHookProps) {
   });
 
   const results = useMemo(
-    () => sortResults(query, data?.findTags.tags ?? []),
-    [data, query]
+    () =>
+      sortResults(
+        query,
+        data?.findTags.tags ?? [],
+        configuration?.ui.sortFavoritedTagsFirst ?? false
+      ),
+    [configuration?.ui.sortFavoritedTagsFirst, data, query]
   );
 
   return { results, loading };

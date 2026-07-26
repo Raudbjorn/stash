@@ -16,6 +16,8 @@ import { StringListInput } from "../StringListInput";
 import { ImageSelector } from "../ImageSelector";
 import { CustomFieldScrapeResults, ScrapeResult } from "./scrapeResult";
 import { ScrapeDialogContext } from "./ScrapeDialog";
+import { MergeModeButtons } from "./mergeMode";
+import { ScrapeListMergeMode } from "src/core/config";
 
 function renderButtonIcon(selected: boolean) {
   const className = selected ? "text-success" : "text-muted";
@@ -28,11 +30,23 @@ function renderButtonIcon(selected: boolean) {
   );
 }
 
+function hasValue(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+  return value !== undefined && value !== null && value !== "";
+}
+
 interface IScrapedFieldProps<T> {
   result: ScrapeResult<T>;
 }
 
-interface IScrapedRowProps<T> extends IScrapedFieldProps<T> {
+interface IMergeModeProps {
+  mergeMode?: ScrapeListMergeMode;
+  onSetMergeMode?: (mode: ScrapeListMergeMode) => void;
+}
+
+interface IScrapedRowProps<T> extends IScrapedFieldProps<T>, IMergeModeProps {
   className?: string;
   field: string;
   title: string;
@@ -45,6 +59,7 @@ interface IScrapedRowProps<T> extends IScrapedFieldProps<T> {
 
 export const ScrapeDialogRow = <T,>(props: IScrapedRowProps<T>) => {
   const { existingLabel, scrapedLabel } = useContext(ScrapeDialogContext);
+  const { mergeMode, onSetMergeMode } = props;
 
   function handleSelectClick(isNew: boolean) {
     const ret = clone(props.result);
@@ -56,14 +71,25 @@ export const ScrapeDialogRow = <T,>(props: IScrapedRowProps<T>) => {
     return null;
   }
 
+  // hide the merge mode buttons when there is no existing value to merge,
+  // or when nothing was scraped
+  const showMergeModeButtons =
+    mergeMode !== undefined &&
+    onSetMergeMode !== undefined &&
+    props.result.scraped &&
+    hasValue(props.result.originalValue);
+
   return (
     <Row
       className={`px-3 pt-3 ${props.className ?? ""}`}
       data-field={props.field}
     >
-      <Form.Label column lg="3">
-        {props.title}
-      </Form.Label>
+      <Col lg="3" className="scraped-field-label">
+        <Form.Label className="col-form-label">{props.title}</Form.Label>
+        {showMergeModeButtons && (
+          <MergeModeButtons mode={mergeMode} onSetMode={onSetMergeMode} />
+        )}
+      </Col>
 
       <Col lg="9">
         <Row>
@@ -131,7 +157,7 @@ const ScrapedInputGroup: React.FC<IScrapedInputGroupProps> = (props) => {
   );
 };
 
-interface IScrapedInputGroupRowProps {
+interface IScrapedInputGroupRowProps extends IMergeModeProps {
   title: string;
   field: string;
   className?: string;
@@ -263,7 +289,7 @@ const ScrapedStringList: React.FC<IScrapedStringListProps> = (props) => {
   );
 };
 
-interface IScrapedStringListRowProps {
+interface IScrapedStringListRowProps extends IMergeModeProps {
   title: string;
   field: string;
   placeholder?: string;
@@ -281,6 +307,8 @@ export const ScrapedStringListRow: React.FC<IScrapedStringListRowProps> = (
       title={props.title}
       field={props.field}
       result={props.result}
+      mergeMode={props.mergeMode}
+      onSetMergeMode={props.onSetMergeMode}
       originalField={
         <ScrapedStringList
           placeholder={props.placeholder || props.title}
@@ -328,6 +356,8 @@ export const ScrapedTextAreaRow: React.FC<IScrapedInputGroupRowProps> = (
       title={props.title}
       field={props.field}
       result={props.result}
+      mergeMode={props.mergeMode}
+      onSetMergeMode={props.onSetMergeMode}
       originalField={
         <ScrapedTextArea
           placeholder={props.placeholder || props.title}

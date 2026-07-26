@@ -724,6 +724,7 @@ func (r *mutationResolver) SceneMarkerCreate(ctx context.Context, input SceneMar
 		}
 		newMarker.EndSeconds = input.EndSeconds
 	}
+	newMarker.Rating100 = input.Rating100
 
 	tagIDs, err := stringslice.StringSliceToIntSlice(input.TagIds)
 	if err != nil {
@@ -780,6 +781,7 @@ func (r *mutationResolver) SceneMarkerUpdate(ctx context.Context, input SceneMar
 	updatedMarker.Title = translator.optionalString(input.Title, "title")
 	updatedMarker.Seconds = translator.optionalFloat64(input.Seconds, "seconds")
 	updatedMarker.EndSeconds = translator.optionalFloat64(input.EndSeconds, "end_seconds")
+	updatedMarker.Rating100 = translator.optionalInt(input.Rating100, "rating100")
 	updatedMarker.SceneID, err = translator.optionalIntFromString(input.SceneID, "scene_id")
 	if err != nil {
 		return nil, fmt.Errorf("converting scene id: %w", err)
@@ -898,6 +900,7 @@ func (r *mutationResolver) BulkSceneMarkerUpdate(ctx context.Context, input Bulk
 	partial := models.NewSceneMarkerPartial()
 
 	partial.Title = translator.optionalString(input.Title, "title")
+	partial.Rating100 = translator.optionalInt(input.Rating100, "rating100")
 
 	partial.PrimaryTagID, err = translator.optionalIntFromString(input.PrimaryTagID, "primary_tag_id")
 	if err != nil {

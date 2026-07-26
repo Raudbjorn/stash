@@ -177,6 +177,16 @@
     font-size: 0.85em;
   }
 
+  .scraped-field-label {
+    label {
+      display: block;
+    }
+
+    .merge-mode-buttons {
+      margin-bottom: 0.25rem;
+    }
+  }
+
   .string-list-input {
     width: 100%;
   }

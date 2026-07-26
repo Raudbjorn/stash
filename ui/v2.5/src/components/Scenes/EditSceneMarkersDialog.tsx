@@ -13,13 +13,14 @@ import {
 import { BulkUpdateFormGroup, BulkUpdateTextInput } from "../Shared/BulkUpdate";
 import { faPencilAlt } from "@fortawesome/free-solid-svg-icons";
 import { TagSelect } from "../Shared/Select";
+import { RatingSystem } from "../Shared/Rating/RatingSystem";
 
 interface IListOperationProps {
   selected: GQL.SceneMarkerDataFragment[];
   onClose: (applied: boolean) => void;
 }
 
-const scenemarkerFields = ["title"];
+const scenemarkerFields = ["title", "rating100"];
 
 export const EditSceneMarkersDialog: React.FC<IListOperationProps> = (
   props: IListOperationProps
@@ -148,6 +149,16 @@ export const EditSceneMarkersDialog: React.FC<IListOperationProps> = (
               value={updateInput.title}
               valueChanged={(newValue) => setUpdateField({ title: newValue })}
               unsetDisabled={unsetDisabled}
+            />
+          </BulkUpdateFormGroup>
+
+          <BulkUpdateFormGroup name="rating">
+            <RatingSystem
+              value={updateInput.rating100}
+              onSetRating={(value) =>
+                setUpdateField({ rating100: value ?? undefined })
+              }
+              disabled={isUpdating}
             />
           </BulkUpdateFormGroup>
 

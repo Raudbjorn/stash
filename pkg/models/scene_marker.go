@@ -13,6 +13,8 @@ type SceneMarkerFilterType struct {
 	Scenes *MultiCriterionInput `json:"scenes"`
 	// Filter by duration (in seconds)
 	Duration *FloatCriterionInput `json:"duration"`
+	// Filter by rating expressed as 1-100
+	Rating100 *IntCriterionInput `json:"rating100"`
 	// Filter by created at
 	CreatedAt *TimestampCriterionInput `json:"created_at"`
 	// Filter by updated at

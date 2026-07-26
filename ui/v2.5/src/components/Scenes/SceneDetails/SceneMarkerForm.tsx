@@ -20,6 +20,7 @@ import isEqual from "lodash-es/isEqual";
 import { formikUtils } from "src/utils/form";
 import { yupFormikValidate } from "src/utils/yup";
 import { Tag, TagSelect } from "src/components/Tags/TagSelect";
+import { RatingSystem } from "src/components/Shared/Rating/RatingSystem";
 
 interface ISceneMarkerForm {
   sceneID: string;
@@ -61,6 +62,7 @@ export const SceneMarkerForm: React.FC<ISceneMarkerForm> = ({
       ),
     primary_tag_id: yup.string().required(),
     tag_ids: yup.array(yup.string().required()).defined(),
+    rating100: yup.number().nullable().defined(),
   });
 
   // useMemo to only run getPlayerPosition when the input marker actually changes
@@ -85,6 +87,7 @@ export const SceneMarkerForm: React.FC<ISceneMarkerForm> = ({
           end_seconds: endSeconds,
           primary_tag_id: "",
           tag_ids: [],
+          rating100: null,
         };
       }
     }
@@ -95,6 +98,7 @@ export const SceneMarkerForm: React.FC<ISceneMarkerForm> = ({
       end_seconds: marker?.end_seconds ?? null,
       primary_tag_id: marker?.primary_tag.id ?? "",
       tag_ids: marker?.tags.map((tag) => tag.id) ?? [],
+      rating100: marker?.rating100 ?? null,
     };
   }, [marker]);
 
@@ -276,6 +280,18 @@ export const SceneMarkerForm: React.FC<ISceneMarkerForm> = ({
     return renderField("end_seconds", title, control);
   }
 
+  function renderRatingField() {
+    const title = intl.formatMessage({ id: "rating" });
+    const control = (
+      <RatingSystem
+        value={formik.values.rating100}
+        onSetRating={(value) => formik.setFieldValue("rating100", value)}
+      />
+    );
+
+    return renderField("rating100", title, control);
+  }
+
   function renderTagsField() {
     const title = intl.formatMessage({ id: "tags" });
     const control = (
@@ -297,6 +313,7 @@ export const SceneMarkerForm: React.FC<ISceneMarkerForm> = ({
         {renderPrimaryTagField()}
         {renderTimeField()}
         {renderEndTimeField()}
+        {renderRatingField()}
         {renderTagsField()}
       </div>
       <div className="buttons-container px-3">

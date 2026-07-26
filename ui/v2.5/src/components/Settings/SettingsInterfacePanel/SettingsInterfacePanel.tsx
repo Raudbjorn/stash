@@ -15,12 +15,16 @@ import {
 } from "../Inputs";
 import { useSettings } from "../context";
 import TextUtils from "src/utils/text";
-import * as GQL from "src/core/generated-graphql";
 import {
   imageLightboxDisplayModeIntlMap,
   imageLightboxScrollModeIntlMap,
+  ImageLightboxDisplayMode,
+  ImageLightboxScrollMode,
 } from "src/core/enums";
-import { useInterfaceLocalForage } from "src/hooks/LocalForage";
+import {
+  useInterfaceLocalForage,
+  ILightboxConfig,
+} from "src/hooks/LocalForage";
 import {
   ConnectionState,
   connectionStateLabel,
@@ -97,7 +101,7 @@ export const SettingsInterfacePanel: React.FC = PatchComponent(
 
     const [, setInterfaceLocalForage] = useInterfaceLocalForage();
 
-    function saveLightboxSettings(v: Partial<GQL.ConfigImageLightboxInput>) {
+    function saveLightboxSettings(v: Partial<ILightboxConfig>) {
       // save in local forage as well for consistency
       setInterfaceLocalForage((prev) => ({
         ...prev,
@@ -107,9 +111,9 @@ export const SettingsInterfacePanel: React.FC = PatchComponent(
         },
       }));
 
-      saveInterface({
+      saveUI({
         imageLightbox: {
-          ...iface.imageLightbox,
+          ...ui.imageLightbox,
           ...v,
         },
       });
@@ -442,7 +446,7 @@ export const SettingsInterfacePanel: React.FC = PatchComponent(
           <NumberSetting
             headingID="config.ui.slideshow_delay.heading"
             subHeadingID="config.ui.slideshow_delay.description"
-            value={iface.imageLightbox?.slideshowDelay ?? undefined}
+            value={ui.imageLightbox?.slideshowDelay ?? undefined}
             onChange={(v) => saveLightboxSettings({ slideshowDelay: v })}
           />
           <BooleanSetting
@@ -498,6 +502,13 @@ export const SettingsInterfacePanel: React.FC = PatchComponent(
             subHeadingID="config.ui.show_tag_card_on_hover.description"
             checked={ui.showTagCardOnHover ?? true}
             onChange={(v) => saveUI({ showTagCardOnHover: v })}
+          />
+          <BooleanSetting
+            id="sort-favorited-tags-first"
+            headingID="config.ui.tag_panel.options.sort_favorited_tags_first.heading"
+            subHeadingID="config.ui.tag_panel.options.sort_favorited_tags_first.description"
+            checked={ui.sortFavoritedTagsFirst ?? undefined}
+            onChange={(v) => saveUI({ sortFavoritedTagsFirst: v })}
           />
           <BooleanSetting
             id="show-child-tagged-content"
@@ -556,7 +567,7 @@ export const SettingsInterfacePanel: React.FC = PatchComponent(
           <NumberSetting
             headingID="config.ui.slideshow_delay.heading"
             subHeadingID="config.ui.slideshow_delay.description"
-            value={iface.imageLightbox?.slideshowDelay ?? undefined}
+            value={ui.imageLightbox?.slideshowDelay ?? undefined}
             onChange={(v) => saveLightboxSettings({ slideshowDelay: v })}
           />
 
@@ -572,12 +583,11 @@ export const SettingsInterfacePanel: React.FC = PatchComponent(
             id="lightbox_display_mode"
             headingID="dialogs.lightbox.display_mode.label"
             value={
-              iface.imageLightbox?.displayMode ??
-              GQL.ImageLightboxDisplayMode.FitXy
+              ui.imageLightbox?.displayMode ?? ImageLightboxDisplayMode.FitXy
             }
             onChange={(v) =>
               saveLightboxSettings({
-                displayMode: v as GQL.ImageLightboxDisplayMode,
+                displayMode: v as ImageLightboxDisplayMode,
               })
             }
           >
@@ -594,14 +604,14 @@ export const SettingsInterfacePanel: React.FC = PatchComponent(
             id="lightbox_scale_up"
             headingID="dialogs.lightbox.scale_up.label"
             subHeadingID="dialogs.lightbox.scale_up.description"
-            checked={iface.imageLightbox?.scaleUp ?? false}
+            checked={ui.imageLightbox?.scaleUp ?? false}
             onChange={(v) => saveLightboxSettings({ scaleUp: v })}
           />
 
           <BooleanSetting
             id="lightbox_reset_zoom_on_nav"
             headingID="dialogs.lightbox.reset_zoom_on_nav"
-            checked={iface.imageLightbox?.resetZoomOnNav ?? false}
+            checked={ui.imageLightbox?.resetZoomOnNav ?? false}
             onChange={(v) => saveLightboxSettings({ resetZoomOnNav: v })}
           />
 
@@ -609,13 +619,10 @@ export const SettingsInterfacePanel: React.FC = PatchComponent(
             id="lightbox_scroll_mode"
             headingID="dialogs.lightbox.scroll_mode.label"
             subHeadingID="dialogs.lightbox.scroll_mode.description"
-            value={
-              iface.imageLightbox?.scrollMode ??
-              GQL.ImageLightboxScrollMode.Zoom
-            }
+            value={ui.imageLightbox?.scrollMode ?? ImageLightboxScrollMode.Zoom}
             onChange={(v) =>
               saveLightboxSettings({
-                scrollMode: v as GQL.ImageLightboxScrollMode,
+                scrollMode: v as ImageLightboxScrollMode,
               })
             }
           >
@@ -631,7 +638,7 @@ export const SettingsInterfacePanel: React.FC = PatchComponent(
           <NumberSetting
             headingID="config.ui.scroll_attempts_before_change.heading"
             subHeadingID="config.ui.scroll_attempts_before_change.description"
-            value={iface.imageLightbox?.scrollAttemptsBeforeChange ?? 0}
+            value={ui.imageLightbox?.scrollAttemptsBeforeChange ?? 0}
             onChange={(v) =>
               saveLightboxSettings({ scrollAttemptsBeforeChange: v })
             }
@@ -640,7 +647,7 @@ export const SettingsInterfacePanel: React.FC = PatchComponent(
           <BooleanSetting
             id="lightbox_disable_animation"
             headingID="dialogs.lightbox.disable_animation"
-            checked={iface.imageLightbox?.disableAnimation ?? false}
+            checked={ui.imageLightbox?.disableAnimation ?? false}
             onChange={(v) => saveLightboxSettings({ disableAnimation: v })}
           />
         </SettingSection>

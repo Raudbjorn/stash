@@ -12,6 +12,7 @@ export const MediaSortByOptions = [
   "path",
   "rating",
   "file_mod_time",
+  "file_birth_time",
   "tag_count",
   "performer_count",
   "random",

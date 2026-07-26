@@ -294,11 +294,22 @@ func (s *Scanner) handleFolderRename(ctx context.Context, file ScannedFile) (*mo
 func (s *Scanner) onExistingFolder(ctx context.Context, f ScannedFile, existing *models.Folder) (*models.Folder, bool, error) {
 	update := false
 
-	// update if mod time is changed
+	// update if mod time changed
 	entryModTime := f.ModTime
-	if !entryModTime.Equal(existing.ModTime) {
+	updated := !entryModTime.Equal(existing.ModTime)
+	if updated {
 		existing.Path = f.Path
 		existing.ModTime = entryModTime
+		existing.BirthTime = f.BirthTime
+		update = true
+	}
+
+	// backfill birth_time for folders created before migration 93.
+	// Guarded so this fires once when missing rather than on every rescan.
+	// This folds into the existing folder-update write (folders are far fewer
+	// than files, and unchanged folders are skipped by the differential scan).
+	if existing.BirthTime == nil && f.BirthTime != nil {
+		existing.BirthTime = f.BirthTime
 		update = true
 	}
 
@@ -805,16 +816,27 @@ func (s *Scanner) setMissingFingerprints(ctx context.Context, f ScannedFile, exi
 }
 
 // returns a file only if it was updated
+// hasFileChanged reports whether a scanned file differs from its existing record
+// in a way that warrants a rescan: a changed mod time, a changed basename
+// (#6326), or a same-path replacement with a different size.
+func hasFileChanged(f ScannedFile, base *models.BaseFile) bool {
+	return !f.ModTime.Equal(base.ModTime) || base.Basename != f.Basename || base.Size != f.Size
+}
+
 func (s *Scanner) onExistingFile(ctx context.Context, f ScannedFile, existing models.File) (*ScanFileResult, error) {
 	base := existing.Base()
 	path := base.Path
 
 	fileModTime := f.ModTime
-	// #6326 - also force a rescan if the basename changed
-	updated := !fileModTime.Equal(base.ModTime) || base.Basename != f.Basename
+	updated := hasFileChanged(f, base)
 	forceRescan := s.Rescan
 
 	if !updated && !forceRescan {
+		// Intentionally no birth_time backfill here: writing per unchanged file
+		// would turn the zero-write incremental-scan fast path into one
+		// transaction per file on the first scan after the migration-93 upgrade,
+		// defeating the large-library differential-scan optimization. Existing
+		// files' birth_time is populated on a forced Rescan (handled below).
 		return s.onUnchangedFile(ctx, f, existing)
 	}
 
@@ -829,6 +851,7 @@ func (s *Scanner) onExistingFile(ctx context.Context, f ScannedFile, existing mo
 	// #6326 - update basename in case it changed
 	base.Basename = f.Basename
 	base.ModTime = fileModTime
+	base.BirthTime = f.BirthTime
 	base.Size = f.Size
 	base.UpdatedAt = time.Now()
 

@@ -2,6 +2,7 @@ import { IntlShape } from "react-intl";
 import { ITypename } from "src/utils/data";
 import { ImageWallOptions } from "src/utils/imageWall";
 import { RatingSystemOptions } from "src/utils/rating";
+import { ImageLightboxDisplayMode, ImageLightboxScrollMode } from "./enums";
 import {
   FilterMode,
   SavedFilterDataFragment,
@@ -40,6 +41,10 @@ export type FrontPageContent = ISavedFilterRow | ICustomFilter;
 export const defaultMaxOptionsShown = 200;
 export const defaultPreviewVolume = 25;
 
+// determines how existing list values are combined with scraped list values
+// in the scrape dialogs
+export type ScrapeListMergeMode = "merge" | "overwrite";
+
 export interface IUIConfig {
   // unknown to prevent direct access - use getFrontPageContent
   frontPageContent?: unknown;
@@ -48,6 +53,7 @@ export interface IUIConfig {
   showChildStudioContent?: boolean;
   showLinksOnPerformerCard?: boolean;
   showTagCardOnHover?: boolean;
+  sortFavoritedTagsFirst?: boolean;
 
   showStudioText?: boolean;
 
@@ -75,6 +81,16 @@ export interface IUIConfig {
 
   // if true the slideshow autostarts when opening a gallery's lightbox from the galleries page
   autostartGallerySlideshow?: boolean;
+
+  imageLightbox?: {
+    slideshowDelay?: number;
+    displayMode?: ImageLightboxDisplayMode;
+    scaleUp?: boolean;
+    resetZoomOnNav?: boolean;
+    scrollMode?: ImageLightboxScrollMode;
+    scrollAttemptsBeforeChange?: number;
+    disableAnimation?: boolean;
+  };
 
   // if true the fullscreen mobile media auto-rotate option will be disabled
   disableMobileMediaAutoRotateEnabled?: boolean;
@@ -108,6 +124,10 @@ export interface IUIConfig {
   advancedMode?: boolean;
 
   taskDefaults?: Record<string, object>;
+
+  // merge modes for list fields in the scrape dialogs,
+  // keyed by {object_type}.{field} - see #1599
+  scrapeDialogMergeModes?: Record<string, ScrapeListMergeMode>;
 
   // if true the auto tag confirmation warning is skipped
   disableAutoTagWarning?: boolean;

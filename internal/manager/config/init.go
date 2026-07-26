@@ -94,6 +94,12 @@ func Initialize() (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		// Migrate legacy server-side image_lightbox.* config into the client UI
+		// config (ui.imageLightbox). Idempotent: no-ops once ui.imageLightbox
+		// exists. Run at startup (not from a DB migration) so it applies
+		// regardless of the DB's current schema version.
+		cfg.MigrateImageLightboxConfig()
 	}
 
 	if err := cfg.initialisePublicWhitelist(); err != nil {

@@ -37,6 +37,7 @@ type sceneMarkerRow struct {
 	CreatedAt    Timestamp  `db:"created_at"`
 	UpdatedAt    Timestamp  `db:"updated_at"`
 	EndSeconds   null.Float `db:"end_seconds"`
+	Rating100    null.Int   `db:"rating100"`
 }
 
 func (r *sceneMarkerRow) fromSceneMarker(o models.SceneMarker) {
@@ -45,6 +46,9 @@ func (r *sceneMarkerRow) fromSceneMarker(o models.SceneMarker) {
 	r.Seconds = o.Seconds
 	if o.EndSeconds != nil {
 		r.EndSeconds = null.FloatFrom(*o.EndSeconds)
+	}
+	if o.Rating100 != nil {
+		r.Rating100 = null.IntFrom(int64(*o.Rating100))
 	}
 	r.PrimaryTagID = o.PrimaryTagID
 	r.SceneID = o.SceneID
@@ -58,6 +62,7 @@ func (r *sceneMarkerRow) resolve() *models.SceneMarker {
 		Title:        r.Title,
 		Seconds:      r.Seconds,
 		EndSeconds:   r.EndSeconds.Ptr(),
+		Rating100:    nullIntPtr(r.Rating100),
 		PrimaryTagID: r.PrimaryTagID,
 		SceneID:      r.SceneID,
 		CreatedAt:    r.CreatedAt.Timestamp,
@@ -80,6 +85,7 @@ func (r *sceneMarkerRowRecord) fromPartial(o models.SceneMarkerPartial) {
 	}
 	r.setFloat64("seconds", o.Seconds)
 	r.setNullFloat64("end_seconds", o.EndSeconds)
+	r.setNullInt("rating100", o.Rating100)
 	r.setInt("primary_tag_id", o.PrimaryTagID)
 	r.setInt("scene_id", o.SceneID)
 	r.setTimestamp("created_at", o.CreatedAt)
@@ -378,6 +384,8 @@ var sceneMarkerSortOptions = sortOptions{
 	"seconds",
 	"updated_at",
 	"duration",
+	"rating",
+	"rating100",
 }
 
 func (qb *SceneMarkerStore) setSceneMarkerSort(query *queryBuilder, findFilter *models.FindFilterType) error {
@@ -397,6 +405,9 @@ func (qb *SceneMarkerStore) setSceneMarkerSort(query *queryBuilder, findFilter *
 	case "title":
 		query.joinSort(tagTable, "", "scene_markers.primary_tag_id = tags.id")
 		query.sortAndPagination += " ORDER BY COALESCE(NULLIF(scene_markers.title,''), tags.name) COLLATE NATURAL_CI " + direction
+	case "rating":
+		sort = "rating100"
+		query.sortAndPagination += getSort(sort, direction, sceneMarkerTable)
 	case "duration":
 		sort = "(scene_markers.end_seconds - scene_markers.seconds)"
 		query.sortAndPagination += getSort(sort, direction, sceneMarkerTable)

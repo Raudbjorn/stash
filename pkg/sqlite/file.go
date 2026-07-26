@@ -35,6 +35,7 @@ type basicFileRow struct {
 	ParentFolderID models.FolderID `db:"parent_folder_id"`
 	Size           int64           `db:"size"`
 	ModTime        Timestamp       `db:"mod_time"`
+	BirthTime      NullTimestamp   `db:"birth_time"`
 	CreatedAt      Timestamp       `db:"created_at"`
 	UpdatedAt      Timestamp       `db:"updated_at"`
 }
@@ -46,6 +47,7 @@ func (r *basicFileRow) fromBasicFile(o models.BaseFile) {
 	r.ParentFolderID = o.ParentFolderID
 	r.Size = o.Size
 	r.ModTime = Timestamp{Timestamp: o.ModTime}
+	r.BirthTime = NullTimestampFromTimePtr(o.BirthTime)
 	r.CreatedAt = Timestamp{Timestamp: o.CreatedAt}
 	r.UpdatedAt = Timestamp{Timestamp: o.UpdatedAt}
 }
@@ -172,6 +174,7 @@ type fileQueryRow struct {
 	ParentFolderID null.Int      `db:"parent_folder_id"`
 	Size           null.Int      `db:"size"`
 	ModTime        NullTimestamp `db:"mod_time"`
+	BirthTime      NullTimestamp `db:"birth_time"`
 	CreatedAt      NullTimestamp `db:"file_created_at"`
 	UpdatedAt      NullTimestamp `db:"file_updated_at"`
 
@@ -191,6 +194,7 @@ func (r *fileQueryRow) resolve() models.File {
 		DirEntry: models.DirEntry{
 			ZipFileID: nullIntFileIDPtr(r.ZipFileID),
 			ModTime:   r.ModTime.Timestamp,
+			BirthTime: r.BirthTime.TimePtr(),
 		},
 		Path:           filepath.Join(r.FolderPath.String, r.Basename.String),
 		ParentFolderID: models.FolderID(r.ParentFolderID.Int64),
@@ -492,6 +496,7 @@ func (qb *FileStore) selectDataset() *goqu.SelectDataset {
 		table.Col("parent_folder_id"),
 		table.Col("size"),
 		table.Col("mod_time"),
+		table.Col("birth_time"),
 		table.Col("created_at").As("file_created_at"),
 		table.Col("updated_at").As("file_updated_at"),
 		folderTable.Col("path").As("parent_folder_path"),

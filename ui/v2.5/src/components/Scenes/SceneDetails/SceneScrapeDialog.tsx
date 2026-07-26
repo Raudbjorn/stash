@@ -8,14 +8,15 @@ import {
 } from "src/components/Shared/ScrapeDialog/ScrapeDialogRow";
 import { ScrapeDialog } from "src/components/Shared/ScrapeDialog/ScrapeDialog";
 import { useIntl } from "react-intl";
-import { uniq } from "lodash-es";
 import { Performer } from "src/components/Performers/PerformerSelect";
-import { sortStoredIdObjects } from "src/utils/data";
 import {
-  ObjectListScrapeResult,
   ObjectScrapeResult,
   ScrapeResult,
 } from "src/components/Shared/ScrapeDialog/scrapeResult";
+import {
+  useMergeModeObjectList,
+  useMergeModeStringList,
+} from "src/components/Shared/ScrapeDialog/mergeMode";
 import {
   ScrapedGroupsRow,
   ScrapedPerformersRow,
@@ -60,14 +61,12 @@ export const SceneScrapeDialog: React.FC<ISceneScrapeDialogProps> = ({
     new ScrapeResult<string>(scene.code, scraped.code)
   );
 
-  const [urls, setURLs] = useState<ScrapeResult<string[]>>(
-    new ScrapeResult<string[]>(
-      scene.urls,
-      scraped.urls
-        ? uniq((scene.urls ?? []).concat(scraped.urls ?? []))
-        : undefined
-    )
-  );
+  const {
+    result: urls,
+    setResult: setURLs,
+    mergeMode: urlsMergeMode,
+    onSetMergeMode: onSetURLsMergeMode,
+  } = useMergeModeStringList("scene.urls", scene.urls, scraped.urls);
 
   const [date, setDate] = useState<ScrapeResult<string>>(
     new ScrapeResult<string>(scene.date, scraped.date)
@@ -97,35 +96,35 @@ export const SceneScrapeDialog: React.FC<ISceneScrapeDialogProps> = ({
     )
   );
 
-  const [performers, setPerformers] = useState<
-    ObjectListScrapeResult<GQL.ScrapedPerformer>
-  >(
-    new ObjectListScrapeResult<GQL.ScrapedPerformer>(
-      sortStoredIdObjects(
-        scenePerformers.map((p) => ({
-          stored_id: p.id,
-          name: p.name,
-        }))
-      ),
-      sortStoredIdObjects(scraped.performers ?? undefined)
-    )
+  const {
+    result: performers,
+    setResult: setPerformers,
+    mergeMode: performersMergeMode,
+    onSetMergeMode: onSetPerformersMergeMode,
+  } = useMergeModeObjectList<GQL.ScrapedPerformer>(
+    "scene.performers",
+    scenePerformers.map((p) => ({
+      stored_id: p.id,
+      name: p.name,
+    })),
+    scraped.performers
   );
   const [newPerformers, setNewPerformers] = useState<GQL.ScrapedPerformer[]>(
     scraped.performers?.filter((t) => !t.stored_id) ?? []
   );
 
-  const [groups, setGroups] = useState<
-    ObjectListScrapeResult<GQL.ScrapedGroup>
-  >(
-    new ObjectListScrapeResult<GQL.ScrapedGroup>(
-      sortStoredIdObjects(
-        sceneGroups.map((p) => ({
-          stored_id: p.id,
-          name: p.name,
-        }))
-      ),
-      sortStoredIdObjects(scraped.groups ?? undefined)
-    )
+  const {
+    result: groups,
+    setResult: setGroups,
+    mergeMode: groupsMergeMode,
+    onSetMergeMode: onSetGroupsMergeMode,
+  } = useMergeModeObjectList<GQL.ScrapedGroup>(
+    "scene.groups",
+    sceneGroups.map((p) => ({
+      stored_id: p.id,
+      name: p.name,
+    })),
+    scraped.groups
   );
   const [newGroups, setNewGroups] = useState<GQL.ScrapedGroup[]>(
     scraped.groups?.filter((t) => !t.stored_id) ?? []
@@ -134,7 +133,7 @@ export const SceneScrapeDialog: React.FC<ISceneScrapeDialogProps> = ({
   const { tags, newTags, scrapedTagsRow, linkDialog } = useScrapedTags(
     sceneTags,
     scraped.tags,
-    endpoint
+    { endpoint, mergeModeField: "scene.tags" }
   );
 
   const [details, setDetails] = useState<ScrapeResult<string>>(
@@ -234,6 +233,8 @@ export const SceneScrapeDialog: React.FC<ISceneScrapeDialogProps> = ({
           title={intl.formatMessage({ id: "urls" })}
           result={urls}
           onChange={(value) => setURLs(value)}
+          mergeMode={urlsMergeMode}
+          onSetMergeMode={onSetURLsMergeMode}
         />
         <ScrapedInputGroupRow
           field="date"
@@ -264,6 +265,8 @@ export const SceneScrapeDialog: React.FC<ISceneScrapeDialogProps> = ({
           newObjects={newPerformers}
           onCreateNew={createNewPerformer}
           ageFromDate={date.useNewValue ? date.newValue : date.originalValue}
+          mergeMode={performersMergeMode}
+          onSetMergeMode={onSetPerformersMergeMode}
         />
         <ScrapedGroupsRow
           field="groups"
@@ -272,6 +275,8 @@ export const SceneScrapeDialog: React.FC<ISceneScrapeDialogProps> = ({
           onChange={(value) => setGroups(value)}
           newObjects={newGroups}
           onCreateNew={createNewGroup}
+          mergeMode={groupsMergeMode}
+          onSetMergeMode={onSetGroupsMergeMode}
         />
         {scrapedTagsRow}
         <ScrapedTextAreaRow

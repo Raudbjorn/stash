@@ -29,7 +29,10 @@ import { ParentFolderCriterionOption } from "./criteria/folder";
 
 const defaultSortBy = "path";
 
-const sortByOptions = ["date", ...MediaSortByOptions]
+const sortByOptions = [
+  "date",
+  ...MediaSortByOptions.filter((o) => o !== "file_birth_time"),
+]
   .map(ListFilterOptions.createSortBy)
   .concat([
     {

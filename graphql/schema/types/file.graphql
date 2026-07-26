@@ -20,6 +20,7 @@ type Folder {
   sub_folders: [Folder!]!
 
   mod_time: Time!
+  birth_time: Time
 
   created_at: Time!
   updated_at: Time!
@@ -37,6 +38,7 @@ interface BaseFile {
   zip_file: BasicFile
 
   mod_time: Time!
+  birth_time: Time
   size: Int64!
 
   fingerprint(type: String!): String
@@ -58,6 +60,7 @@ type BasicFile implements BaseFile {
   zip_file: BasicFile
 
   mod_time: Time!
+  birth_time: Time
   size: Int64!
 
   fingerprint(type: String!): String
@@ -79,6 +82,7 @@ type VideoFile implements BaseFile {
   zip_file: BasicFile
 
   mod_time: Time!
+  birth_time: Time
   size: Int64!
 
   fingerprint(type: String!): String
@@ -111,6 +115,7 @@ type ImageFile implements BaseFile {
   zip_file: BasicFile
 
   mod_time: Time!
+  birth_time: Time
   size: Int64!
 
   fingerprint(type: String!): String
@@ -140,6 +145,7 @@ type GalleryFile implements BaseFile {
   zip_file: BasicFile
 
   mod_time: Time!
+  birth_time: Time
   size: Int64!
 
   fingerprint(type: String!): String

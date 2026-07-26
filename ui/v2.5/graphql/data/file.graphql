@@ -9,6 +9,7 @@ fragment VideoFileData on VideoFile {
   path
   size
   mod_time
+  birth_time
   duration
   video_codec
   audio_codec
@@ -27,6 +28,7 @@ fragment ImageFileData on ImageFile {
   path
   size
   mod_time
+  birth_time
   width
   height
   fingerprints {
@@ -52,6 +54,7 @@ fragment VisualFileData on VisualFile {
     path
     size
     mod_time
+    birth_time
     fingerprints {
       type
       value
@@ -62,6 +65,7 @@ fragment VisualFileData on VisualFile {
     path
     size
     mod_time
+    birth_time
     width
     height
     fingerprints {
@@ -74,6 +78,7 @@ fragment VisualFileData on VisualFile {
     path
     size
     mod_time
+    birth_time
     duration
     video_codec
     audio_codec

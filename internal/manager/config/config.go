@@ -298,19 +298,7 @@ const (
 	WallPlayback        = "wall_playback"
 	defaultWallPlayback = "video"
 
-	// Image lightbox options
-	legacyImageLightboxSlideshowDelay       = "slideshow_delay"
-	ImageLightboxSlideshowDelay             = "image_lightbox.slideshow_delay"
-	ImageLightboxDisplayModeKey             = "image_lightbox.display_mode"
-	ImageLightboxScaleUp                    = "image_lightbox.scale_up"
-	ImageLightboxResetZoomOnNav             = "image_lightbox.reset_zoom_on_nav"
-	ImageLightboxScrollModeKey              = "image_lightbox.scroll_mode"
-	ImageLightboxScrollAttemptsBeforeChange = "image_lightbox.scroll_attempts_before_change"
-	ImageLightboxDisableAnimation           = "image_lightbox.disable_animation"
-
 	UI = "ui"
-
-	defaultImageLightboxSlideshowDelay = 5
 
 	DisableDropdownCreatePerformer = "disable_dropdown_create.performer"
 	DisableDropdownCreateStudio    = "disable_dropdown_create.studio"
@@ -669,18 +657,6 @@ func (i *Config) forKey(key string) *koanf.Koanf {
 	}
 
 	return v
-}
-
-// viper returns the viper instance that has the key set. Returns nil
-// if no instance has the key. Assumes read lock held.
-func (i *Config) with(key string) *koanf.Koanf {
-	v := i.forKey(key)
-
-	if v.Exists(key) {
-		return v
-	}
-
-	return nil
 }
 
 func (i *Config) HasOverride(key string) bool {
@@ -1475,61 +1451,6 @@ func (i *Config) GetShowStudioAsText() bool {
 	return i.getBool(ShowStudioAsText)
 }
 
-func (i *Config) getSlideshowDelay() int {
-	// assume have lock
-
-	ret := defaultImageLightboxSlideshowDelay
-	v := i.forKey(ImageLightboxSlideshowDelay)
-	if v.Exists(ImageLightboxSlideshowDelay) {
-		ret = v.Int(ImageLightboxSlideshowDelay)
-	} else {
-		// fallback to old location
-		v := i.forKey(legacyImageLightboxSlideshowDelay)
-		if v.Exists(legacyImageLightboxSlideshowDelay) {
-			ret = v.Int(legacyImageLightboxSlideshowDelay)
-		}
-	}
-
-	return ret
-}
-
-func (i *Config) GetImageLightboxOptions() ConfigImageLightboxResult {
-	i.RLock()
-	defer i.RUnlock()
-
-	delay := i.getSlideshowDelay()
-
-	ret := ConfigImageLightboxResult{
-		SlideshowDelay: &delay,
-	}
-
-	if v := i.with(ImageLightboxDisplayModeKey); v != nil {
-		mode := ImageLightboxDisplayMode(v.String(ImageLightboxDisplayModeKey))
-		ret.DisplayMode = &mode
-	}
-	if v := i.with(ImageLightboxScaleUp); v != nil {
-		value := v.Bool(ImageLightboxScaleUp)
-		ret.ScaleUp = &value
-	}
-	if v := i.with(ImageLightboxResetZoomOnNav); v != nil {
-		value := v.Bool(ImageLightboxResetZoomOnNav)
-		ret.ResetZoomOnNav = &value
-	}
-	if v := i.with(ImageLightboxScrollModeKey); v != nil {
-		mode := ImageLightboxScrollMode(v.String(ImageLightboxScrollModeKey))
-		ret.ScrollMode = &mode
-	}
-	if v := i.with(ImageLightboxScrollAttemptsBeforeChange); v != nil {
-		ret.ScrollAttemptsBeforeChange = v.Int(ImageLightboxScrollAttemptsBeforeChange)
-	}
-	if v := i.with(ImageLightboxDisableAnimation); v != nil {
-		value := v.Bool(ImageLightboxDisableAnimation)
-		ret.DisableAnimation = &value
-	}
-
-	return ret
-}
-
 func (i *Config) GetDisableDropdownCreate() *ConfigDisableDropdownCreate {
 	return &ConfigDisableDropdownCreate{
 		Performer: i.getBool(DisableDropdownCreatePerformer),
@@ -2283,4 +2204,65 @@ func (i *Config) SetInitialConfig() error {
 func (i *Config) FinalizeSetup() {
 	i.isNewSystem = false
 	// i.configUpdates <- 0
+}
+
+func (i *Config) MigrateImageLightboxConfig() {
+	uiConfig := i.GetUIConfiguration()
+	if uiConfig == nil {
+		uiConfig = make(map[string]interface{})
+	}
+
+	existing, hasExisting := uiConfig["imageLightbox"]
+	if hasExisting && existing != nil {
+		return
+	}
+
+	newConfig := make(map[string]interface{})
+	migrated := false
+
+	if v := i.getInt("image_lightbox.slideshow_delay"); v != 0 {
+		newConfig["slideshowDelay"] = v
+		migrated = true
+	} else if v := i.getInt("slideshow_delay"); v != 0 {
+		newConfig["slideshowDelay"] = v
+		migrated = true
+	}
+
+	if v := i.getString("image_lightbox.display_mode"); v != "" {
+		newConfig["displayMode"] = v
+		migrated = true
+	}
+
+	if i.getBool("image_lightbox.scale_up") {
+		newConfig["scaleUp"] = true
+		migrated = true
+	}
+
+	if i.getBool("image_lightbox.reset_zoom_on_nav") {
+		newConfig["resetZoomOnNav"] = true
+		migrated = true
+	}
+
+	if v := i.getString("image_lightbox.scroll_mode"); v != "" {
+		newConfig["scrollMode"] = v
+		migrated = true
+	}
+
+	if v := i.getInt("image_lightbox.scroll_attempts_before_change"); v != 0 {
+		newConfig["scrollAttemptsBeforeChange"] = v
+		migrated = true
+	}
+
+	if i.getBool("image_lightbox.disable_animation") {
+		newConfig["disableAnimation"] = true
+		migrated = true
+	}
+
+	if migrated {
+		uiConfig["imageLightbox"] = newConfig
+		i.SetUIConfiguration(uiConfig)
+		if err := i.Write(); err != nil {
+			logger.Errorf("error writing config after migrating image lightbox settings: %v", err)
+		}
+	}
 }
