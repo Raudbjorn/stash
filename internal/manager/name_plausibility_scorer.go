@@ -14,6 +14,12 @@ import (
 // nonstandard install; the rest are the common install locations across
 // this fork's actual targets (Alpine's own "onnxruntime" apk package, and a
 // system-wide glibc install on a native Linux dev machine).
+//
+// This is a distinct, production-facing knob from the test-only
+// ONNXRUNTIME_LIB_PATH read by embedding_scorer_test.go, which opts that
+// integration test into running locally/in CI environments that happen to
+// have the library installed somewhere nonstandard - the two are not meant
+// to be the same variable.
 var onnxRuntimeLibraryPaths = []string{
 	os.Getenv("STASH_ONNXRUNTIME_LIB_PATH"),
 	"/usr/lib/libonnxruntime.so",

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"strings"
 
 	"github.com/rwcarlsen/goexif/exif"
 )
@@ -26,7 +25,14 @@ var exifThumbnailTags = map[string]struct{}{
 func ExtractExifData(r io.Reader) (map[string]interface{}, error) {
 	x, err := exif.Decode(r)
 	if err != nil {
-		if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "failed to find exif") {
+		// The pinned goexif version (v0.0.0-20190401172101-9e8deecbddbd) has
+		// no exported sentinel for "no EXIF segment present" - it only
+		// returns io.EOF (short/empty file) or a plain errors.New with this
+		// exact text (exif/exif.go's readImageStructure). Matched on the
+		// full string, not a substring, to fail loudly (fall through to the
+		// generic error path below) rather than silently if a future
+		// goexif bump changes it - re-check for a real sentinel on upgrade.
+		if errors.Is(err, io.EOF) || err.Error() == "exif: failed to find exif intro marker" {
 			return nil, ErrNoExifData
 		}
 		return nil, err
