@@ -16,6 +16,8 @@ import (
 type PerformerFinder interface {
 	models.PerformerGetter
 	GetImage(ctx context.Context, performerID int) ([]byte, error)
+	// GetImageByIndex returns the Nth image in the ordered collection.
+	GetImageByIndex(ctx context.Context, performerID int, index int) ([]byte, error)
 }
 
 type sfwConfig interface {
@@ -42,12 +44,18 @@ func (rs performerRoutes) Routes() chi.Router {
 func (rs performerRoutes) Image(w http.ResponseWriter, r *http.Request) {
 	performer := r.Context().Value(performerKey).(*models.Performer)
 	defaultParam := r.URL.Query().Get("default")
+	// Index selects an image from the ordered collection; absent/0 == primary
+	index, _ := strconv.Atoi(r.URL.Query().Get("index"))
 
 	var image []byte
 	if defaultParam != "true" {
 		readTxnErr := rs.withReadTxn(r, func(ctx context.Context) error {
 			var err error
-			image, err = rs.performerFinder.GetImage(ctx, performer.ID)
+			if index > 0 {
+				image, err = rs.performerFinder.GetImageByIndex(ctx, performer.ID, index)
+			} else {
+				image, err = rs.performerFinder.GetImage(ctx, performer.ID)
+			}
 			return err
 		})
 		if errors.Is(readTxnErr, context.Canceled) {

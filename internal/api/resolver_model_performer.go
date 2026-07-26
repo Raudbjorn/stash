@@ -157,6 +157,32 @@ func (r *performerResolver) ImagePath(ctx context.Context, obj *models.Performer
 	return &imagePath, nil
 }
 
+// Images resolves the performer's ordered headline image collection (index 0 ==
+// primary, byte-identical to image_path). Detail-page only — list/card views
+// don't select this field — so a plain per-call resolver is fine, no dataloader.
+func (r *performerResolver) Images(ctx context.Context, obj *models.Performer) ([]*PerformerImage, error) {
+	var checksums []string
+	if err := r.withReadTxn(ctx, func(ctx context.Context) error {
+		var err error
+		checksums, err = r.repository.Performer.GetImageChecksums(ctx, obj.ID)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	baseURL, _ := ctx.Value(BaseURLCtxKey).(string)
+	builder := urlbuilders.NewPerformerURLBuilder(baseURL, obj)
+
+	ret := make([]*PerformerImage, len(checksums))
+	for i := range checksums {
+		ret[i] = &PerformerImage{
+			Index: i,
+			URL:   builder.GetPerformerImageURLByIndex(i),
+		}
+	}
+	return ret, nil
+}
+
 func (r *performerResolver) Tags(ctx context.Context, obj *models.Performer) (ret []*models.Tag, err error) {
 	if !obj.TagIDs.Loaded() {
 		if err := r.withReadTxn(ctx, func(ctx context.Context) error {
@@ -185,6 +211,17 @@ func (r *performerResolver) SceneCount(ctx context.Context, obj *models.Performe
 func (r *performerResolver) ImageCount(ctx context.Context, obj *models.Performer) (ret int, err error) {
 	if err := r.withReadTxn(ctx, func(ctx context.Context) error {
 		ret, err = image.CountByPerformerID(ctx, r.repository.Image, obj.ID)
+		return err
+	}); err != nil {
+		return 0, err
+	}
+
+	return ret, nil
+}
+
+func (r *performerResolver) ImageCollectionCount(ctx context.Context, obj *models.Performer) (ret int, err error) {
+	if err := r.withReadTxn(ctx, func(ctx context.Context) error {
+		ret, err = r.repository.Performer.GetImageCount(ctx, obj.ID)
 		return err
 	}); err != nil {
 		return 0, err

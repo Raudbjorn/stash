@@ -37,6 +37,7 @@ var (
 
 	performersAliasesJoinTable  = goqu.T(performersAliasesTable)
 	performersURLsJoinTable     = goqu.T(performerURLsTable)
+	performerImagesJoinTable    = goqu.T(performerImagesTable)
 	performersTagsJoinTable     = goqu.T(performersTagsTable)
 	performersStashIDsJoinTable = goqu.T("performer_stash_ids")
 	performersCustomFieldsTable = goqu.T("performer_custom_fields")
@@ -327,6 +328,15 @@ var (
 			idColumn: performersURLsJoinTable.Col(performerIDColumn),
 		},
 		valueColumn: performersURLsJoinTable.Col(performerURLColumn),
+	}
+
+	// Ordered blob-checksum collection for multi-image performers.
+	performersImagesBlobTableMgr = &orderedValueTable[string]{
+		table: table{
+			table:    performerImagesJoinTable,
+			idColumn: performerImagesJoinTable.Col(performerIDColumn),
+		},
+		valueColumn: performerImagesJoinTable.Col(performerImageBlobColumn),
 	}
 
 	performersTagsTableMgr = &joinTable{

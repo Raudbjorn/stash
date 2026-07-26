@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,6 +21,100 @@ const (
 	twitterURL   = "https://twitter.com"
 	instagramURL = "https://instagram.com"
 )
+
+// processImagesInput decodes an ordered list of image inputs (each a URL or
+// base64 data URL) into raw byte slices for the multi-image collection. Used on
+// create, where every entry is necessarily new.
+func processImagesInput(ctx context.Context, images []string) ([][]byte, error) {
+	if len(images) == 0 {
+		return nil, nil
+	}
+	ret := make([][]byte, 0, len(images))
+	for i, img := range images {
+		data, err := utils.ProcessImageInput(ctx, img)
+		if err != nil {
+			return nil, fmt.Errorf("processing image %d: %w", i, err)
+		}
+		ret = append(ret, data)
+	}
+	return ret, nil
+}
+
+// performerImageItem is one resolved entry of an images-update: either an
+// existing image kept by its current position (keep == true) or freshly decoded
+// bytes for a new image.
+type performerImageItem struct {
+	keep  bool
+	index int
+	data  []byte
+}
+
+// parseOwnPerformerImageURL reports whether img is a URL pointing back at this
+// performer's own image serve route and, if so, the collection index it refers
+// to (the &index query, defaulting to 0). Such entries are existing images
+// being kept/reordered — we resolve them to stored bytes rather than HTTP-
+// fetching our own URL through the reverse proxy mid-transaction.
+func parseOwnPerformerImageURL(img string, performerID int) (int, bool) {
+	u, err := url.Parse(img)
+	if err != nil {
+		return 0, false
+	}
+	if !strings.HasSuffix(u.Path, fmt.Sprintf("/performer/%d/image", performerID)) {
+		return 0, false
+	}
+	index := 0
+	if v := u.Query().Get("index"); v != "" {
+		index, err = strconv.Atoi(v)
+		if err != nil {
+			return 0, false
+		}
+	}
+	return index, true
+}
+
+// parsePerformerImagesUpdate classifies each images-update entry without
+// touching the database: kept own-images become keep-by-index items, everything
+// else (base64 data URLs, external scraped URLs) is decoded/fetched now, outside
+// the write transaction.
+func parsePerformerImagesUpdate(ctx context.Context, performerID int, images []string) ([]performerImageItem, error) {
+	items := make([]performerImageItem, 0, len(images))
+	for i, img := range images {
+		if index, ok := parseOwnPerformerImageURL(img, performerID); ok {
+			items = append(items, performerImageItem{keep: true, index: index})
+			continue
+		}
+		data, err := utils.ProcessImageInput(ctx, img)
+		if err != nil {
+			return nil, fmt.Errorf("processing image %d: %w", i, err)
+		}
+		items = append(items, performerImageItem{data: data})
+	}
+	return items, nil
+}
+
+// resolvePerformerImageItems turns classified items into ordered raw bytes,
+// reading kept images from the store by their (pre-update) position. Must run
+// inside the read/write transaction.
+func (r *mutationResolver) resolvePerformerImageItems(ctx context.Context, performerID int, items []performerImageItem) ([][]byte, error) {
+	qb := r.repository.Performer
+	ret := make([][]byte, 0, len(items))
+	for _, it := range items {
+		if it.keep {
+			data, err := qb.GetImageByIndex(ctx, performerID, it.index)
+			if err != nil {
+				return nil, fmt.Errorf("reading existing image %d: %w", it.index, err)
+			}
+			if len(data) == 0 {
+				// stale reference (image removed concurrently) — skip it
+				continue
+			}
+			ret = append(ret, data)
+			continue
+		}
+		ret = append(ret, it.data)
+	}
+	return ret, nil
+}
 
 // used to refetch performer after hooks run
 func (r *mutationResolver) getPerformer(ctx context.Context, id int) (ret *models.Performer, err error) {
@@ -122,6 +217,17 @@ func (r *mutationResolver) PerformerCreate(ctx context.Context, input models.Per
 		}
 	}
 
+	// Process the ordered multi-image collection. When present it takes
+	// precedence over the singular image field.
+	imagesIncluded := translator.hasField("images")
+	var imagesData [][]byte
+	if imagesIncluded {
+		imagesData, err = processImagesInput(ctx, input.Images)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Start the transaction and save the performer
 	if err := r.withTxn(ctx, func(ctx context.Context) error {
 		qb := r.repository.Performer
@@ -141,8 +247,12 @@ func (r *mutationResolver) PerformerCreate(ctx context.Context, input models.Per
 			return err
 		}
 
-		// update image table
-		if len(imageData) > 0 {
+		// update image table; the collection wins over the singular image
+		if imagesIncluded {
+			if err := qb.UpdateImages(ctx, newPerformer.ID, imagesData); err != nil {
+				return err
+			}
+		} else if len(imageData) > 0 {
 			if err := qb.UpdateImage(ctx, newPerformer.ID, imageData); err != nil {
 				return err
 			}
@@ -378,6 +488,18 @@ func (r *mutationResolver) PerformerUpdate(ctx context.Context, input models.Per
 		}
 	}
 
+	// The ordered multi-image collection takes precedence over image.
+	// Classify entries outside the txn (decode/fetch new images now); kept
+	// own-images are resolved to stored bytes inside the txn below.
+	imagesIncluded := translator.hasField("images")
+	var imageItems []performerImageItem
+	if imagesIncluded {
+		imageItems, err = parsePerformerImagesUpdate(ctx, performerID, input.Images)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Start the transaction and save the performer
 	if err := r.withTxn(ctx, func(ctx context.Context) error {
 		qb := r.repository.Performer
@@ -418,8 +540,16 @@ func (r *mutationResolver) PerformerUpdate(ctx context.Context, input models.Per
 			return err
 		}
 
-		// update image table
-		if imageIncluded {
+		// update image table; the collection wins over the singular image
+		if imagesIncluded {
+			imagesData, err := r.resolvePerformerImageItems(ctx, performerID, imageItems)
+			if err != nil {
+				return err
+			}
+			if err := qb.UpdateImages(ctx, performerID, imagesData); err != nil {
+				return err
+			}
+		} else if imageIncluded {
 			if err := qb.UpdateImage(ctx, performerID, imageData); err != nil {
 				return err
 			}

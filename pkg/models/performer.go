@@ -243,7 +243,10 @@ type PerformerCreateInput struct {
 	Favorite       *bool            `json:"favorite"`
 	TagIds         []string         `json:"tag_ids"`
 	// This should be a URL or a base64 encoded data URL
-	Image         *string        `json:"image"`
+	Image *string `json:"image"`
+	// Ordered headline images (index 0 == primary), each a URL or base64
+	// data URL. Takes precedence over the singular Image field.
+	Images        []string       `json:"images"`
 	StashIds      []StashIDInput `json:"stash_ids"`
 	Rating100     *int           `json:"rating100"`
 	Details       *string        `json:"details"`
@@ -284,7 +287,10 @@ type PerformerUpdateInput struct {
 	Favorite       *bool            `json:"favorite"`
 	TagIds         []string         `json:"tag_ids"`
 	// This should be a URL or a base64 encoded data URL
-	Image         *string        `json:"image"`
+	Image *string `json:"image"`
+	// Ordered headline images (index 0 == primary), each a URL or base64
+	// data URL. Takes precedence over the singular Image field.
+	Images        []string       `json:"images"`
 	StashIds      []StashIDInput `json:"stash_ids"`
 	Rating100     *int           `json:"rating100"`
 	Details       *string        `json:"details"`
