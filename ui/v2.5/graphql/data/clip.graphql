@@ -1,0 +1,47 @@
+fragment SlimClipData on Clip {
+  id
+  title
+  scene_id
+  seconds
+  end_seconds
+  rating100
+  o_counter
+  play_count
+  stream
+  preview
+  tags {
+    id
+    name
+  }
+}
+
+fragment ClipData on Clip {
+  id
+  title
+  scene_id
+  seconds
+  end_seconds
+  rating100
+  o_counter
+  play_count
+  last_played_at
+  stream
+  preview
+  created_at
+  updated_at
+  scene {
+    id
+    title
+    files {
+      path
+      duration
+    }
+    paths {
+      screenshot
+    }
+  }
+  tags {
+    id
+    name
+  }
+}

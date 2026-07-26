@@ -45,6 +45,12 @@ type ScenePaths interface {
 	GetTranscodePath(checksum string) string
 }
 
+type ClipsPaths interface {
+	Paths
+
+	GetClipVideoPath(sceneChecksum string, clipID int) string
+}
+
 type FFMpegConfig interface {
 	GetTranscodeInputArgs() []string
 	GetTranscodeOutputArgs() []string
@@ -56,6 +62,7 @@ type Generator struct {
 	LockManager  *fsutil.ReadLockManager
 	MarkerPaths  MarkerPaths
 	ScenePaths   ScenePaths
+	ClipsPaths   ClipsPaths
 	Overwrite    bool
 }
 

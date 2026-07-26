@@ -2,7 +2,9 @@ package gallery
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 
 	"github.com/stashapp/stash/pkg/models"
 )
@@ -61,6 +63,16 @@ func (s *Service) SetCover(ctx context.Context, g *models.Gallery, coverImageID 
 }
 
 func (s *Service) ResetCover(ctx context.Context, g *models.Gallery) error {
+	if g.HasGeneratedCover {
+		p := s.Paths.Generated.GetGalleryContactSheetPath(ContactSheetHash(g.ID))
+		if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to remove generated cover %s: %w", p, err)
+		}
+		if err := s.Repository.SetHasGeneratedCover(ctx, g.ID, false); err != nil {
+			return fmt.Errorf("failed to clear has_generated_cover: %w", err)
+		}
+	}
+
 	if err := s.Repository.ResetCover(ctx, g.ID); err != nil {
 		return fmt.Errorf("failed to reset cover: %w", err)
 	}

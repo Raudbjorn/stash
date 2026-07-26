@@ -349,9 +349,14 @@ const StashSearchResult: React.FC<IStashSearchResultProps> = ({
       [name]: value,
     });
 
-  async function handleSave() {
-    const excludedFieldList = Object.keys(excludedFields).filter(
-      (f) => excludedFields[f]
+  // handleSave applies the scraped metadata to the scene. By default it honours
+  // the per-field include/exclude toggles; passing an override (e.g. {} for the
+  // one-click "apply all") ignores those toggles. Empty remote fields are never
+  // written over existing values regardless (see resolveField).
+  async function handleSave(overrideExcluded?: Record<string, boolean>) {
+    const effectiveExcluded = overrideExcluded ?? excludedFields;
+    const excludedFieldList = Object.keys(effectiveExcluded).filter(
+      (f) => effectiveExcluded[f]
     );
 
     function resolveField<T>(field: string, stashField: T, remoteField: T) {
@@ -366,7 +371,7 @@ const StashSearchResult: React.FC<IStashSearchResultProps> = ({
     }
 
     let imgData: string | undefined;
-    if (!excludedFields.cover_image && config.setCoverImage) {
+    if (!effectiveExcluded.cover_image && config.setCoverImage) {
       const imgurl = scene.image;
       if (imgurl) {
         const img = await fetch(imgurl, {
@@ -870,6 +875,21 @@ const StashSearchResult: React.FC<IStashSearchResultProps> = ({
           {maybeRenderTagsField()}
 
           <div className="row no-gutters mt-2 align-items-center justify-content-end">
+            <OperationButton
+              className="mr-2"
+              variant="secondary"
+              operation={() => handleSave({})}
+              title={intl.formatMessage({
+                id: "component_tagger.results.apply_all_tooltip",
+                defaultMessage:
+                  "Apply all scraped fields, ignoring the include/exclude toggles",
+              })}
+            >
+              <FormattedMessage
+                id="component_tagger.results.apply_all"
+                defaultMessage="Apply All"
+              />
+            </OperationButton>
             <OperationButton operation={handleSave}>
               <FormattedMessage id="actions.save" />
             </OperationButton>

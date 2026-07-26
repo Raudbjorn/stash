@@ -17,6 +17,7 @@ type Gallery {
   rating100: Int
   organized: Boolean!
   favorite: Boolean!
+  has_generated_cover: Boolean!
   created_at: Time!
   updated_at: Time!
 

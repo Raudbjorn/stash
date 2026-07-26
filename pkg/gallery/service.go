@@ -7,6 +7,7 @@ import (
 
 	"github.com/stashapp/stash/pkg/image"
 	"github.com/stashapp/stash/pkg/models"
+	"github.com/stashapp/stash/pkg/models/paths"
 )
 
 type ImageFinder interface {
@@ -27,4 +28,5 @@ type Service struct {
 	ImageService ImageService
 	File         models.FileReaderWriter
 	Folder       models.FolderReaderWriter
+	Paths        *paths.Paths
 }

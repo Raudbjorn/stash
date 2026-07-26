@@ -27,6 +27,11 @@ const (
 	performerURLColumn = "url"
 
 	performerImageBlobColumn = "image_blob"
+
+	// Ordered multi-image collection (position 0 == primary, mirrored
+	// into performers.image_blob). Distinct from the existing
+	// performers_images gallery-image join table.
+	performerImagesTable = "performer_images"
 )
 
 type performerRow struct {
@@ -399,12 +404,32 @@ func (qb *PerformerStore) Update(ctx context.Context, updatedObject *models.Upda
 }
 
 func (qb *PerformerStore) Destroy(ctx context.Context, id int) error {
-	// must handle image checksums manually
+	// must handle image checksums manually. Capture the full ordered image
+	// collection before the row (and its CASCADE-linked performer_images rows)
+	// are gone, so the now-orphaned blobs can be GC'd afterwards.
+	checksums, err := qb.GetImageChecksums(ctx, id)
+	if err != nil {
+		return err
+	}
+
 	if err := qb.destroyImage(ctx, id); err != nil {
 		return err
 	}
 
-	return performerRepository.destroyExisting(ctx, []int{id})
+	if err := performerRepository.destroyExisting(ctx, []int{id}); err != nil {
+		return err
+	}
+
+	// performer_images rows are dropped by ON DELETE CASCADE without freeing
+	// their blobs; GC each here (Delete no-ops for blobs still referenced
+	// elsewhere, e.g. shared content-addressed images).
+	for _, c := range checksums {
+		if err := qb.blobStore.Delete(ctx, c); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // returns nil, nil if not found
@@ -812,6 +837,7 @@ var performerSortOptions = sortOptions{
 	"galleries_count",
 	"height",
 	"id",
+	"image_collection_count",
 	"images_count",
 	"last_o_at",
 	"last_played_at",
@@ -859,6 +885,8 @@ func (qb *PerformerStore) getPerformerSort(findFilter *models.FindFilterType) (s
 		sortQuery += qb.sortByScenesSize(direction)
 	case "images_count":
 		sortQuery += getCountSort(performerTable, performersImagesTable, performerIDColumn, direction)
+	case "image_collection_count":
+		sortQuery += getCountSort(performerTable, performerImagesTable, performerIDColumn, direction)
 	case "galleries_count":
 		sortQuery += getCountSort(performerTable, performersGalleriesTable, performerIDColumn, direction)
 	case "play_count":
@@ -892,12 +920,127 @@ func (qb *PerformerStore) HasImage(ctx context.Context, performerID int) (bool, 
 	return qb.blobJoinQueryBuilder.HasImage(ctx, performerID, performerImageBlobColumn)
 }
 
+// UpdateImage sets the performer's single headline image. Routed through
+// the ordered collection so the legacy single-image path (scrape/identify/merge
+// and external API clients) keeps performers.image_blob and performer_images in
+// sync — it collapses the collection to this one image (or clears it when empty).
+// The multi-image edit flow uses UpdateImages instead and is unaffected.
 func (qb *PerformerStore) UpdateImage(ctx context.Context, performerID int, image []byte) error {
-	return qb.blobJoinQueryBuilder.UpdateImage(ctx, performerID, performerImageBlobColumn, image)
+	if len(image) == 0 {
+		return qb.SetImages(ctx, performerID, nil)
+	}
+	checksum, err := qb.blobStore.Write(ctx, image)
+	if err != nil {
+		return err
+	}
+	return qb.SetImages(ctx, performerID, []string{checksum})
 }
 
 func (qb *PerformerStore) destroyImage(ctx context.Context, performerID int) error {
 	return qb.blobJoinQueryBuilder.DestroyImage(ctx, performerID, performerImageBlobColumn)
+}
+
+// UpdateImages writes the given raw image byte slices to the blob store (in
+// order) and replaces the performer's ordered image collection with the
+// resulting checksums. Empty entries are skipped; an empty result clears the
+// collection. Mirrors UpdateImage for the multi-image case.
+func (qb *PerformerStore) UpdateImages(ctx context.Context, performerID int, images [][]byte) error {
+	checksums := make([]string, 0, len(images))
+	for _, img := range images {
+		if len(img) == 0 {
+			continue
+		}
+		checksum, err := qb.blobStore.Write(ctx, img)
+		if err != nil {
+			return err
+		}
+		checksums = append(checksums, checksum)
+	}
+	return qb.SetImages(ctx, performerID, checksums)
+}
+
+// GetImageChecksums returns the performer's image blob checksums in display
+// order (position 0 == primary). Backs the multi-image collection.
+func (qb *PerformerStore) GetImageChecksums(ctx context.Context, performerID int) ([]string, error) {
+	return performersImagesBlobTableMgr.get(ctx, performerID)
+}
+
+// GetImageCount returns the number of images in the performer's headshot
+// collection (performer_images). Backs the image_collection_count field. The
+// collection is small, so counting the ordered checksums is cheap and reuses
+// the one tested read path (the sort uses a SQL COUNT — see getPerformerSort).
+func (qb *PerformerStore) GetImageCount(ctx context.Context, performerID int) (int, error) {
+	checksums, err := qb.GetImageChecksums(ctx, performerID)
+	if err != nil {
+		return 0, err
+	}
+	return len(checksums), nil
+}
+
+// GetImageByIndex returns the raw bytes of the performer's image at the given
+// position in the ordered collection (0 == primary). Returns nil when the index
+// is out of range. Backs the multi-image serve route.
+func (qb *PerformerStore) GetImageByIndex(ctx context.Context, performerID int, index int) ([]byte, error) {
+	checksums, err := qb.GetImageChecksums(ctx, performerID)
+	if err != nil {
+		return nil, err
+	}
+	if index < 0 || index >= len(checksums) {
+		return nil, nil
+	}
+	return qb.blobStore.Read(ctx, checksums[index])
+}
+
+// setImageChecksum points performers.image_blob at an already-stored blob (the
+// position-0 mirror) without writing or deleting any blob. Pass nil to clear
+// it. Blob lifecycle/GC is the caller's responsibility (SetImages/Destroy).
+func (qb *PerformerStore) setImageChecksum(ctx context.Context, performerID int, checksum *string) error {
+	if checksum == nil {
+		q := fmt.Sprintf("UPDATE %s SET %s = NULL WHERE id = ?", performerTable, performerImageBlobColumn)
+		_, err := dbWrapper.Exec(ctx, q, performerID)
+		return err
+	}
+	q := fmt.Sprintf("UPDATE %s SET %s = ? WHERE id = ?", performerTable, performerImageBlobColumn)
+	_, err := dbWrapper.Exec(ctx, q, *checksum, performerID)
+	return err
+}
+
+// SetImages replaces the performer's ordered image collection with the given
+// blob checksums (already written to the blob store by the caller). It keeps
+// performers.image_blob synced to the new position-0 image and garbage-collects
+// any blob that drops out of the collection.
+func (qb *PerformerStore) SetImages(ctx context.Context, performerID int, checksums []string) error {
+	old, err := qb.GetImageChecksums(ctx, performerID)
+	if err != nil {
+		return err
+	}
+
+	if err := performersImagesBlobTableMgr.replaceJoins(ctx, performerID, checksums); err != nil {
+		return err
+	}
+
+	// Sync the position-0 mirror BEFORE GC so that repointing or clearing the
+	// primary frees its old blob correctly — otherwise the mirror's FK would
+	// block the delete and the blob would leak.
+	var primary *string
+	if len(checksums) > 0 {
+		primary = &checksums[0]
+	}
+	if err := qb.setImageChecksum(ctx, performerID, primary); err != nil {
+		return err
+	}
+
+	// GC any blob that left the collection. Delete no-ops while the blob is
+	// still referenced (e.g. shared across performers, content-addressed).
+	for _, c := range old {
+		if !slices.Contains(checksums, c) {
+			if err := qb.blobStore.Delete(ctx, c); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (qb *PerformerStore) GetAliases(ctx context.Context, performerID int) ([]string, error) {

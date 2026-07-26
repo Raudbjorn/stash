@@ -1,0 +1,45 @@
+mutation ClipCreate($input: ClipCreateInput!) {
+  clipCreate(input: $input) {
+    ...ClipData
+  }
+}
+
+mutation ClipUpdate($input: ClipUpdateInput!) {
+  clipUpdate(input: $input) {
+    ...ClipData
+  }
+}
+
+mutation ClipDestroy($id: ID!) {
+  clipDestroy(id: $id)
+}
+
+mutation ClipsDestroy($ids: [ID!]!) {
+  clipsDestroy(ids: $ids)
+}
+
+mutation ClipGenerate($id: ID!) {
+  clipGenerate(id: $id)
+}
+
+mutation ClipAddO($id: ID!, $times: [Timestamp!]) {
+  clipAddO(id: $id, times: $times) {
+    count
+  }
+}
+
+mutation ClipDeleteO($id: ID!, $times: [Timestamp!]) {
+  clipDeleteO(id: $id, times: $times) {
+    count
+  }
+}
+
+mutation ClipResetO($id: ID!) {
+  clipResetO(id: $id)
+}
+
+mutation ClipAddPlay($id: ID!, $times: [Timestamp!]) {
+  clipAddPlay(id: $id, times: $times) {
+    count
+  }
+}

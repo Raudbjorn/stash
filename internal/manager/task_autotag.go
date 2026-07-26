@@ -650,7 +650,7 @@ func (t *autoTagFilesTask) processScenes(ctx context.Context) {
 	// pre-populate the single-letter caches serially so the concurrent
 	// matching phase below only reads them (see match.Cache.Warm).
 	if err := r.WithReadTxn(ctx, func(ctx context.Context) error {
-		return t.cache.Warm(ctx, t.performerReader(r), t.studioReader(r), t.tagReader(r))
+		return t.cache.Preload(ctx, t.performerReader(r), t.studioReader(r), t.tagReader(r))
 	}); err != nil && !job.IsCancelled(ctx) {
 		logger.Errorf("error warming auto-tag cache: %v", err)
 	}
@@ -719,7 +719,7 @@ func (t *autoTagFilesTask) processImages(ctx context.Context) {
 	r := t.repository
 
 	if err := r.WithReadTxn(ctx, func(ctx context.Context) error {
-		return t.cache.Warm(ctx, t.performerReader(r), t.studioReader(r), t.tagReader(r))
+		return t.cache.Preload(ctx, t.performerReader(r), t.studioReader(r), t.tagReader(r))
 	}); err != nil && !job.IsCancelled(ctx) {
 		logger.Errorf("error warming auto-tag cache: %v", err)
 	}
@@ -788,7 +788,7 @@ func (t *autoTagFilesTask) processGalleries(ctx context.Context) {
 	r := t.repository
 
 	if err := r.WithReadTxn(ctx, func(ctx context.Context) error {
-		return t.cache.Warm(ctx, t.performerReader(r), t.studioReader(r), t.tagReader(r))
+		return t.cache.Preload(ctx, t.performerReader(r), t.studioReader(r), t.tagReader(r))
 	}); err != nil && !job.IsCancelled(ctx) {
 		logger.Errorf("error warming auto-tag cache: %v", err)
 	}

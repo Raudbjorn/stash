@@ -340,6 +340,14 @@ func (s *runningStream) makeStreamArgs(sm *StreamManager, segment int) Args {
 	args = sm.encoder.hwDeviceInit(args, codec, fullhw)
 	args = append(args, extraInputArgs...)
 
+	// For AV1 sources, optionally force a specific hardware decode method (e.g. av1_cuvid)
+	// via FORCE_AV1_HW_DECODE_METHOD, since -hwaccel auto may not select the right one.
+	if s.vf.VideoCodec == "av1" {
+		if decodeMethod, ok := os.LookupEnv(forceAV1HWDecodeMethodEnv); ok && decodeMethod != "" {
+			args = append(args, "-c:v", decodeMethod)
+		}
+	}
+
 	if segment > 0 {
 		args = args.Seek(float64(segment * segmentLength))
 	}

@@ -1,0 +1,19 @@
+.default-tab-dropdown {
+  position: absolute;
+  right: 0;
+
+  .dropdown-toggle {
+    color: inherit;
+    opacity: 0.6;
+    padding: 4px 8px;
+
+    &:hover,
+    &:focus {
+      opacity: 1;
+    }
+
+    &::after {
+      display: none;
+    }
+  }
+}

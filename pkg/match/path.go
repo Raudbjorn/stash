@@ -91,7 +91,7 @@ func allASCII(s string) bool {
 func nameMatchesPath(cache *Cache, name, path string) int {
 	// #2363 - optimisation: only use unicode character regexp if path contains
 	// unicode characters
-	re := cache.nameToRegexp(name, !allASCII(path))
+	re := cache.nameRegexp(name, !allASCII(path))
 	return regexpMatchesPath(re, path)
 }
 
@@ -143,11 +143,18 @@ func getPerformers(ctx context.Context, words []string, performerReader models.P
 }
 
 func PathToPerformers(ctx context.Context, path string, reader models.PerformerAutoTagQueryer, cache *Cache, trimExt bool) ([]*models.Performer, error) {
-	words := getPathWords(path, trimExt)
-
-	performers, err := getPerformers(ctx, words, reader, cache)
-	if err != nil {
-		return nil, err
+	// When preloaded (bulk file-based auto-tag), narrow candidates via the
+	// in-memory 2-rune prefix index instead of a per-path SQL prefilter.
+	var performers []*models.Performer
+	if cache != nil && cache.allPerformers != nil {
+		performers = cache.performerCandidates(getPathWords(path, trimExt))
+	} else {
+		words := getPathWords(path, trimExt)
+		var err error
+		performers, err = getPerformers(ctx, words, reader, cache)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var ret []*models.Performer
@@ -198,6 +205,26 @@ func getStudios(ctx context.Context, words []string, reader models.StudioAutoTag
 // Where multiple matching studios are found, the one that matches the latest
 // position in the path is returned.
 func PathToStudio(ctx context.Context, path string, reader models.StudioAutoTagQueryer, cache *Cache, trimExt bool) (*models.Studio, error) {
+	// Preloaded path: candidates and their aliases are already in memory.
+	if cache != nil && cache.allStudios != nil {
+		candidates := cache.studioCandidates(getPathWords(path, trimExt))
+		var ret *models.Studio
+		index := -1
+		for _, c := range candidates {
+			if matchIndex := nameMatchesPath(cache, c.Studio.Name, path); matchIndex != -1 && matchIndex > index {
+				ret = c.Studio
+				index = matchIndex
+			}
+			for _, alias := range c.Aliases {
+				if matchIndex := nameMatchesPath(cache, alias, path); matchIndex != -1 && matchIndex > index {
+					ret = c.Studio
+					index = matchIndex
+				}
+			}
+		}
+		return ret, nil
+	}
+
 	words := getPathWords(path, trimExt)
 	candidates, err := getStudios(ctx, words, reader, cache)
 
@@ -246,6 +273,25 @@ func getTags(ctx context.Context, words []string, reader models.TagAutoTagQuerye
 }
 
 func PathToTags(ctx context.Context, path string, reader models.TagAutoTagQueryer, cache *Cache, trimExt bool) ([]*models.Tag, error) {
+	// Preloaded path: candidates and their aliases are already in memory.
+	if cache != nil && cache.allTags != nil {
+		candidates := cache.tagCandidates(getPathWords(path, trimExt))
+		var ret []*models.Tag
+		for _, c := range candidates {
+			if nameMatchesPath(cache, c.Tag.Name, path) != -1 {
+				ret = append(ret, c.Tag)
+				continue
+			}
+			for _, alias := range c.Aliases {
+				if nameMatchesPath(cache, alias, path) != -1 {
+					ret = append(ret, c.Tag)
+					break
+				}
+			}
+		}
+		return ret, nil
+	}
+
 	words := getPathWords(path, trimExt)
 	tags, err := getTags(ctx, words, reader, cache)
 

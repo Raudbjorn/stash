@@ -9,6 +9,7 @@ fragment SlimGalleryData on Gallery {
   rating100
   organized
   favorite
+  has_generated_cover
   files {
     ...GalleryFileData
   }

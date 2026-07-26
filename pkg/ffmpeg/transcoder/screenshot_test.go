@@ -15,6 +15,7 @@ func TestScreenshotTimeDefaultUsesFastSeek(t *testing.T) {
 	want := []string{
 		"-v", "error",
 		"-y",
+		"-hwaccel", "auto",
 		"-ss", "12.5",
 		"-i", "input.webm",
 		"-frames:v", "1",
@@ -38,8 +39,33 @@ func TestScreenshotTimeSlowSeek(t *testing.T) {
 	want := []string{
 		"-v", "error",
 		"-y",
+		"-hwaccel", "auto",
 		"-i", "input.webm",
 		"-ss", "12.5",
+		"-frames:v", "1",
+		"-f", "image2",
+		"out.jpg",
+	}
+
+	if !reflect.DeepEqual([]string(got), want) {
+		t.Fatalf("ScreenshotTime() = %#v, want %#v", []string(got), want)
+	}
+}
+
+func TestScreenshotTimeDisableHWDecode(t *testing.T) {
+	// phash path: must not emit -hwaccel auto, so frames stay deterministic.
+	options := ScreenshotOptions{
+		OutputPath:      "out.jpg",
+		OutputType:      ScreenshotOutputTypeImage2,
+		DisableHWDecode: true,
+	}
+
+	got := ScreenshotTime("input.webm", 12.5, options)
+	want := []string{
+		"-v", "error",
+		"-y",
+		"-ss", "12.5",
+		"-i", "input.webm",
 		"-frames:v", "1",
 		"-f", "image2",
 		"out.jpg",

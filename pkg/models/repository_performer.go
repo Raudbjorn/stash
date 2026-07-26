@@ -51,6 +51,9 @@ type PerformerUpdater interface {
 	Update(ctx context.Context, updatedPerformer *UpdatePerformerInput) error
 	UpdatePartial(ctx context.Context, id int, updatedPerformer PerformerPartial) (*Performer, error)
 	UpdateImage(ctx context.Context, performerID int, image []byte) error
+	// UpdateImages replaces the performer's ordered image collection (index 0 ==
+	// primary, mirrored into image_blob).
+	UpdateImages(ctx context.Context, performerID int, images [][]byte) error
 }
 
 // PerformerDestroyer provides methods to destroy performers.
@@ -85,6 +88,15 @@ type PerformerReader interface {
 	All(ctx context.Context) ([]*Performer, error)
 	GetImage(ctx context.Context, performerID int) ([]byte, error)
 	HasImage(ctx context.Context, performerID int) (bool, error)
+	// GetImageChecksums returns the performer's ordered image blob checksums
+	// (position 0 == primary).
+	GetImageChecksums(ctx context.Context, performerID int) ([]string, error)
+	// GetImageCount returns the number of images in the performer's headshot
+	// collection (performer_images). Backs the image_collection_count field.
+	GetImageCount(ctx context.Context, performerID int) (int, error)
+	// GetImageByIndex returns the Nth image in the ordered collection (0 ==
+	// primary), or nil when out of range.
+	GetImageByIndex(ctx context.Context, performerID int, index int) ([]byte, error)
 }
 
 // PerformerWriter provides all methods to modify performers.

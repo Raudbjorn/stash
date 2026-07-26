@@ -24,6 +24,12 @@ type task struct {
 }
 
 func (p *Progress) updated() {
+	if p.updater == nil {
+		// zero-value Progress (used in tests and standalone benchmarks) has
+		// no job manager to notify.
+		return
+	}
+
 	var details []string
 	for _, t := range p.currentTasks {
 		details = append(details, t.description)

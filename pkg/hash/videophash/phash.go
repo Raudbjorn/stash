@@ -37,15 +37,18 @@ func Generate(encoder *ffmpeg.FFMpeg, videoFile *models.VideoFile) (*uint64, err
 	return &hashValue, nil
 }
 
-func generateSpriteScreenshot(encoder *ffmpeg.FFMpeg, input string, t float64, slowSeek bool) (image.Image, error) {
+func generateSpriteScreenshot(encoder *ffmpeg.FFMpeg, videoFile *models.VideoFile, t float64, slowSeek bool) (image.Image, error) {
 	options := transcoder.ScreenshotOptions{
 		Width:      screenshotSize,
 		OutputPath: "-",
 		OutputType: transcoder.ScreenshotOutputTypeBMP,
 		SlowSeek:   slowSeek,
+		VideoCodec: videoFile.VideoCodec,
+		// phash must be deterministic across runs/machines — never HW-decode.
+		DisableHWDecode: true,
 	}
 
-	args := transcoder.ScreenshotTime(input, t, options)
+	args := transcoder.ScreenshotTime(videoFile.Path, t, options)
 	data, err := encoder.GenerateOutput(context.Background(), args, nil)
 	if err != nil {
 		return nil, err
@@ -90,12 +93,12 @@ func generateSprite(encoder *ffmpeg.FFMpeg, videoFile *models.VideoFile) (image.
 	for i := 0; i < chunkCount; i++ {
 		time := offset + (float64(i) * stepSize)
 
-		img, err := generateSpriteScreenshot(encoder, videoFile.Path, time, slowSeek)
+		img, err := generateSpriteScreenshot(encoder, videoFile, time, slowSeek)
 		if err != nil && !slowSeek {
 			logger.Warnf("[generator] fast phash screenshot seek failed for %s at %.3fs, retrying with accurate seek for remaining phash screenshots: %v", videoFile.Path, time, err)
 
 			slowSeek = true
-			img, err = generateSpriteScreenshot(encoder, videoFile.Path, time, slowSeek)
+			img, err = generateSpriteScreenshot(encoder, videoFile, time, slowSeek)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("generating sprite screenshot: %w", err)

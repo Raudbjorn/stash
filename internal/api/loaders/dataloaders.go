@@ -9,6 +9,12 @@
 //go:generate go run github.com/vektah/dataloaden StudioLoader int *github.com/stashapp/stash/pkg/models.Studio
 //go:generate go run github.com/vektah/dataloaden TagLoader int *github.com/stashapp/stash/pkg/models.Tag
 //go:generate go run github.com/vektah/dataloaden GroupLoader int *github.com/stashapp/stash/pkg/models.Group
+//go:generate go run github.com/vektah/dataloaden ClipLoader int *github.com/stashapp/stash/pkg/models.Clip
+//go:generate go run github.com/vektah/dataloaden ClipOCountLoader int int
+//go:generate go run github.com/vektah/dataloaden ClipPlayCountLoader int int
+//go:generate go run github.com/vektah/dataloaden ClipOHistoryLoader int []time.Time
+//go:generate go run github.com/vektah/dataloaden ClipPlayHistoryLoader int []time.Time
+//go:generate go run github.com/vektah/dataloaden ClipLastPlayedLoader int *time.Time
 //go:generate go run github.com/vektah/dataloaden FileLoader github.com/stashapp/stash/pkg/models.FileID github.com/stashapp/stash/pkg/models.File
 //go:generate go run github.com/vektah/dataloaden FolderLoader github.com/stashapp/stash/pkg/models.FolderID *github.com/stashapp/stash/pkg/models.Folder
 //go:generate go run github.com/vektah/dataloaden FolderRelatedFolderIDsLoader github.com/stashapp/stash/pkg/models.FolderID []github.com/stashapp/stash/pkg/models.FolderID
@@ -75,6 +81,13 @@ type Loaders struct {
 
 	GroupByID         *GroupLoader
 	GroupCustomFields *CustomFieldsLoader
+
+	ClipByID        *ClipLoader
+	ClipPlayCount   *ClipPlayCountLoader
+	ClipOCount      *ClipOCountLoader
+	ClipPlayHistory *ClipPlayHistoryLoader
+	ClipOHistory    *ClipOHistoryLoader
+	ClipLastPlayed  *ClipLastPlayedLoader
 
 	FileByID *FileLoader
 
@@ -175,6 +188,36 @@ func (m Middleware) Middleware(next http.Handler) http.Handler {
 				wait:     wait,
 				maxBatch: maxBatch,
 				fetch:    m.fetchGroupCustomFields(ctx),
+			},
+			ClipByID: &ClipLoader{
+				wait:     wait,
+				maxBatch: maxBatch,
+				fetch:    m.fetchClips(ctx),
+			},
+			ClipPlayCount: &ClipPlayCountLoader{
+				wait:     wait,
+				maxBatch: maxBatch,
+				fetch:    m.fetchClipsPlayCount(ctx),
+			},
+			ClipOCount: &ClipOCountLoader{
+				wait:     wait,
+				maxBatch: maxBatch,
+				fetch:    m.fetchClipsOCount(ctx),
+			},
+			ClipPlayHistory: &ClipPlayHistoryLoader{
+				wait:     wait,
+				maxBatch: maxBatch,
+				fetch:    m.fetchClipsPlayHistory(ctx),
+			},
+			ClipOHistory: &ClipOHistoryLoader{
+				wait:     wait,
+				maxBatch: maxBatch,
+				fetch:    m.fetchClipsOHistory(ctx),
+			},
+			ClipLastPlayed: &ClipLastPlayedLoader{
+				wait:     wait,
+				maxBatch: maxBatch,
+				fetch:    m.fetchClipsLastPlayed(ctx),
 			},
 			FileByID: &FileLoader{
 				wait:     wait,
@@ -451,6 +494,72 @@ func (m Middleware) fetchGroups(ctx context.Context) func(keys []int) ([]*models
 		err := m.Repository.WithDB(ctx, func(ctx context.Context) error {
 			var err error
 			ret, err = m.Repository.Group.FindMany(ctx, keys)
+			return err
+		})
+		return ret, toErrorSlice(err)
+	}
+}
+
+func (m Middleware) fetchClips(ctx context.Context) func(keys []int) ([]*models.Clip, []error) {
+	return func(keys []int) (ret []*models.Clip, errs []error) {
+		err := m.Repository.WithDB(ctx, func(ctx context.Context) error {
+			var err error
+			ret, err = m.Repository.Clip.FindMany(ctx, keys)
+			return err
+		})
+		return ret, toErrorSlice(err)
+	}
+}
+
+func (m Middleware) fetchClipsOCount(ctx context.Context) func(keys []int) ([]int, []error) {
+	return func(keys []int) (ret []int, errs []error) {
+		err := m.Repository.WithDB(ctx, func(ctx context.Context) error {
+			var err error
+			ret, err = m.Repository.Clip.GetManyOCount(ctx, keys)
+			return err
+		})
+		return ret, toErrorSlice(err)
+	}
+}
+
+func (m Middleware) fetchClipsPlayCount(ctx context.Context) func(keys []int) ([]int, []error) {
+	return func(keys []int) (ret []int, errs []error) {
+		err := m.Repository.WithDB(ctx, func(ctx context.Context) error {
+			var err error
+			ret, err = m.Repository.Clip.GetManyViewCount(ctx, keys)
+			return err
+		})
+		return ret, toErrorSlice(err)
+	}
+}
+
+func (m Middleware) fetchClipsOHistory(ctx context.Context) func(keys []int) ([][]time.Time, []error) {
+	return func(keys []int) (ret [][]time.Time, errs []error) {
+		err := m.Repository.WithDB(ctx, func(ctx context.Context) error {
+			var err error
+			ret, err = m.Repository.Clip.GetManyODates(ctx, keys)
+			return err
+		})
+		return ret, toErrorSlice(err)
+	}
+}
+
+func (m Middleware) fetchClipsPlayHistory(ctx context.Context) func(keys []int) ([][]time.Time, []error) {
+	return func(keys []int) (ret [][]time.Time, errs []error) {
+		err := m.Repository.WithDB(ctx, func(ctx context.Context) error {
+			var err error
+			ret, err = m.Repository.Clip.GetManyViewDates(ctx, keys)
+			return err
+		})
+		return ret, toErrorSlice(err)
+	}
+}
+
+func (m Middleware) fetchClipsLastPlayed(ctx context.Context) func(keys []int) ([]*time.Time, []error) {
+	return func(keys []int) (ret []*time.Time, errs []error) {
+		err := m.Repository.WithDB(ctx, func(ctx context.Context) error {
+			var err error
+			ret, err = m.Repository.Clip.GetManyLastViewed(ctx, keys)
 			return err
 		})
 		return ret, toErrorSlice(err)

@@ -67,6 +67,10 @@ const messages = defineMessages({
     id: "markers",
     defaultMessage: "Markers",
   },
+  clips: {
+    id: "clips",
+    defaultMessage: "Clips",
+  },
   performers: {
     id: "performers",
     defaultMessage: "Performers",
@@ -98,6 +102,10 @@ const messages = defineMessages({
   statistics: {
     id: "statistics",
     defaultMessage: "Statistics",
+  },
+  favourites: {
+    id: "favourites",
+    defaultMessage: "Favourites",
   },
 });
 
@@ -133,6 +141,13 @@ const allMenuItems: IMenuItem[] = [
     hotkey: "g k",
   },
   {
+    name: "clips",
+    message: messages.clips,
+    href: "/clips",
+    icon: faVideo,
+    hotkey: "g c",
+  },
+  {
     name: "galleries",
     message: messages.galleries,
     href: "/galleries",
@@ -163,6 +178,13 @@ const allMenuItems: IMenuItem[] = [
     icon: faTag,
     hotkey: "g t",
     userCreatable: true,
+  },
+  {
+    name: "favourites",
+    message: messages.favourites,
+    href: "/favourites",
+    icon: faHeart,
+    hotkey: "g f",
   },
   {
     name: "playlists",
@@ -217,6 +239,16 @@ export const MainNavbar: React.FC = () => {
     // Always include playlists even if not in config
     if (!cfgMenuItems.includes("playlists")) {
       cfgMenuItems = [...cfgMenuItems, "playlists"];
+    }
+
+    // Always include favourites even if not in config
+    if (!cfgMenuItems.includes("favourites")) {
+      cfgMenuItems = [...cfgMenuItems, "favourites"];
+    }
+
+    // Always include clips even if not in config (fork feature)
+    if (!cfgMenuItems.includes("clips")) {
+      cfgMenuItems = [...cfgMenuItems, "clips"];
     }
 
     return allMenuItems.filter((menuItem) =>

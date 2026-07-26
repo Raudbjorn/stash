@@ -56,6 +56,8 @@ type SceneFilterType struct {
 	Duplicated *DuplicationCriterionInput `json:"duplicated"`
 	// Filter by resolution
 	Resolution *ResolutionCriterionInput `json:"resolution"`
+	// Filter by minimum dimension (pixels, custom value)
+	MinResolution *IntCriterionInput `json:"min_resolution"`
 	// Filter by orientation
 	Orientation *OrientationCriterionInput `json:"orientation"`
 	// Filter by framerate

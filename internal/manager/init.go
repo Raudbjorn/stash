@@ -19,6 +19,7 @@ import (
 	"github.com/stashapp/stash/pkg/gallery"
 	"github.com/stashapp/stash/pkg/group"
 	"github.com/stashapp/stash/pkg/image"
+	"github.com/stashapp/stash/pkg/imagemagick"
 	"github.com/stashapp/stash/pkg/job"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models/paths"
@@ -66,6 +67,7 @@ func Initialize(cfg *config.Config, l *log.Logger) (*Manager, error) {
 		ImageService: imageService,
 		File:         db.File,
 		Folder:       db.Folder,
+		Paths:        mgrPaths,
 	}
 
 	groupService := &group.Service{
@@ -243,6 +245,7 @@ func (s *Manager) postInit(ctx context.Context) error {
 	}
 
 	s.RefreshFFMpeg(ctx)
+	s.RefreshImageMagick(ctx)
 	s.RefreshStreamManager()
 
 	return nil
@@ -308,4 +311,29 @@ func (s *Manager) RefreshFFMpeg(ctx context.Context) {
 		// initialise hardware support with background context
 		s.FFMpeg.InitHWSupport(context.Background())
 	}
+}
+
+// RefreshImageMagick locates the ImageMagick convert/magick binary and stores
+// it on the manager. It is used as a fallback image probe when ffprobe cannot
+// read an image. ImageMagick is optional: if it cannot be found the fallback is
+// simply skipped, so this only logs an informational message rather than
+// failing.
+func (s *Manager) RefreshImageMagick(ctx context.Context) {
+	// use same directory as config path
+	// executing binaries requires directory to be included
+	// https://pkg.go.dev/os/exec#hdr-Executables_in_the_current_directory
+	configDirectory := s.Config.GetConfigPathAbs()
+	stashHomeDir := paths.GetStashHomeDirectory()
+
+	magickPath := imagemagick.GetPaths([]string{
+		configDirectory,
+		stashHomeDir,
+	})
+	if magickPath == "" {
+		logger.Info("Couldn't find ImageMagick")
+	} else {
+		logger.Debugf("using ImageMagick: %s", magickPath)
+	}
+
+	s.IMConvert = imagemagick.IMConvert(magickPath)
 }

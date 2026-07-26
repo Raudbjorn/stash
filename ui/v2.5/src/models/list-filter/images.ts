@@ -28,7 +28,7 @@ import { PhashCriterionOption } from "./criteria/phash";
 import { CustomFieldsCriterionOption } from "./criteria/custom-fields";
 import { FolderCriterionOption } from "./criteria/folder";
 
-const defaultSortBy = "path";
+const defaultSortBy = "title";
 
 const sortByOptions = [
   "filesize",
@@ -65,6 +65,7 @@ const criterionOptions = [
     sfwMessageID: "o_count_sfw",
   }),
   ResolutionCriterionOption,
+  createMandatoryNumberCriterionOption("min_resolution"),
   OrientationCriterionOption,
   ImageIsMissingCriterionOption,
   TagsCriterionOption,

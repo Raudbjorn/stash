@@ -42,6 +42,8 @@ var (
 	VideoCodecRK264 = makeVideoCodec("H264 Rockchip MPP (rkmpp)", "h264_rkmpp")
 )
 
+const forceAV1HWDecodeMethodEnv = "FORCE_AV1_HW_DECODE_METHOD"
+
 const minHeight int = 480
 
 // Tests all (given) hardware codec's
@@ -221,6 +223,37 @@ func (f *FFMpeg) hwCanFullHWTranscode(ctx context.Context, codec VideoCodec, vf 
 
 	logger.Infof("[transcode] Full hardware transcode test passed for file %s with codec %s", vf.Basename, codec.Name)
 	return true
+}
+
+// HasHWCodec returns true if the encoder passed hardware codec initialization.
+func (f *FFMpeg) HasHWCodec(codec VideoCodec) bool {
+	for _, c := range f.getHWCodecSupport() {
+		if c == codec {
+			return true
+		}
+	}
+
+	return false
+}
+
+// HardwareDecodeArgs returns input arguments for opportunistic hardware decode.
+func HardwareDecodeArgs(videoCodec string, hwaccel string, outputFormat string) Args {
+	if hwaccel == "" {
+		hwaccel = "auto"
+	}
+
+	args := Args{"-hwaccel", hwaccel}
+	if outputFormat != "" {
+		args = append(args, "-hwaccel_output_format", outputFormat)
+	}
+
+	if videoCodec == "av1" {
+		if decodeMethod, ok := os.LookupEnv(forceAV1HWDecodeMethodEnv); ok && decodeMethod != "" {
+			args = append(args, "-c:v", decodeMethod)
+		}
+	}
+
+	return args
 }
 
 // Prepend input for hardware encoding only
@@ -494,8 +527,8 @@ func (f *FFMpeg) hwApplyFullHWFilter(args VideoFilter, codec VideoCodec, fullhw 
 			args = args.Append("scale_vt=format=nv12")
 		}
 
-	// AMD AMF codecs - typically don't support full hardware scaling
-	// Legacy codecs - no hardware scaling support
+		// AMD AMF codecs - typically don't support full hardware scaling
+		// Legacy codecs - no hardware scaling support
 	}
 
 	return args
@@ -579,7 +612,7 @@ func (f *FFMpeg) hwCodecMaxRes(codec VideoCodec) (int, int) {
 		VideoCodecA264, VideoCodecM264:
 		return 4096, 4096 // 4K support
 
-	// Other codecs - use default resolution
+		// Other codecs - use default resolution
 	}
 
 	return 0, 0
