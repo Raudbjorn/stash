@@ -6,6 +6,7 @@ import {
   ImageLightboxDisplayMode,
   ImageLightboxScrollMode,
 } from "src/core/enums";
+import { DisplayMode } from "src/models/list-filter/types";
 
 interface IInterfaceQueryConfig {
   filter: string;
@@ -13,8 +14,10 @@ interface IInterfaceQueryConfig {
   currentPage: number;
 }
 
+/** Per-view UI configuration persisted to IndexedDB. */
 export interface IViewConfig {
   showSidebar?: boolean;
+  displayMode?: DisplayMode;
 }
 
 type IQueryConfig = Record<string, IInterfaceQueryConfig>;
@@ -36,6 +39,7 @@ interface IInterfaceConfig {
   viewConfig: Partial<Record<View, IViewConfig>>;
 }
 
+/** Persisted changelog acknowledgement state. */
 export interface IChangelogConfig {
   versions: Record<string, boolean>;
 }
@@ -49,6 +53,13 @@ interface ILocalForage<T> {
 const Loading: Record<string, boolean> = {};
 const Cache: Record<string, object> = {};
 
+/**
+ * Read/write a JSON-serialisable value to IndexedDB via localforage.
+ * The value is cached in memory so subsequent reads are synchronous.
+ * @param key - Storage key (scoped under the stash app).
+ * @param defaultValue - Fallback when no data exists in storage.
+ * @returns A tuple of `{ data, error, loading }` and a setter.
+ */
 export function useLocalForage<T extends {}>(
   key: string,
   defaultValue: T = {} as T
@@ -103,8 +114,10 @@ export function useLocalForage<T extends {}>(
   return [{ data, error, loading: isLoading }, setData];
 }
 
+/** Convenience hook for reading/writing the interface config (view config, lightbox settings, etc.). */
 export const useInterfaceLocalForage = () =>
   useLocalForage<IInterfaceConfig>("interface");
 
+/** Convenience hook for reading/writing changelog acknowledgement state. */
 export const useChangelogStorage = () =>
   useLocalForage<IChangelogConfig>("changelog");
