@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/remeh/sizedwaitgroup"
@@ -62,6 +63,11 @@ type Manager struct {
 	DLNAService *dlna.Service
 
 	ScanScheduler *scheduler.Scheduler
+	// scanScheduleEntries maps a ScanSchedule ID to the scheduler entry ID
+	// currently armed for it, so a schedule can be cancelled/re-armed on
+	// update or destroy. Guarded by scanScheduleMu.
+	scanScheduleEntries map[string]string
+	scanScheduleMu      sync.Mutex
 
 	Database   *sqlite.Database
 	Repository models.Repository
@@ -401,6 +407,8 @@ func (s *Manager) GetSystemStatus() *SystemStatus {
 // Shutdown gracefully stops the manager
 func (s *Manager) Shutdown() {
 	// TODO: Each part of the manager needs to gracefully stop at some point
+
+	s.StopScanScheduler()
 
 	if s.StreamManager != nil {
 		s.StreamManager.Shutdown()

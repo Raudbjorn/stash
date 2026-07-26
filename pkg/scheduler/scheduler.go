@@ -94,40 +94,35 @@ func FormatScheduleSpec(s ScheduleSpec) string {
 	return strings.ToLower(s.DayOfWeek.String()) + "@" + timeStr
 }
 
-// NextRunTime returns the next UTC time at which the schedule should fire,
-// relative to now. Seconds and sub-seconds are zeroed.
+// NextRunTime returns the next time at which the schedule should fire, relative
+// to now and in the same location as now (typically the server's local
+// timezone). Seconds and sub-seconds are zeroed. Days are advanced with
+// AddDate so the wall-clock hour is preserved across DST transitions.
 func NextRunTime(dayOfWeek time.Weekday, hour, minute int, now time.Time) time.Time {
-	now = now.UTC()
+	loc := now.Location()
 
-	candidate := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, time.UTC)
-
-	if dayOfWeek == AnyDay {
-		if !candidate.After(now) {
-			candidate = candidate.Add(24 * time.Hour)
-		}
-		return candidate
-	}
-
-	// Find the next occurrence of dayOfWeek at the specified time.
+	// Find the next day (today included) whose target time is still in the
+	// future and, for weekly schedules, whose weekday matches.
 	for i := 0; i <= 7; i++ {
-		t := candidate.Add(time.Duration(i) * 24 * time.Hour)
-		if t.Weekday() == dayOfWeek && t.After(now) {
-			return t
+		d := now.AddDate(0, 0, i)
+		candidate := time.Date(d.Year(), d.Month(), d.Day(), hour, minute, 0, 0, loc)
+		if !candidate.After(now) {
+			continue
+		}
+		if dayOfWeek == AnyDay || candidate.Weekday() == dayOfWeek {
+			return candidate
 		}
 	}
 
 	// Fallback: one week from now at the target time (should never be reached).
-	return candidate.Add(7 * 24 * time.Hour)
+	d := now.AddDate(0, 0, 7)
+	return time.Date(d.Year(), d.Month(), d.Day(), hour, minute, 0, 0, loc)
 }
 
 // entry is a scheduled task managed by the Scheduler.
 type entry struct {
-	id       string
-	fn       func()
-	repeat   bool
-	interval time.Duration // used when repeat=true with interval mode
-	nextRun  time.Time
-	cancel   context.CancelFunc
+	fn     func()
+	cancel context.CancelFunc
 }
 
 // Scheduler manages a collection of timed or recurring tasks.
@@ -174,9 +169,10 @@ func (s *Scheduler) Stop() {
 	s.started = false
 }
 
-// AddAt schedules fn to run once at the given time. If repeat is false the
-// entry removes itself after firing. Returns the entry ID.
-func (s *Scheduler) AddAt(at time.Time, repeat bool, fn func()) (string, error) {
+// AddAt schedules fn to run once at the given time. The entry removes itself
+// after firing. Returns the entry ID, which can be passed to Remove to cancel
+// the pending run before it fires.
+func (s *Scheduler) AddAt(at time.Time, fn func()) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -188,15 +184,12 @@ func (s *Scheduler) AddAt(at time.Time, repeat bool, fn func()) (string, error) 
 	ctx, cancel := context.WithCancel(s.ctx)
 
 	e := &entry{
-		id:      id,
-		fn:      fn,
-		repeat:  repeat,
-		nextRun: at,
-		cancel:  cancel,
+		fn:     fn,
+		cancel: cancel,
 	}
 	s.entries[id] = e
 
-	go s.runAt(ctx, e, at)
+	go s.runAt(ctx, id, e, at)
 	return id, nil
 }
 
@@ -213,15 +206,12 @@ func (s *Scheduler) AddInterval(interval time.Duration, fn func()) (string, erro
 	ctx, cancel := context.WithCancel(s.ctx)
 
 	e := &entry{
-		id:       id,
-		fn:       fn,
-		repeat:   true,
-		interval: interval,
-		cancel:   cancel,
+		fn:     fn,
+		cancel: cancel,
 	}
 	s.entries[id] = e
 
-	go s.runInterval(ctx, id, interval, fn)
+	go s.runInterval(ctx, interval, fn)
 	return id, nil
 }
 
@@ -238,7 +228,7 @@ func (s *Scheduler) Remove(id string) {
 	delete(s.entries, id)
 }
 
-func (s *Scheduler) runAt(ctx context.Context, e *entry, at time.Time) {
+func (s *Scheduler) runAt(ctx context.Context, id string, e *entry, at time.Time) {
 	delay := time.Until(at)
 	if delay < 0 {
 		delay = 0
@@ -255,13 +245,11 @@ func (s *Scheduler) runAt(ctx context.Context, e *entry, at time.Time) {
 		return
 	default:
 		e.fn()
-		if !e.repeat {
-			s.Remove(e.id)
-		}
+		s.Remove(id)
 	}
 }
 
-func (s *Scheduler) runInterval(ctx context.Context, id string, interval time.Duration, fn func()) {
+func (s *Scheduler) runInterval(ctx context.Context, interval time.Duration, fn func()) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -19,6 +20,33 @@ func makeTestSchedule(id, name, spec string) ScanSchedule {
 			ScanGeneratePreviews: true,
 		},
 	}
+}
+
+// TestScanSchedules_PersistRoundTrip writes schedules to a real config file and
+// reads them back through a fresh Config, guarding against the regression where
+// mutations only touched the in-memory store and were lost on restart.
+func TestScanSchedules_PersistRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yml")
+
+	c := InitializeEmpty()
+	c.SetConfigFile(path)
+
+	sched := makeTestSchedule("id-1", "Nightly", "daily@02:00")
+	sched.Paths = []string{"/media/movies"}
+	require.NoError(t, c.AddScanSchedule(sched))
+	require.NoError(t, c.Write())
+
+	// Load a fresh Config from the written file; the schedule must survive.
+	reloaded := InitializeEmpty()
+	require.NoError(t, reloaded.load(path))
+
+	got := reloaded.GetScanSchedules()
+	require.Len(t, got, 1)
+	assert.Equal(t, "id-1", got[0].ID)
+	assert.Equal(t, "Nightly", got[0].Name)
+	assert.Equal(t, "daily@02:00", got[0].Spec)
+	assert.Equal(t, []string{"/media/movies"}, got[0].Paths)
+	assert.True(t, got[0].ScanOptions.ScanGeneratePreviews)
 }
 
 func TestScanSchedules_EmptyInitially(t *testing.T) {

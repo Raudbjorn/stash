@@ -82,10 +82,11 @@ func scheduledScanToGQL(s *config.ScanSchedule) *ScanSchedule {
 		LastRunAt: s.LastRunAt,
 	}
 
-	// Compute next run time for enabled, repeating schedules.
+	// Compute the next run time for enabled schedules. Use local time so this
+	// matches how the scheduler actually arms the timer (see registerSchedule).
 	if s.Enabled {
 		if spec, err := scheduler.ParseScheduleSpec(s.Spec); err == nil {
-			next := scheduler.NextRunTime(spec.DayOfWeek, spec.Hour, spec.Minute, time.Now().UTC())
+			next := scheduler.NextRunTime(spec.DayOfWeek, spec.Hour, spec.Minute, time.Now())
 			gql.NextRunAt = &next
 		}
 	}

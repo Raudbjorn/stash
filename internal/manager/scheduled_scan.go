@@ -44,6 +44,9 @@ func (s *Manager) CreateScheduledScan(input ScanScheduleInput) (*config.ScanSche
 	if err := s.Config.AddScanSchedule(sched); err != nil {
 		return nil, fmt.Errorf("failed to save scheduled scan: %w", err)
 	}
+	if err := s.Config.Write(); err != nil {
+		return nil, fmt.Errorf("failed to persist scheduled scan: %w", err)
+	}
 
 	if s.ScanScheduler != nil && input.Enabled {
 		s.registerSchedule(sched)
@@ -77,9 +80,14 @@ func (s *Manager) UpdateScheduledScan(id string, input ScanScheduleInput) (*conf
 	if err := s.Config.UpdateScanSchedule(existing); err != nil {
 		return nil, fmt.Errorf("failed to update scheduled scan: %w", err)
 	}
+	if err := s.Config.Write(); err != nil {
+		return nil, fmt.Errorf("failed to persist scheduled scan: %w", err)
+	}
 
 	if s.ScanScheduler != nil {
-		s.ScanScheduler.Remove(id)
+		// Cancel the currently armed timer before (re-)arming, otherwise the
+		// stale timer fires the previous scan config.
+		s.unregisterSchedule(id)
 		if input.Enabled {
 			s.registerSchedule(existing)
 		}
@@ -93,10 +101,11 @@ func (s *Manager) DestroyScheduledScan(id string) error {
 	if err := s.Config.RemoveScanSchedule(id); err != nil {
 		return fmt.Errorf("failed to remove scheduled scan: %w", err)
 	}
-
-	if s.ScanScheduler != nil {
-		s.ScanScheduler.Remove(id)
+	if err := s.Config.Write(); err != nil {
+		return fmt.Errorf("failed to persist scheduled scan removal: %w", err)
 	}
+
+	s.unregisterSchedule(id)
 
 	return nil
 }
@@ -118,6 +127,10 @@ func (s *Manager) StartScanScheduler() {
 	s.ScanScheduler = scheduler.New()
 	s.ScanScheduler.Start()
 
+	s.scanScheduleMu.Lock()
+	s.scanScheduleEntries = make(map[string]string)
+	s.scanScheduleMu.Unlock()
+
 	for _, sched := range s.Config.GetScanSchedules() {
 		if sched.Enabled {
 			s.registerSchedule(sched)
@@ -132,7 +145,8 @@ func (s *Manager) StopScanScheduler() {
 	}
 }
 
-// registerSchedule computes the next fire time and schedules the scan.
+// registerSchedule computes the next fire time and schedules the scan, recording
+// the scheduler entry ID so the timer can later be cancelled by schedule ID.
 func (s *Manager) registerSchedule(sched config.ScanSchedule) {
 	spec, err := scheduler.ParseScheduleSpec(sched.Spec)
 	if err != nil {
@@ -140,7 +154,9 @@ func (s *Manager) registerSchedule(sched config.ScanSchedule) {
 		return
 	}
 
-	now := time.Now().UTC()
+	// Schedules are interpreted in the server's local timezone (honouring the
+	// TZ environment variable), matching what the UI displays for next-run.
+	now := time.Now()
 	nextRun := scheduler.NextRunTime(spec.DayOfWeek, spec.Hour, spec.Minute, now)
 	repeat := sched.Repeat
 
@@ -158,7 +174,11 @@ func (s *Manager) registerSchedule(sched config.ScanSchedule) {
 		if _, err := s.Scan(context.Background(), input); err != nil {
 			logger.Errorf("scheduled scan %q failed: %v", name, err)
 		}
-		_ = s.Config.UpdateScanScheduleLastRun(id, time.Now().UTC())
+		if err := s.Config.UpdateScanScheduleLastRun(id, time.Now()); err != nil {
+			logger.Errorf("failed to record last run for scheduled scan %q: %v", name, err)
+		} else if err := s.Config.Write(); err != nil {
+			logger.Errorf("failed to persist last run for scheduled scan %q: %v", name, err)
+		}
 
 		if repeat {
 			// Re-register for next occurrence.
@@ -169,7 +189,34 @@ func (s *Manager) registerSchedule(sched config.ScanSchedule) {
 		}
 	}
 
-	if _, err := s.ScanScheduler.AddAt(nextRun, false, fireFn); err != nil {
+	entryID, err := s.ScanScheduler.AddAt(nextRun, fireFn)
+	if err != nil {
 		logger.Errorf("failed to register scheduled scan %q: %v", name, err)
+		return
+	}
+
+	s.scanScheduleMu.Lock()
+	if s.scanScheduleEntries == nil {
+		s.scanScheduleEntries = make(map[string]string)
+	}
+	s.scanScheduleEntries[id] = entryID
+	s.scanScheduleMu.Unlock()
+}
+
+// unregisterSchedule cancels the armed timer (if any) for the given schedule ID.
+func (s *Manager) unregisterSchedule(id string) {
+	if s.ScanScheduler == nil {
+		return
+	}
+
+	s.scanScheduleMu.Lock()
+	entryID, ok := s.scanScheduleEntries[id]
+	if ok {
+		delete(s.scanScheduleEntries, id)
+	}
+	s.scanScheduleMu.Unlock()
+
+	if ok {
+		s.ScanScheduler.Remove(entryID)
 	}
 }

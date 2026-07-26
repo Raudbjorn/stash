@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stashapp/stash/internal/manager/config"
@@ -14,6 +15,9 @@ import (
 func newTestManagerForSchedules(t *testing.T) *Manager {
 	t.Helper()
 	cfg := config.InitializeEmpty()
+	// Give the config a real (temp) file path so schedule mutations can
+	// persist via Config.Write().
+	cfg.SetConfigFile(filepath.Join(t.TempDir(), "config.yml"))
 	return &Manager{Config: cfg}
 }
 
@@ -137,6 +141,52 @@ func TestScheduledScanDestroy_NotFound(t *testing.T) {
 	m := newTestManagerForSchedules(t)
 	err := m.DestroyScheduledScan("nope")
 	assert.Error(t, err)
+}
+
+// TestScheduledScan_TimerCancelledOnUpdateAndDestroy verifies that the manager
+// tracks the scheduler entry ID so that updating or destroying a schedule
+// actually cancels its armed timer instead of leaking a stale one.
+func TestScheduledScan_TimerCancelledOnUpdateAndDestroy(t *testing.T) {
+	m := newTestManagerForSchedules(t)
+	m.StartScanScheduler()
+	defer m.StopScanScheduler()
+
+	entryCount := func() int {
+		m.scanScheduleMu.Lock()
+		defer m.scanScheduleMu.Unlock()
+		return len(m.scanScheduleEntries)
+	}
+
+	// A far-future daily time so the timer never fires during the test.
+	s, err := m.CreateScheduledScan(ScanScheduleInput{
+		Name: "Nightly", Spec: "daily@23:59", Repeat: true, Enabled: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, entryCount(), "one timer armed after create")
+
+	// Update must cancel the old timer and arm exactly one new one — not two.
+	_, err = m.UpdateScheduledScan(s.ID, ScanScheduleInput{
+		Name: "Nightly", Spec: "daily@23:58", Repeat: true, Enabled: true,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, entryCount(), "update must not leak a second timer")
+
+	// Disabling must remove the timer entirely.
+	_, err = m.UpdateScheduledScan(s.ID, ScanScheduleInput{
+		Name: "Nightly", Spec: "daily@23:58", Repeat: true, Enabled: false,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, entryCount(), "disabled schedule must have no armed timer")
+
+	// Re-enable, then destroy.
+	_, err = m.UpdateScheduledScan(s.ID, ScanScheduleInput{
+		Name: "Nightly", Spec: "daily@23:58", Repeat: true, Enabled: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, entryCount())
+
+	require.NoError(t, m.DestroyScheduledScan(s.ID))
+	assert.Equal(t, 0, entryCount(), "destroy must remove the armed timer")
 }
 
 func TestGetScheduledScans(t *testing.T) {

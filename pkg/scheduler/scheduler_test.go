@@ -133,7 +133,7 @@ func TestScheduler_FiresOnce(t *testing.T) {
 	// Schedule to fire 30ms from now (daily, any specific time doesn't matter; use absolute trigger via test helper)
 	triggerAt := now.Add(30 * time.Millisecond)
 
-	id, err := s.AddAt(triggerAt, false, func() {
+	id, err := s.AddAt(triggerAt, func() {
 		fired.Add(1)
 	})
 	require.NoError(t, err)
@@ -185,6 +185,56 @@ func TestScheduler_RemoveEntry(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 	assert.Equal(t, countAfterRemove, fired.Load(), "should not fire after removal")
+}
+
+func TestScheduler_RemoveByReturnedIDCancelsBeforeFire(t *testing.T) {
+	s := scheduler.New()
+	s.Start()
+	defer s.Stop()
+
+	var fired atomic.Int32
+	id, err := s.AddAt(time.Now().Add(50*time.Millisecond), func() {
+		fired.Add(1)
+	})
+	require.NoError(t, err)
+
+	// Cancelling with the ID returned by AddAt must prevent the run.
+	s.Remove(id)
+
+	time.Sleep(120 * time.Millisecond)
+	assert.Equal(t, int32(0), fired.Load(), "removed entry must not fire")
+}
+
+func TestScheduler_RemoveWrongIDDoesNotCancel(t *testing.T) {
+	s := scheduler.New()
+	s.Start()
+	defer s.Stop()
+
+	var fired atomic.Int32
+	_, err := s.AddAt(time.Now().Add(50*time.Millisecond), func() {
+		fired.Add(1)
+	})
+	require.NoError(t, err)
+
+	// Removing an unrelated ID must not affect the armed entry. This is the
+	// contract the manager relies on: it must track the ID returned by AddAt,
+	// not the schedule's own ID (the original bug passed the wrong ID here).
+	s.Remove("some-unrelated-id")
+
+	time.Sleep(120 * time.Millisecond)
+	assert.Equal(t, int32(1), fired.Load(), "entry keyed by a different ID must still fire")
+}
+
+func TestNextRunTime_UsesNowLocation(t *testing.T) {
+	loc, err := time.LoadLocation("America/New_York")
+	require.NoError(t, err)
+
+	// Thursday 01:00 local; daily 02:00 → same day 02:00 in the same location.
+	now := time.Date(2026, 1, 15, 1, 0, 0, 0, loc)
+	next := scheduler.NextRunTime(scheduler.AnyDay, 2, 0, now)
+
+	assert.Equal(t, loc.String(), next.Location().String(), "next run must be in now's location")
+	assert.Equal(t, time.Date(2026, 1, 15, 2, 0, 0, 0, loc), next)
 }
 
 func TestScheduler_StopAndStart(t *testing.T) {

@@ -198,17 +198,22 @@ func (j *ScanJob) runJob(ctx context.Context, paths []string, nTasks int, progre
 	var dirWg sync.WaitGroup
 	dirWg.Add(1)
 	go func() {
-		defer func() {
-			dirWg.Done()
+		defer dirWg.Done()
 
-			if p := recover(); p != nil {
-				logger.Errorf("panic while processing dir queue: %v", p)
-				logger.Errorf(string(debug.Stack()))
-			}
-		}()
-
+		// Drain the whole queue. A panic on a single item is recovered
+		// per-item so the writer keeps draining — otherwise the goroutine
+		// would exit, nothing would drain dirQueue, and the walker would
+		// block forever on a full channel.
 		for d := range j.dirQueue {
-			j.processQueueItem(ctx, d, progress)
+			func(d file.ScannedFile) {
+				defer func() {
+					if p := recover(); p != nil {
+						logger.Errorf("panic while processing dir %q: %v", d.Path, p)
+						logger.Errorf(string(debug.Stack()))
+					}
+				}()
+				j.processQueueItem(ctx, d, progress)
+			}(d)
 		}
 	}()
 
@@ -233,10 +238,13 @@ func (j *ScanJob) queueFiles(ctx context.Context, paths []string, progress *job.
 
 	var err error
 	progress.ExecuteTask("Walking directory tree", func() {
-		j.dirCheckAttempts.Store(0)
-		j.dirCheckHits.Store(0)
-
 		for _, p := range paths {
+			// Reset the hit-rate governor per path so a warm path's history
+			// doesn't gate the optimisation on a subsequently scanned cold
+			// path (each path has its own filesystem classification too).
+			j.dirCheckAttempts.Store(0)
+			j.dirCheckHits.Store(0)
+
 			skipUnchanged := true
 			isNet, netErr := fsutil.IsNetworkFS(p)
 			if netErr != nil {
@@ -345,13 +353,15 @@ func (j *ScanJob) queueFileFunc(ctx context.Context, f models.FS, zipFile *file.
 			if j.shouldCheckFolder() {
 				j.dirCheckAttempts.Add(1)
 				_, unchanged, err := j.scanner.CheckFolder(ctx, ff)
-				if err != nil {
-					if !errors.Is(err, context.Canceled) {
-						logger.Errorf("error checking folder %q: %v", path, err)
-					}
-					return fs.SkipDir
-				}
-				if unchanged {
+				switch {
+				case errors.Is(err, context.Canceled):
+					return err
+				case err != nil:
+					// A transient read error (e.g. SQLITE_BUSY under load) must
+					// not drop the entire subtree from the scan. Fall through
+					// and scan this folder normally.
+					logger.Errorf("error checking folder %q, scanning it normally: %v", path, err)
+				case unchanged:
 					j.dirCheckHits.Add(1)
 					j.unchangedDirs.Store(ff.Path, struct{}{})
 					return nil
