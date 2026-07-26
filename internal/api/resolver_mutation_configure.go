@@ -424,7 +424,8 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 	}
 
 	refreshNamePlausibilityScorer := false
-	if input.OnnxRuntimeLibPath != nil {
+	existingOnnxRuntimeLibPath := c.GetOnnxRuntimeLibPath()
+	if input.OnnxRuntimeLibPath != nil && *input.OnnxRuntimeLibPath != existingOnnxRuntimeLibPath {
 		r.setConfigString(config.OnnxRuntimeLibPath, input.OnnxRuntimeLibPath)
 		refreshNamePlausibilityScorer = true
 	}

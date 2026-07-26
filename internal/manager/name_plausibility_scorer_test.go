@@ -38,6 +38,24 @@ func TestFindOnnxRuntimeLibrary(t *testing.T) {
 	})
 }
 
+// resetNamePlausibilityScorerState resets the package-level singleton state
+// to its zero-value defaults (unloaded, heuristic scorer, no model). It's
+// called both before and after TestReloadNamePlausibilityScorer so the test
+// is self-contained regardless of what ran before it in the same process,
+// and doesn't leave state behind for whatever runs after it.
+func resetNamePlausibilityScorerState(t *testing.T) {
+	t.Helper()
+
+	namePlausibilityReloadMu.Lock()
+	namePlausibilityLoaded = false
+	namePlausibilityReloadMu.Unlock()
+
+	namePlausibilityScorerMu.Lock()
+	namePlausibilityScorer = metadata.HeuristicNamePlausibilityScorer{}
+	namePlausibilityModel = nil
+	namePlausibilityScorerMu.Unlock()
+}
+
 // TestReloadNamePlausibilityScorer exercises the reload path with no
 // onnxruntime library available, which is the only path that runs
 // unconditionally in CI. It guards against the two failure modes a reload
@@ -49,15 +67,10 @@ func TestReloadNamePlausibilityScorer(t *testing.T) {
 	onnxRuntimeLibraryPaths = []string{"/does/not/exist"}
 	t.Setenv("STASH_ONNXRUNTIME_LIB_PATH", "")
 
+	resetNamePlausibilityScorerState(t)
 	t.Cleanup(func() {
 		onnxRuntimeLibraryPaths = originalPaths
-		namePlausibilityReloadMu.Lock()
-		namePlausibilityLoaded = false
-		namePlausibilityReloadMu.Unlock()
-		namePlausibilityScorerMu.Lock()
-		namePlausibilityScorer = nil
-		namePlausibilityModel = nil
-		namePlausibilityScorerMu.Unlock()
+		resetNamePlausibilityScorerState(t)
 	})
 
 	assertHeuristic := func(t *testing.T) {

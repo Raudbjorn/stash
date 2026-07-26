@@ -37,8 +37,13 @@ var (
 	// namePlausibilityScorerMu guards the two vars below so concurrent
 	// readers (getNamePlausibilityScorer, called once per analyzer job) never
 	// block on more than the brief pointer swap a reload performs.
+	//
+	// namePlausibilityScorer always holds a non-nil scorer, defaulting to
+	// the heuristic one - doReloadNamePlausibilityScorer only ever replaces
+	// it with something, never clears it to nil, so callers never need a
+	// nil check.
 	namePlausibilityScorerMu sync.RWMutex
-	namePlausibilityScorer   metadata.NamePlausibilityScorer
+	namePlausibilityScorer   metadata.NamePlausibilityScorer = metadata.HeuristicNamePlausibilityScorer{}
 	namePlausibilityModel    *embedding.Model
 )
 
@@ -83,17 +88,36 @@ func reloadNamePlausibilityScorer() {
 	namePlausibilityLoaded = true
 }
 
-// doReloadNamePlausibilityScorer does the actual close-old/resolve/load-new
+// doReloadNamePlausibilityScorer does the actual resolve/close-old/load-new
 // work. Callers must hold namePlausibilityReloadMu.
 //
-// The old model is closed - which destroys the process-global onnxruntime
-// environment - before a new one is loaded, since InitializeEnvironment
-// cannot run again until the previous environment is destroyed. This means
-// there's a brief window, bounded by how long the new model takes to load,
-// where the scorer is the heuristic fallback; that's an acceptable
-// consequence of the same "never a hard failure" philosophy that governs
-// every other failure path here.
+// The library path is resolved first, before anything currently loaded is
+// touched: tearing down a working embedding model only makes sense if a
+// replacement candidate actually exists. Without this ordering, an admin
+// clearing or mistyping the configured path - with no STASH_ONNXRUNTIME_LIB_PATH
+// or default install location to fall back to either - would permanently
+// strand the scorer on the heuristic fallback even though the previously
+// loaded library is still sitting on disk, untouched.
+//
+// Only once a candidate path is found is the old model closed - which
+// destroys the process-global onnxruntime environment - before the new one
+// is loaded, since InitializeEnvironment cannot run again until the
+// previous environment is destroyed. This means there's a brief window,
+// bounded by how long the new model takes to load, where the scorer is the
+// heuristic fallback; that's an acceptable consequence of the same "never a
+// hard failure" philosophy that governs every other failure path here. If
+// the candidate path turns out to be invalid (embedding.Load fails after
+// the old model has already been closed), the scorer likewise settles on
+// the heuristic fallback rather than the old model - a rarer case than a
+// missing path, since it means a file exists there but isn't a usable
+// onnxruntime library.
 func doReloadNamePlausibilityScorer() {
+	libPath, ok := findOnnxRuntimeLibrary()
+	if !ok {
+		logger.Infof("[scene metadata] onnxruntime shared library not found; leaving name-plausibility scorer unchanged")
+		return
+	}
+
 	namePlausibilityScorerMu.Lock()
 	oldModel := namePlausibilityModel
 	namePlausibilityScorer = metadata.HeuristicNamePlausibilityScorer{}
@@ -104,12 +128,6 @@ func doReloadNamePlausibilityScorer() {
 		if err := oldModel.Close(); err != nil {
 			logger.Warnf("[scene metadata] error closing previous embedding model: %v", err)
 		}
-	}
-
-	libPath, ok := findOnnxRuntimeLibrary()
-	if !ok {
-		logger.Infof("[scene metadata] onnxruntime shared library not found; using heuristic name-plausibility scorer")
-		return
 	}
 
 	model, err := embedding.Load(libPath)
