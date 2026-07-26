@@ -337,6 +337,61 @@ func TestMarkerSyncApplyGalleries(t *testing.T) {
 	}
 }
 
+// TestMarkerSyncScenesExcludesSkipSyncTag proves the fetch-path scene selection
+// excludes scenes bearing the skip-sync tag, mirroring the submit path.
+func TestMarkerSyncScenesExcludesSkipSyncTag(t *testing.T) {
+	r := newTestRepository(t)
+	ctx := context.Background()
+	s := &Manager{Repository: r}
+
+	var keepID, skipID int
+	if err := txn.WithTxn(ctx, r.TxnManager, func(ctx context.Context) error {
+		tag := models.NewTag()
+		tag.Name = ttSkipSyncTagName
+		if err := r.Tag.Create(ctx, &models.CreateTagInput{Tag: &tag}); err != nil {
+			return err
+		}
+
+		keep := models.NewScene()
+		keep.Title = "keep me"
+		if err := r.Scene.Create(ctx, &keep, nil); err != nil {
+			return err
+		}
+		keepID = keep.ID
+
+		skip := models.NewScene()
+		skip.Title = "skip me"
+		if err := r.Scene.Create(ctx, &skip, nil); err != nil {
+			return err
+		}
+		skipID = skip.ID
+
+		_, err := r.Scene.UpdatePartial(ctx, skipID, models.ScenePartial{
+			TagIDs: &models.UpdateIDs{IDs: []int{tag.ID}, Mode: models.RelationshipUpdateModeAdd},
+		})
+		return err
+	}); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	all := MarkerSyncSelectModeAll
+	scenes, err := s.markerSyncScenes(ctx, MarkerSyncInput{Mode: &all})
+	if err != nil {
+		t.Fatalf("markerSyncScenes: %v", err)
+	}
+
+	ids := map[int]bool{}
+	for _, sc := range scenes {
+		ids[sc.ID] = true
+	}
+	if !ids[keepID] {
+		t.Errorf("keep scene %d missing from result (should be synced)", keepID)
+	}
+	if ids[skipID] {
+		t.Errorf("skip-sync-tagged scene %d present in result, want excluded", skipID)
+	}
+}
+
 // TestMarkerSyncIntegration exercises the real repository-backed MarkerWriter
 // and TagResolver against markersync.Apply end-to-end on a live sqlite database.
 func TestMarkerSyncIntegration(t *testing.T) {

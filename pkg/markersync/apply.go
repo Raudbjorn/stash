@@ -49,8 +49,9 @@ type MarkerWriter interface {
 
 // ApplyOptions controls the dedup/apply behaviour.
 type ApplyOptions struct {
-	// Tolerance is the duplicate matching window in seconds. Values <= 0 fall
-	// back to DefaultTolerance.
+	// Tolerance is the duplicate matching window in seconds. A negative value
+	// falls back to DefaultTolerance; 0 means exact match (a candidate is a
+	// duplicate only when it lands on the same second as an existing marker).
 	Tolerance float64
 	// Mode is one of ModeSkip, ModeMerge or ModeOverwrite. An empty value
 	// defaults to ModeSkip.
@@ -96,7 +97,9 @@ func Apply(ctx context.Context, w MarkerWriter, tags TagResolver, sceneID int, c
 	var result ApplyResult
 
 	tolerance := opts.Tolerance
-	if tolerance <= 0 {
+	// A negative tolerance is treated as "unset" and defaults; 0 is a deliberate
+	// exact-match request and is honoured.
+	if tolerance < 0 {
 		tolerance = DefaultTolerance
 	}
 	mode := opts.Mode

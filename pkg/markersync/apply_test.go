@@ -293,18 +293,48 @@ func TestApply_ExtraTagsExcludePrimary(t *testing.T) {
 }
 
 func TestApply_DefaultsToleranceAndMode(t *testing.T) {
-	// Tolerance 0 -> DefaultTolerance (15); Mode "" -> skip.
+	// A NEGATIVE tolerance -> DefaultTolerance (15); Mode "" -> skip. (A 0
+	// tolerance is now a deliberate exact-match window, tested separately.)
 	w := &fakeMarkerWriter{existing: []ExistingMarker{{ID: 42, Seconds: 100, PrimaryTagID: 1}}}
 	tags := newFakeTagResolver(map[string]int{"A": 1})
 
 	res, err := Apply(context.Background(), w, tags, 7,
 		[]MarkerCandidate{{Title: "c", PrimaryTag: "A", Seconds: 110}}, // within default 15
-		ApplyOptions{TagAware: true})
+		ApplyOptions{TagAware: true, Tolerance: -1})
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	if res.Skipped != 1 {
 		t.Errorf("Skipped = %d, want 1 (default tolerance/mode)", res.Skipped)
+	}
+}
+
+func TestApply_ZeroToleranceExactMatch(t *testing.T) {
+	// Tolerance 0 means exact match: a candidate 14s away from an existing marker
+	// is NOT a duplicate and must be created.
+	w := &fakeMarkerWriter{existing: []ExistingMarker{{ID: 42, Seconds: 100, PrimaryTagID: 1}}}
+	tags := newFakeTagResolver(map[string]int{"A": 1})
+
+	res, err := Apply(context.Background(), w, tags, 7,
+		[]MarkerCandidate{{Title: "c", PrimaryTag: "A", Seconds: 114}}, // 14s away
+		ApplyOptions{Tolerance: 0, Mode: ModeSkip, TagAware: true})
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if res.Created != 1 || res.Skipped != 0 {
+		t.Errorf("Tolerance 0: Created=%d Skipped=%d, want 1/0 (14s apart is NOT a dup)", res.Created, res.Skipped)
+	}
+
+	// And a candidate landing on the exact same second IS a duplicate.
+	w2 := &fakeMarkerWriter{existing: []ExistingMarker{{ID: 42, Seconds: 100, PrimaryTagID: 1}}}
+	res2, err := Apply(context.Background(), w2, newFakeTagResolver(map[string]int{"A": 1}), 7,
+		[]MarkerCandidate{{Title: "c", PrimaryTag: "A", Seconds: 100}},
+		ApplyOptions{Tolerance: 0, Mode: ModeSkip, TagAware: true})
+	if err != nil {
+		t.Fatalf("Apply (exact): %v", err)
+	}
+	if res2.Skipped != 1 || res2.Created != 0 {
+		t.Errorf("Tolerance 0 exact: Created=%d Skipped=%d, want 0/1", res2.Created, res2.Skipped)
 	}
 }
 

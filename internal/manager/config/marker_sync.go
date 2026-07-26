@@ -1,6 +1,10 @@
 package config
 
-import "github.com/stashapp/stash/pkg/logger"
+import (
+	"fmt"
+
+	"github.com/stashapp/stash/pkg/logger"
+)
 
 // Marker Sync default values. These are applied by GetMarkerSyncConfig when the
 // corresponding field is unset (see the getter for the exact unset semantics).
@@ -173,6 +177,28 @@ func (in *MarkerSyncConfigInput) ApplyTo(base MarkerSyncConfig) MarkerSyncConfig
 	return base
 }
 
+// Validate reports whether the (fully-merged) config holds sane values. It is
+// called before the config is persisted so invalid input is rejected instead of
+// being stored. It mirrors ValidateStashBoxes.
+func (c MarkerSyncConfig) Validate() error {
+	switch c.Mode {
+	case "", "skip", "merge", "overwrite":
+		// ok
+	default:
+		return fmt.Errorf("marker sync: invalid mode %q (want skip, merge or overwrite)", c.Mode)
+	}
+	if c.ToleranceSeconds < 0 {
+		return fmt.Errorf("marker sync: tolerance_seconds must be >= 0, got %v", c.ToleranceSeconds)
+	}
+	if c.ThePornDB.RequestsPerMinute < 0 {
+		return fmt.Errorf("marker sync: theporndb.requests_per_minute must be >= 0, got %d", c.ThePornDB.RequestsPerMinute)
+	}
+	if c.TimestampTrade.RequestsPerMinute < 0 {
+		return fmt.Errorf("marker sync: timestamp_trade.requests_per_minute must be >= 0, got %d", c.TimestampTrade.RequestsPerMinute)
+	}
+	return nil
+}
+
 // markerSyncDefaults returns a fully-populated MarkerSyncConfig representing the
 // behaviour of an installation that has never configured marker sync.
 func markerSyncDefaults() MarkerSyncConfig {
@@ -218,9 +244,13 @@ func (i *Config) GetMarkerSyncConfig() MarkerSyncConfig {
 		logger.Warnf("error unmarshalling %s config: %v", MarkerSync, err)
 	}
 
-	// Zero-guard the numeric/string/slice fields that cannot be told apart from
-	// a deliberate "unset within a set key".
-	if cfg.ToleranceSeconds == 0 {
+	// Zero-guard the string/slice fields that cannot be told apart from a
+	// deliberate "unset within a set key". ToleranceSeconds is deliberately NOT
+	// zero-guarded: once the key is set the config is stored fully-merged (the
+	// resolver overlays input onto the current config), so a stored 0 is an
+	// intentional exact-match window and must be honoured. A negative value is
+	// nonsensical and defaults.
+	if cfg.ToleranceSeconds < 0 {
 		cfg.ToleranceSeconds = markerSyncDefaultTolerance
 	}
 	if cfg.Mode == "" {

@@ -100,6 +100,47 @@ func TestTimestampTradeSource_FetchMarkers_MillisecondsToSeconds(t *testing.T) {
 	}
 }
 
+// TestTimestampTradeSource_FetchMarkers_EndTime asserts that an optional wire
+// end_time (milliseconds) surfaces as EndSeconds in seconds, and that a marker
+// without end_time leaves EndSeconds nil.
+func TestTimestampTradeSource_FetchMarkers_EndTime(t *testing.T) {
+	srv := newTTStub(t,
+		map[string]string{"stash-abc": "555"},
+		map[string]string{"555": `{"markers": [
+			{"name": "Action", "tag_name": "T", "start_time": 90000, "end_time": 123456},
+			{"name": "NoEnd", "tag_name": "T", "start_time": 5000}
+		]}`},
+	)
+	defer srv.Close()
+
+	s := NewTimestampTradeSource(TimestampTradeOptions{Enabled: true})
+	s.baseURL = srv.URL
+
+	id := SceneIdentity{StashIDs: []StashID{
+		{Endpoint: "https://ignored/graphql", StashID: "stash-abc"},
+	}}
+
+	markers, err := s.FetchMarkers(context.Background(), id)
+	if err != nil {
+		t.Fatalf("FetchMarkers: %v", err)
+	}
+	if len(markers) != 2 {
+		t.Fatalf("got %d markers, want 2", len(markers))
+	}
+
+	// end_time 123456 ms -> 123.456 seconds.
+	if markers[0].EndSeconds == nil {
+		t.Fatalf("markers[0].EndSeconds = nil, want 123.456 (ms->sec)")
+	}
+	if *markers[0].EndSeconds != 123.456 {
+		t.Errorf("markers[0].EndSeconds = %v, want 123.456", *markers[0].EndSeconds)
+	}
+	// no end_time -> EndSeconds nil.
+	if markers[1].EndSeconds != nil {
+		t.Errorf("markers[1].EndSeconds = %v, want nil (no end_time on wire)", *markers[1].EndSeconds)
+	}
+}
+
 func TestTimestampTradeSource_FetchMarkers_SecondStashIDWins(t *testing.T) {
 	// Only the second stash id resolves via get-markers.
 	srv := newTTStub(t,
@@ -236,6 +277,65 @@ func TestTimestampTradeSource_FetchExtras(t *testing.T) {
 	wantMovieURL := "https://timestamp.trade/movie/42"
 	if len(g.URLs) != 2 || g.URLs[0] != "https://studio.example/collection" || g.URLs[1] != wantMovieURL {
 		t.Errorf("group URLs = %v, want [studio url, %s]", g.URLs, wantMovieURL)
+	}
+}
+
+// TestTimestampTradeSource_FetchSceneData_Memoised asserts the single-entry memo
+// collapses the repeated resolve+scene fetches performed by FetchMarkers and the
+// four extras providers into ONE resolve GET and ONE scene GET for the same
+// scene identity.
+func TestTimestampTradeSource_FetchSceneData_Memoised(t *testing.T) {
+	var resolveCalls, sceneCalls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/get-markers/"):
+			resolveCalls++
+			_, _ = w.Write([]byte(`{"scene_id": 555}`))
+		case strings.HasPrefix(r.URL.Path, "/json-scene/"):
+			sceneCalls++
+			_, _ = w.Write([]byte(`{
+				"scene_id": 555,
+				"markers": [{"name": "M", "tag_name": "T", "start_time": 1000}],
+				"urls": ["https://example.com/a"],
+				"galleries": [{"files": [{"md5": "aaa"}], "urls": []}],
+				"funscripts": [{"md5": "fs1"}],
+				"movies": [{"id": 42, "title": "G", "scenes": [{"scene_id": 555, "scene_index": 1}]}]
+			}`))
+		default:
+			http.Error(w, "unexpected "+r.URL.Path, http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	s := NewTimestampTradeSource(TimestampTradeOptions{Enabled: true})
+	s.baseURL = srv.URL
+
+	id := SceneIdentity{StashIDs: []StashID{
+		{Endpoint: "https://a/graphql", StashID: "stash-abc"},
+	}}
+	ctx := context.Background()
+
+	if _, err := s.FetchMarkers(ctx, id); err != nil {
+		t.Fatalf("FetchMarkers: %v", err)
+	}
+	if _, err := s.FetchGroups(ctx, id); err != nil {
+		t.Fatalf("FetchGroups: %v", err)
+	}
+	if _, err := s.FetchGalleries(ctx, id); err != nil {
+		t.Fatalf("FetchGalleries: %v", err)
+	}
+	if _, err := s.FetchExtraURLs(ctx, id); err != nil {
+		t.Fatalf("FetchExtraURLs: %v", err)
+	}
+	if _, err := s.FetchFunscripts(ctx, id); err != nil {
+		t.Fatalf("FetchFunscripts: %v", err)
+	}
+
+	if resolveCalls != 1 {
+		t.Errorf("resolve GETs = %d, want 1 (memoised across 5 providers)", resolveCalls)
+	}
+	if sceneCalls != 1 {
+		t.Errorf("scene GETs = %d, want 1 (memoised across 5 providers)", sceneCalls)
 	}
 }
 

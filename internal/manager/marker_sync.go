@@ -239,19 +239,17 @@ func buildMarkerSyncSources() []markersync.Source {
 	return sources
 }
 
-// markerSyncApplyOptions builds the apply options from the marker sync config,
-// defensively re-applying the getter's defaults for the guarded fields.
+// markerSyncApplyOptions builds the apply options from the marker sync config.
+// ToleranceSeconds is passed straight through: an unset key already yields the
+// default (15) via GetMarkerSyncConfig, and a stored 0 is a deliberate
+// exact-match request that must reach the apply engine unchanged.
 func markerSyncApplyOptions(cfg config.MarkerSyncConfig) markersync.ApplyOptions {
-	tolerance := cfg.ToleranceSeconds
-	if tolerance == 0 {
-		tolerance = markersync.DefaultTolerance
-	}
 	mode := cfg.Mode
 	if mode == "" {
 		mode = markersync.ModeSkip
 	}
 	return markersync.ApplyOptions{
-		Tolerance: tolerance,
+		Tolerance: cfg.ToleranceSeconds,
 		Mode:      mode,
 		SkipTags:  cfg.SkipTags,
 		TagAware:  cfg.TagAware,
@@ -802,12 +800,32 @@ func (s *Manager) MarkerSync(ctx context.Context, input MarkerSyncInput) int {
 }
 
 // markerSyncScenes resolves the scene set for the run, with stash ids loaded on
-// each returned scene. Scene resolution runs inside a read transaction.
+// each returned scene. Scenes bearing the skip-sync tag are excluded in every
+// selection mode, mirroring how the submit path honours its skip tag. Scene
+// resolution runs inside a read transaction.
 func (s *Manager) markerSyncScenes(ctx context.Context, input MarkerSyncInput) ([]*models.Scene, error) {
 	mode := input.resolveMode()
 
 	var scenes []*models.Scene
 	err := s.Repository.WithReadTxn(ctx, func(ctx context.Context) error {
+		// Resolve the skip-sync tag once; id 0 means it does not exist and no
+		// scene is skipped for it. The tag is never created here.
+		skipTagID, err := s.markerSyncSkipSyncTagID(ctx)
+		if err != nil {
+			return err
+		}
+
+		// sceneHasSkipTag reports whether sc bears the skip-sync tag.
+		sceneHasSkipTag := func(sc *models.Scene) (bool, error) {
+			if skipTagID == 0 {
+				return false, nil
+			}
+			if err := sc.LoadTagIDs(ctx, s.Repository.Scene); err != nil {
+				return false, fmt.Errorf("loading tag ids for scene %d: %w", sc.ID, err)
+			}
+			return slices.Contains(sc.TagIDs.List(), skipTagID), nil
+		}
+
 		switch mode {
 		case MarkerSyncSelectModeIds:
 			ids, err := stringslice.StringSliceToIntSlice(input.SceneIDs)
@@ -818,7 +836,19 @@ func (s *Manager) markerSyncScenes(ctx context.Context, input MarkerSyncInput) (
 			if err != nil {
 				return fmt.Errorf("finding scenes by id: %w", err)
 			}
-			scenes = found
+			for _, sc := range found {
+				if sc == nil {
+					continue
+				}
+				skip, err := sceneHasSkipTag(sc)
+				if err != nil {
+					return err
+				}
+				if skip {
+					continue
+				}
+				scenes = append(scenes, sc)
+			}
 			return nil
 
 		case MarkerSyncSelectModeAll, MarkerSyncSelectModeOnlyWithoutMarkers:
@@ -843,6 +873,14 @@ func (s *Manager) markerSyncScenes(ctx context.Context, input MarkerSyncInput) (
 					return fmt.Errorf("loading stash ids for scene %d: %w", sc.ID, err)
 				}
 
+				skip, err := sceneHasSkipTag(sc)
+				if err != nil {
+					return err
+				}
+				if skip {
+					continue
+				}
+
 				if mode == MarkerSyncSelectModeOnlyWithoutMarkers {
 					existing, err := s.Repository.SceneMarker.FindBySceneID(ctx, sc.ID)
 					if err != nil {
@@ -863,4 +901,19 @@ func (s *Manager) markerSyncScenes(ctx context.Context, input MarkerSyncInput) (
 	})
 
 	return scenes, err
+}
+
+// markerSyncSkipSyncTagID returns the id of the skip-sync tag, or 0 when the tag
+// does not exist. It must be called inside a read transaction. The tag is never
+// created by this package; a missing tag simply means nothing is skipped.
+func (s *Manager) markerSyncSkipSyncTagID(ctx context.Context) (int, error) {
+	const nocase = true
+	tag, err := s.Repository.Tag.FindByName(ctx, ttSkipSyncTagName, nocase)
+	if err != nil {
+		return 0, fmt.Errorf("finding skip-sync tag: %w", err)
+	}
+	if tag == nil {
+		return 0, nil
+	}
+	return tag.ID, nil
 }

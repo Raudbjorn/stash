@@ -2,9 +2,11 @@ package manager
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stashapp/stash/pkg/models"
 	"github.com/stashapp/stash/pkg/txn"
@@ -101,6 +103,83 @@ func TestFunscriptMatchCopy(t *testing.T) {
 	}
 	if string(after) != sentinel {
 		t.Errorf("existing destination was overwritten: %q, want sentinel preserved", string(after))
+	}
+}
+
+// TestFunscriptMatchScene proves the stem match: a unique stem links to its one
+// scene, while a stem shared by two scenes is ambiguous and links to NEITHER
+// (returns 0) so a funscript is never linked to the wrong scene. It also proves
+// the query returns all results (no 25-row cap) by seeding 30 decoy scenes.
+func TestFunscriptMatchScene(t *testing.T) {
+	r := newTestRepository(t)
+	ctx := context.Background()
+	s := &Manager{Repository: r}
+
+	// makeScene creates a scene with a single video file at videoPath.
+	makeScene := func(folderPath, videoPath string) int {
+		var sceneID int
+		if err := txn.WithTxn(ctx, r.TxnManager, func(ctx context.Context) error {
+			folder := models.Folder{
+				Path:     folderPath,
+				DirEntry: models.DirEntry{ModTime: time.Now()},
+			}
+			if err := r.Folder.Create(ctx, &folder); err != nil {
+				return err
+			}
+			f := &models.VideoFile{
+				BaseFile: &models.BaseFile{
+					Path:           videoPath,
+					Basename:       filepath.Base(videoPath),
+					ParentFolderID: folder.ID,
+				},
+			}
+			if err := r.File.Create(ctx, f); err != nil {
+				return err
+			}
+			sc := models.NewScene()
+			sc.Title = videoPath
+			if err := r.Scene.Create(ctx, &sc, []models.FileID{f.ID}); err != nil {
+				return err
+			}
+			sceneID = sc.ID
+			return nil
+		}); err != nil {
+			t.Fatalf("creating scene %q: %v", videoPath, err)
+		}
+		return sceneID
+	}
+
+	// One scene whose stem exactly equals uniqueStem, plus 30 decoy scenes whose
+	// paths CONTAIN uniqueStem as a substring (so they all match the path query)
+	// but whose stems differ (so only the first exact-matches). This exercises
+	// the >25-row path: with the default 25-row page the exact match could be
+	// missed; with PerPage=-1 all rows are returned and the match is found.
+	const uniqueStem = "Unique Clip 0001"
+	uniqueID := makeScene("/lib/unique", "/lib/unique/"+uniqueStem+".mp4")
+	for i := 0; i < 30; i++ {
+		name := fmt.Sprintf("%s variant %02d", uniqueStem, i)
+		makeScene("/lib/decoy", "/lib/decoy/"+name+".mp4")
+	}
+
+	got, err := s.funscriptMatchScene(ctx, "/scripts/"+uniqueStem+".funscript")
+	if err != nil {
+		t.Fatalf("funscriptMatchScene (unique): %v", err)
+	}
+	if got != uniqueID {
+		t.Errorf("funscriptMatchScene(unique) = %d, want %d", got, uniqueID)
+	}
+
+	// Two scenes sharing the same stem -> ambiguous -> no link.
+	const sharedStem = "Shared Clip"
+	makeScene("/lib/a", "/lib/a/"+sharedStem+".mp4")
+	makeScene("/lib/b", "/lib/b/"+sharedStem+".mkv")
+
+	got, err = s.funscriptMatchScene(ctx, "/scripts/"+sharedStem+".funscript")
+	if err != nil {
+		t.Fatalf("funscriptMatchScene (ambiguous): %v", err)
+	}
+	if got != 0 {
+		t.Errorf("funscriptMatchScene(ambiguous) = %d, want 0 (ambiguous stem, not linked)", got)
 	}
 }
 

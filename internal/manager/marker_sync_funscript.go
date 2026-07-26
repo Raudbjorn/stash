@@ -196,24 +196,30 @@ func (s *Manager) funscriptIndexMatch(ctx context.Context) (int, error) {
 	return matched, nil
 }
 
-// funscriptMatchScene finds the scene whose primary video file basename-stem
-// equals the funscript filename-stem, mirroring the community plugin (query
-// scenes by path substring, then compare stems exactly). It returns 0 when there
-// is no match. The lookup runs in a read transaction.
+// funscriptMatchScene finds the scene whose video file basename-stem equals the
+// funscript filename-stem, mirroring the community plugin (query scenes by path
+// substring, then compare stems exactly). It returns 0 when there is no match.
+//
+// The substring query requests ALL results (per_page = -1) so a real match past
+// the default page limit is never missed. If more than one distinct scene has a
+// file matching the stem the match is AMBIGUOUS: no scene is linked (returns 0)
+// and a warning is logged, so a funscript is never silently linked to the wrong
+// scene. The lookup runs in a read transaction.
 func (s *Manager) funscriptMatchScene(ctx context.Context, funscriptPath string) (int, error) {
 	stem := funscriptStem(funscriptPath)
 	if stem == "" {
 		return 0, nil
 	}
 
-	var sceneID int
+	var matchedIDs []int
 	err := s.Repository.WithReadTxn(ctx, func(ctx context.Context) error {
+		all := models.PerPageAll
 		scenes, err := scene.Query(ctx, s.Repository.Scene, &models.SceneFilterType{
 			Path: &models.StringCriterionInput{
 				Value:    stem,
 				Modifier: models.CriterionModifierIncludes,
 			},
-		}, nil)
+		}, &models.FindFilterType{PerPage: &all})
 		if err != nil {
 			return fmt.Errorf("querying scenes by path: %w", err)
 		}
@@ -235,14 +241,26 @@ func (s *Manager) funscriptMatchScene(ctx context.Context, funscriptPath string)
 					basename = filepath.Base(bf.Path)
 				}
 				if funscriptStem(basename) == stem {
-					sceneID = sc.ID
-					return nil
+					matchedIDs = append(matchedIDs, sc.ID)
+					break
 				}
 			}
 		}
 		return nil
 	})
-	return sceneID, err
+	if err != nil {
+		return 0, err
+	}
+
+	switch len(matchedIDs) {
+	case 0:
+		return 0, nil
+	case 1:
+		return matchedIDs[0], nil
+	default:
+		logger.Warnf("Marker Sync Funscript Index: funscript stem %q is ambiguous (matches scenes %v); not linking", stem, matchedIDs)
+		return 0, nil
+	}
 }
 
 // funscriptStem returns the base filename of p without its extension.

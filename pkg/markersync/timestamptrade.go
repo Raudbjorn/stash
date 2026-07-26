@@ -6,6 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
+	"strings"
+	"sync"
 )
 
 // timestampTradeBaseURL is the REST API base for timestamp.trade.
@@ -28,6 +31,18 @@ type TimestampTradeSource struct {
 	client  *restClient
 	baseURL string
 	enabled bool
+
+	// Single-entry memo for fetchSceneData. FetchMarkers and each extras provider
+	// resolve+GET the same scene independently, so a full sync of one scene would
+	// otherwise perform 5 identical round trips. Because the sync task processes
+	// one scene's markers+providers fully before moving to the next, a one-slot
+	// cache keyed by the scene's stash-id signature collapses those to one fetch
+	// while staying O(1) memory. cacheValid distinguishes a cached "no match"
+	// (cacheResp == nil) from "not yet fetched".
+	mu         sync.Mutex
+	cacheValid bool
+	cacheKey   string
+	cacheResp  *ttSceneResponse
 }
 
 // TimestampTradeOptions configures a TimestampTradeSource.
@@ -80,9 +95,10 @@ type ttSceneResponse struct {
 	SceneID json.Number `json:"scene_id"`
 
 	Markers []struct {
-		Name      string  `json:"name"`
-		TagName   string  `json:"tag_name"`
-		StartTime float64 `json:"start_time"` // MILLISECONDS
+		Name      string   `json:"name"`
+		TagName   string   `json:"tag_name"`
+		StartTime float64  `json:"start_time"` // MILLISECONDS
+		EndTime   *float64 `json:"end_time"`   // MILLISECONDS, optional
 	} `json:"markers"`
 
 	// URLs are extra scene URLs.
@@ -143,11 +159,18 @@ func (s *TimestampTradeSource) FetchMarkers(ctx context.Context, id SceneIdentit
 			primaryTag = m.Name
 		}
 
-		markers = append(markers, MarkerCandidate{
+		mc := MarkerCandidate{
 			Title:      m.Name,
 			PrimaryTag: primaryTag,
 			Seconds:    m.StartTime / millisPerSecond, // ms -> seconds
-		})
+		}
+		// Optional end time: only present when the wire carries end_time. Convert
+		// ms -> seconds, matching the start-time conversion.
+		if m.EndTime != nil {
+			end := *m.EndTime / millisPerSecond
+			mc.EndSeconds = &end
+		}
+		markers = append(markers, mc)
 	}
 
 	if len(markers) == 0 {
@@ -291,14 +314,52 @@ func (s *TimestampTradeSource) FetchFunscripts(ctx context.Context, id SceneIden
 }
 
 // fetchSceneData resolves the scene's stash ids to a timestamp.trade scene and
-// fetches its /json-scene record in a single round trip. It returns (nil, nil)
-// when no stash id resolves to a timestamp.trade scene.
+// fetches its /json-scene record. It returns (nil, nil) when no stash id
+// resolves to a timestamp.trade scene.
 //
-// NOTE: FetchMarkers and each extras provider call this independently, so a
-// full-sync of one scene performs up to four resolve+GET round trips against
-// timestamp.trade. This keeps each capability self-contained; a per-scene cache
-// can be layered on later if the request volume warrants it.
+// It memoises the most recent result (keyed by the scene's stash-id signature)
+// so the repeated calls from FetchMarkers and each extras provider for the same
+// scene collapse to a single resolve+GET. A cached "no match" (nil response) is
+// returned as well, avoiding a re-fetch. Errors are never cached.
 func (s *TimestampTradeSource) fetchSceneData(ctx context.Context, id SceneIdentity) (*ttSceneResponse, error) {
+	key := sceneIdentityKey(id)
+
+	s.mu.Lock()
+	if s.cacheValid && s.cacheKey == key {
+		resp := s.cacheResp
+		s.mu.Unlock()
+		return resp, nil
+	}
+	s.mu.Unlock()
+
+	resp, err := s.fetchSceneDataUncached(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	s.cacheValid = true
+	s.cacheKey = key
+	s.cacheResp = resp
+	s.mu.Unlock()
+
+	return resp, nil
+}
+
+// sceneIdentityKey builds a stable signature for a scene identity from its
+// (endpoint, stash id) pairs, order-independent, for use as the memo key.
+func sceneIdentityKey(id SceneIdentity) string {
+	parts := make([]string, 0, len(id.StashIDs))
+	for _, sid := range id.StashIDs {
+		parts = append(parts, sid.StashID+"\x00"+sid.Endpoint)
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, "\x01")
+}
+
+// fetchSceneDataUncached performs the two-step resolve+GET without consulting or
+// populating the memo.
+func (s *TimestampTradeSource) fetchSceneDataUncached(ctx context.Context, id SceneIdentity) (*ttSceneResponse, error) {
 	for _, sid := range id.StashIDs {
 		ttSceneID, err := s.resolveSceneID(ctx, sid.StashID)
 		if err != nil {
@@ -512,7 +573,12 @@ func buildSubmitScene(scene SceneSubmission) ttWireScene {
 		wire.FunscriptHashes = make([]ttWireFunscript, 0, len(scene.FunscriptHashes))
 		for _, fh := range scene.FunscriptHashes {
 			var meta json.RawMessage
-			if fh.Metadata != "" {
+			// Only pass metadata through when it is valid JSON. Invalid JSON here
+			// would make json.Marshal of the whole payload fail (RawMessage is
+			// re-validated on encode), aborting the entire scene submission; drop
+			// it to null instead. Callers validate + log upstream; this is a
+			// belt-and-suspenders guard at the wire boundary.
+			if fh.Metadata != "" && json.Valid([]byte(fh.Metadata)) {
 				meta = json.RawMessage(fh.Metadata)
 			}
 			wire.FunscriptHashes = append(wire.FunscriptHashes, ttWireFunscript{

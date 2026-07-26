@@ -2,8 +2,10 @@ package manager
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"slices"
 
 	"github.com/stashapp/stash/internal/manager/config"
 	"github.com/stashapp/stash/pkg/job"
@@ -180,9 +182,17 @@ func buildSceneSubmission(ctx context.Context, r models.Repository, s *models.Sc
 		}
 		sub.FunscriptHashes = make([]markersync.FunscriptHash, 0, len(rows))
 		for _, row := range rows {
+			// Guard against a corrupt stored metadata blob: invalid JSON would
+			// otherwise abort the whole scene submission when the payload is
+			// marshalled. Omit just this funscript's metadata (send null) and log.
+			meta := row.Metadata
+			if meta != "" && !json.Valid([]byte(meta)) {
+				logger.Warnf("Marker Sync Submit: scene %d: funscript %q has invalid metadata JSON; omitting its metadata", s.ID, row.Filename)
+				meta = ""
+			}
 			sub.FunscriptHashes = append(sub.FunscriptHashes, markersync.FunscriptHash{
 				Filename: filepath.Base(row.Filename),
-				Metadata: row.Metadata,
+				Metadata: meta,
 				MD5:      row.MD5,
 			})
 		}
@@ -356,7 +366,7 @@ func (s *Manager) markerSyncSubmitScenes(ctx context.Context, input MarkerSyncSu
 				if err := sc.LoadTagIDs(ctx, s.Repository.Scene); err != nil {
 					return fmt.Errorf("loading tag ids for scene %d: %w", sc.ID, err)
 				}
-				if containsInt(sc.TagIDs.List(), skipTagID) {
+				if slices.Contains(sc.TagIDs.List(), skipTagID) {
 					continue
 				}
 			}
@@ -381,14 +391,4 @@ func (s *Manager) markerSyncSkipSubmitTagID(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 	return tag.ID, nil
-}
-
-// containsInt reports whether v is present in vs.
-func containsInt(vs []int, v int) bool {
-	for _, x := range vs {
-		if x == v {
-			return true
-		}
-	}
-	return false
 }

@@ -59,6 +59,29 @@ func TestMarkerSyncConfigInputApplyTo(t *testing.T) {
 	assert.Equal(t, base, (*MarkerSyncConfigInput)(nil).ApplyTo(base))
 }
 
+// TestMarkerSyncConfigValidate covers the pre-persist validation of the merged
+// config: bad mode, negative tolerance and negative per-source rate all fail;
+// valid values (including a 0 tolerance meaning exact match) pass.
+func TestMarkerSyncConfigValidate(t *testing.T) {
+	valid := MarkerSyncConfig{Mode: "skip", ToleranceSeconds: 0}
+	assert.NoError(t, valid.Validate())
+
+	for _, m := range []string{"", "skip", "merge", "overwrite"} {
+		assert.NoError(t, MarkerSyncConfig{Mode: m}.Validate(), "mode %q should be valid", m)
+	}
+
+	assert.Error(t, MarkerSyncConfig{Mode: "bogus"}.Validate())
+	assert.Error(t, MarkerSyncConfig{Mode: "skip", ToleranceSeconds: -1}.Validate())
+	assert.Error(t, MarkerSyncConfig{
+		Mode:      "skip",
+		ThePornDB: MarkerSyncSourceConfig{RequestsPerMinute: -5},
+	}.Validate())
+	assert.Error(t, MarkerSyncConfig{
+		Mode:           "skip",
+		TimestampTrade: MarkerSyncSourceConfig{RequestsPerMinute: -1},
+	}.Validate())
+}
+
 // TestGetMarkerSyncConfigDefaults verifies that an installation that has never
 // configured marker sync gets a fully-defaulted config.
 func TestGetMarkerSyncConfigDefaults(t *testing.T) {
@@ -79,8 +102,8 @@ func TestGetMarkerSyncConfigDefaults(t *testing.T) {
 }
 
 // TestGetMarkerSyncConfigPartial verifies that when the key is set, stored
-// values are respected verbatim (including a false bool) while the zero-valued
-// numeric/string/slice fields are still defaulted.
+// values are respected verbatim (including a false bool and a 0 tolerance, which
+// means exact match) while the zero-valued Mode/SkipTags fields are defaulted.
 func TestGetMarkerSyncConfigPartial(t *testing.T) {
 	i := InitializeEmpty()
 
@@ -105,8 +128,10 @@ func TestGetMarkerSyncConfigPartial(t *testing.T) {
 	assert.Equal(t, "secret", cfg.ThePornDB.APIKey)
 	assert.Equal(t, 30, cfg.TimestampTrade.RequestsPerMinute)
 
-	// Zero-valued guarded fields defaulted.
-	assert.Equal(t, markerSyncDefaultTolerance, cfg.ToleranceSeconds)
+	// Zero-valued Mode/SkipTags are still defaulted, but a stored 0 tolerance is
+	// honoured as an exact-match window (the config is stored fully-merged, so 0
+	// is deliberate, not "unset").
+	assert.Equal(t, 0.0, cfg.ToleranceSeconds)
 	assert.Equal(t, markerSyncDefaultMode, cfg.Mode)
 	assert.Equal(t, []string{
 		"[Timestamp: Skip Sync]",
