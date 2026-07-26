@@ -405,6 +405,7 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 	}
 
 	r.setConfigBool(config.CreateGalleriesFromFolders, input.CreateGalleriesFromFolders)
+	r.setConfigBool(config.AutoScanWatch, input.AutoScanWatch)
 
 	if input.CustomPerformerImageLocation != nil {
 		c.SetString(config.CustomPerformerImageLocation, *input.CustomPerformerImageLocation)
@@ -452,6 +453,9 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 	}
 
 	manager.GetInstance().RefreshConfig()
+	// Re-arm the filesystem watcher in case auto_scan_watch or the library
+	// paths changed.
+	manager.GetInstance().RefreshFileWatcher()
 	if refreshScraperCache {
 		manager.GetInstance().RefreshScraperCache()
 	}

@@ -149,6 +149,12 @@ const (
 	Port        = "port"
 	portDefault = 9999
 
+	HTTPSPort = "https_port"
+
+	MetricsEnabled = "metrics_enabled"
+
+	AutoScanWatch = "auto_scan_watch"
+
 	ExternalHost = "external_host"
 
 	// http proxy url if required
@@ -1062,6 +1068,26 @@ func (i *Config) GetPort() int {
 	}
 
 	return ret
+}
+
+// GetHTTPSPort returns the port for the HTTPS listener. When greater than 0 and
+// TLS is configured, HTTPS is served on this port while plain HTTP continues to
+// be served on GetPort(). When 0 (the default), TLS (if configured) is served on
+// GetPort() as before.
+func (i *Config) GetHTTPSPort() int {
+	return i.getInt(HTTPSPort)
+}
+
+// GetMetricsEnabled reports whether the Prometheus /metrics endpoint and its
+// request-instrumentation middleware should be enabled. Defaults to false.
+func (i *Config) GetMetricsEnabled() bool {
+	return i.getBool(MetricsEnabled)
+}
+
+// GetAutoScanWatch reports whether the filesystem watcher should auto-trigger
+// scans when files change under the configured library paths. Defaults to false.
+func (i *Config) GetAutoScanWatch() bool {
+	return i.getBool(AutoScanWatch)
 }
 
 func (i *Config) GetThemeColor() string {

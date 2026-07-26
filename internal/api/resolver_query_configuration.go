@@ -128,6 +128,7 @@ func makeConfigGeneralResult() *ConfigGeneralResult {
 		ImageExtensions:               config.GetImageExtensions(),
 		GalleryExtensions:             config.GetGalleryExtensions(),
 		CreateGalleriesFromFolders:    config.GetCreateGalleriesFromFolders(),
+		AutoScanWatch:                 config.GetAutoScanWatch(),
 		Excludes:                      config.GetExcludes(),
 		ImageExcludes:                 config.GetImageExcludes(),
 		CustomPerformerImageLocation:  &customPerformerImageLocation,

@@ -249,6 +249,7 @@ func (s *Manager) postInit(ctx context.Context) error {
 	s.RefreshStreamManager()
 
 	s.StartScanScheduler()
+	s.RefreshFileWatcher()
 
 	return nil
 }

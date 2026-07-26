@@ -50,3 +50,7 @@ Frontend (`cd ui/v2.5`, pnpm):
 **Ask sparingly.** Only when tools + context can't resolve a material trade-off; then state the conflict and ask for the one missing decision. Otherwise make a grounded best effort.
 
 **Precedence** when rules conflict: current user task intent → repo instructions & pinned versions → scoped file/platform rules → global defaults. At the same level, the most recent specific instruction wins. Project conventions override style/tool defaults — never safety or integrity rules.
+
+## Fork-integration scope
+
+- VR/HereSphere/DeoVR integration is deferred — do not pull VR features from forks for now.

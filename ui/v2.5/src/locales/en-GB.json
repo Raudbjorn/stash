@@ -356,6 +356,8 @@
         "username": "Username",
         "username_desc": "Username to access Stash. Leave blank to disable user authentication"
       },
+      "auto_scan_watch_desc": "Automatically scan new or changed files in your library folders as they appear, without waiting for a manual or scheduled scan.",
+      "auto_scan_watch_label": "Watch for filesystem changes",
       "backup_directory_path": {
         "description": "Directory location for SQLite database file backups.",
         "heading": "Backup directory path"
@@ -492,6 +494,7 @@
       "video_head": "Video"
     },
     "library": {
+      "automatic_scanning": "Automatic Scanning",
       "exclusions": "Exclusions",
       "gallery_and_image_options": "Gallery and Image Options",
       "media_content_extensions": "Media Content Extensions"

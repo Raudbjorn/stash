@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -52,6 +53,10 @@ const (
 type Server struct {
 	http.Server
 	displayAddress string
+
+	// httpsServer is the secondary TLS listener used when https_port is set;
+	// nil otherwise.
+	httpsServer *http.Server
 
 	manager *manager.Manager
 }
@@ -123,6 +128,9 @@ func Initialize() (*Server, error) {
 	}
 
 	r.Use(middleware.Heartbeat("/healthz"))
+	if cfg.GetMetricsEnabled() {
+		r.Use(MetricsMiddleware)
+	}
 	r.Use(cors.AllowAll().Handler)
 	r.Use(RequestIPMiddleware)
 	r.Use(authenticateHandler())
@@ -223,6 +231,11 @@ func Initialize() (*Server, error) {
 	r.Mount("/downloads", server.getDownloadsRoutes())
 	r.Mount("/plugin", server.getPluginRoutes())
 	r.Mount("/tts", server.getTTSRoutes())
+
+	if cfg.GetMetricsEnabled() {
+		// Auth-gated (inherits authenticateHandler); opt-in via metrics_enabled.
+		r.Handle("/metrics", metricsHandler())
+	}
 
 	r.HandleFunc("/css", cssHandler(cfg))
 	r.HandleFunc("/javascript", javascriptHandler(cfg))
@@ -334,15 +347,78 @@ func (s *Server) Start() error {
 	logger.Infof("stash is listening on " + s.Addr)
 	logger.Infof("stash is running at " + s.displayAddress)
 
-	if s.TLSConfig != nil {
-		return s.ListenAndServeTLS("", "")
-	} else {
+	if s.TLSConfig == nil {
 		return s.ListenAndServe()
 	}
+
+	httpsPort := s.manager.Config.GetHTTPSPort()
+	if httpsPort <= 0 {
+		// Default behaviour: serve TLS on the main port.
+		return s.ListenAndServeTLS("", "")
+	}
+
+	// Dual-listener mode: serve HTTPS on the configured port and plain HTTP on
+	// the main port. Useful behind a reverse proxy that terminates on one port
+	// while exposing TLS directly on another.
+	host, _, err := net.SplitHostPort(s.Addr)
+	if err != nil {
+		return fmt.Errorf("parsing listen address %q: %w", s.Addr, err)
+	}
+	if httpsPort > 65535 || httpsPort == s.manager.Config.GetPort() {
+		// Fail fast on an obvious misconfiguration rather than silently serving
+		// HTTP-only after the HTTPS listener fails to bind.
+		return fmt.Errorf("invalid https_port %d: must be 1-65535 and different from port %d", httpsPort, s.manager.Config.GetPort())
+	}
+	httpsAddr := net.JoinHostPort(host, strconv.Itoa(httpsPort))
+
+	s.httpsServer = &http.Server{
+		Addr:      httpsAddr,
+		Handler:   s.Handler,
+		TLSConfig: s.TLSConfig,
+		// mirror the main server: disable http/2 so streams can be hijacked/closed
+		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
+	}
+
+	// Run both listeners; the first to fail (or be shut down) wins. A bind
+	// failure on the HTTPS listener must not leave stash silently serving
+	// HTTP-only when the operator asked for TLS — surface it and tear the
+	// other listener down.
+	errCh := make(chan error, 2)
+
+	go func() {
+		logger.Infof("stash HTTPS is listening on " + httpsAddr)
+		err := s.httpsServer.ListenAndServeTLS("", "")
+		if errors.Is(err, http.ErrServerClosed) {
+			err = nil
+		}
+		errCh <- err
+	}()
+
+	go func() {
+		err := s.ListenAndServe()
+		if errors.Is(err, http.ErrServerClosed) {
+			err = nil
+		}
+		errCh <- err
+	}()
+
+	err = <-errCh
+	if err != nil {
+		// One listener failed to serve; stop the other so Start returns and the
+		// process exits instead of running half-configured.
+		s.Shutdown()
+	}
+	return err
 }
 
 // Shutdown gracefully shuts down the server without interrupting any active connections.
 func (s *Server) Shutdown() {
+	if s.httpsServer != nil {
+		if err := s.httpsServer.Shutdown(context.TODO()); err != nil {
+			logger.Errorf("Error shutting down https server: %v", err)
+		}
+	}
+
 	err := s.Server.Shutdown(context.TODO())
 	if err != nil {
 		logger.Errorf("Error shutting down http server: %v", err)
