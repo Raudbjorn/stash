@@ -1,0 +1,6 @@
+# makepkg build output/cache — never commit build artifacts here.
+/src/
+/pkg/
+/stash/
+*.pkg.tar.*
+*.log
