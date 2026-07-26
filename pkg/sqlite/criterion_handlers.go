@@ -372,6 +372,20 @@ func resolutionCriterionHandler(resolution *models.ResolutionCriterionInput, hei
 	}
 }
 
+func minDimensionCriterionHandler(minResolution *models.IntCriterionInput, heightColumn string, widthColumn string, addJoinFn func(f *filterBuilder, joinType joinType)) criterionHandlerFunc {
+	return func(ctx context.Context, f *filterBuilder) {
+		if minResolution != nil && minResolution.Modifier.IsValid() {
+			if addJoinFn != nil {
+				addJoinFn(f, joinTypeInner)
+			}
+
+			widthHeight := fmt.Sprintf("MIN(%s, %s)", widthColumn, heightColumn)
+			clause, args := getIntCriterionWhereClause(widthHeight, *minResolution)
+			f.addWhere(clause, args...)
+		}
+	}
+}
+
 func orientationCriterionHandler(orientation *models.OrientationCriterionInput, heightColumn string, widthColumn string, addJoinFn func(f *filterBuilder, joinType joinType)) criterionHandlerFunc {
 	return func(ctx context.Context, f *filterBuilder) {
 		if orientation != nil {

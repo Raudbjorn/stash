@@ -41,8 +41,13 @@ type Performer {
   ignore_auto_tag: Boolean!
 
   image_path: String # Resolver
+  # Ordered multi-image collection (index 0 == primary, mirrors image_path)
+  images: [PerformerImage!]! # Resolver
   scene_count: Int! # Resolver
   image_count: Int! # Resolver
+  # Size of the headshot collection (performer_images), distinct from
+  # image_count (library images the performer appears in).
+  image_collection_count: Int! # Resolver
   gallery_count: Int! # Resolver
   group_count: Int! # Resolver
   movie_count: Int! @deprecated(reason: "use group_count instead") # Resolver
@@ -62,6 +67,13 @@ type Performer {
   movies: [Movie!]! @deprecated(reason: "use groups instead")
 
   custom_fields: Map!
+}
+
+# A single performer headline image, addressed by its position in the
+# ordered collection. index 0 is the primary (matches image_path).
+type PerformerImage {
+  index: Int!
+  url: String!
 }
 
 input PerformerCreateInput {
@@ -92,6 +104,8 @@ input PerformerCreateInput {
   tag_ids: [ID!]
   "This should be a URL or a base64 encoded data URL"
   image: String
+  "Ordered headline images (index 0 == primary). Each entry is a URL or base64 data URL. Takes precedence over the singular image field."
+  images: [String!]
   stash_ids: [StashIDInput!]
   # rating expressed as 1-100
   rating100: Int
@@ -133,6 +147,8 @@ input PerformerUpdateInput {
   tag_ids: [ID!]
   "This should be a URL or a base64 encoded data URL"
   image: String
+  "Ordered headline images (index 0 == primary). Each entry is a URL or base64 data URL. Takes precedence over the singular image field."
+  images: [String!]
   stash_ids: [StashIDInput!]
   # rating expressed as 1-100
   rating100: Int

@@ -383,6 +383,73 @@ func (_m *PerformerReaderWriter) GetImage(ctx context.Context, performerID int) 
 	return r0, r1
 }
 
+// GetImageByIndex provides a mock function with given fields: ctx, performerID, index
+func (_m *PerformerReaderWriter) GetImageByIndex(ctx context.Context, performerID int, index int) ([]byte, error) {
+	ret := _m.Called(ctx, performerID, index)
+
+	var r0 []byte
+	if rf, ok := ret.Get(0).(func(context.Context, int, int) []byte); ok {
+		r0 = rf(ctx, performerID, index)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]byte)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, int, int) error); ok {
+		r1 = rf(ctx, performerID, index)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetImageChecksums provides a mock function with given fields: ctx, performerID
+func (_m *PerformerReaderWriter) GetImageChecksums(ctx context.Context, performerID int) ([]string, error) {
+	ret := _m.Called(ctx, performerID)
+
+	var r0 []string
+	if rf, ok := ret.Get(0).(func(context.Context, int) []string); ok {
+		r0 = rf(ctx, performerID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, int) error); ok {
+		r1 = rf(ctx, performerID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetImageCount provides a mock function with given fields: ctx, performerID
+func (_m *PerformerReaderWriter) GetImageCount(ctx context.Context, performerID int) (int, error) {
+	ret := _m.Called(ctx, performerID)
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func(context.Context, int) int); ok {
+		r0 = rf(ctx, performerID)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, int) error); ok {
+		r1 = rf(ctx, performerID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetStashIDs provides a mock function with given fields: ctx, relatedID
 func (_m *PerformerReaderWriter) GetStashIDs(ctx context.Context, relatedID int) ([]models.StashID, error) {
 	ret := _m.Called(ctx, relatedID)
@@ -582,6 +649,20 @@ func (_m *PerformerReaderWriter) UpdateImage(ctx context.Context, performerID in
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, int, []byte) error); ok {
 		r0 = rf(ctx, performerID, image)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// UpdateImages provides a mock function with given fields: ctx, performerID, images
+func (_m *PerformerReaderWriter) UpdateImages(ctx context.Context, performerID int, images [][]byte) error {
+	ret := _m.Called(ctx, performerID, images)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, int, [][]byte) error); ok {
+		r0 = rf(ctx, performerID, images)
 	} else {
 		r0 = ret.Error(0)
 	}

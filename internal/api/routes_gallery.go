@@ -8,8 +8,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/stashapp/stash/internal/manager"
 	"github.com/stashapp/stash/internal/manager/config"
 	"github.com/stashapp/stash/internal/static"
+	"github.com/stashapp/stash/pkg/fsutil"
+	"github.com/stashapp/stash/pkg/gallery"
 	"github.com/stashapp/stash/pkg/image"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
@@ -50,6 +53,16 @@ func (rs galleryRoutes) Routes() chi.Router {
 
 func (rs galleryRoutes) Cover(w http.ResponseWriter, r *http.Request) {
 	g := r.Context().Value(galleryKey).(*models.Gallery)
+
+	if g.HasGeneratedCover {
+		p := manager.GetInstance().Paths.Generated.GetGalleryContactSheetPath(gallery.ContactSheetHash(g.ID))
+		// The generated dir is regenerable and users prune it; if the file is
+		// gone, fall through to the image cover / default rather than 404.
+		if exists, _ := fsutil.FileExists(p); exists {
+			utils.ServeStaticFileModTime(w, r, p, g.UpdatedAt)
+			return
+		}
+	}
 
 	var i *models.Image
 	_ = rs.withReadTxn(r, func(ctx context.Context) error {

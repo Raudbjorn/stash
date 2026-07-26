@@ -27,3 +27,14 @@ func (b PerformerURLBuilder) GetPerformerImageURL(hasImage bool) string {
 	}
 	return url
 }
+
+// GetPerformerImageURLByIndex builds the serve URL for the Nth image in the
+// ordered collection. Index 0 is byte-identical to GetPerformerImageURL(true)
+// (the primary, mirrored into image_path); higher indices add &index=N.
+func (b PerformerURLBuilder) GetPerformerImageURLByIndex(index int) string {
+	url := b.BaseURL + "/performer/" + b.PerformerID + "/image?t=" + b.UpdatedAt
+	if index > 0 {
+		url += "&index=" + strconv.Itoa(index)
+	}
+	return url
+}

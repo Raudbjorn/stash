@@ -33,8 +33,11 @@ var (
 
 	sceneMarkersTagsJoinTable = goqu.T(sceneMarkersTagsTable)
 
+	clipsTagsJoinTable = goqu.T(clipsTagsTable)
+
 	performersAliasesJoinTable  = goqu.T(performersAliasesTable)
 	performersURLsJoinTable     = goqu.T(performerURLsTable)
+	performerImagesJoinTable    = goqu.T(performerImagesTable)
 	performersTagsJoinTable     = goqu.T(performersTagsTable)
 	performersStashIDsJoinTable = goqu.T("performer_stash_ids")
 	performersCustomFieldsTable = goqu.T("performer_custom_fields")
@@ -181,6 +184,37 @@ var (
 		orderBy:      tagTableSort,
 	}
 
+	clipTableMgr = &table{
+		table:    goqu.T(clipTable),
+		idColumn: goqu.T(clipTable).Col(idColumn),
+	}
+
+	clipsTagsTableMgr = &joinTable{
+		table: table{
+			table:    clipsTagsJoinTable,
+			idColumn: clipsTagsJoinTable.Col(clipIDColumn),
+		},
+		fkColumn:     clipsTagsJoinTable.Col(tagIDColumn),
+		foreignTable: tagTableMgr,
+		orderBy:      tagTableSort,
+	}
+
+	clipsViewTableMgr = &viewHistoryTable{
+		table: table{
+			table:    goqu.T(clipsViewDatesTable),
+			idColumn: goqu.T(clipsViewDatesTable).Col(clipIDColumn),
+		},
+		dateColumn: goqu.T(clipsViewDatesTable).Col(clipViewDateColumn),
+	}
+
+	clipsOTableMgr = &viewHistoryTable{
+		table: table{
+			table:    goqu.T(clipsODatesTable),
+			idColumn: goqu.T(clipsODatesTable).Col(clipIDColumn),
+		},
+		dateColumn: goqu.T(clipsODatesTable).Col(clipODateColumn),
+	}
+
 	scenesFilesTableMgr = &relatedFilesTable{
 		table: table{
 			table:    scenesFilesJoinTable,
@@ -294,6 +328,15 @@ var (
 			idColumn: performersURLsJoinTable.Col(performerIDColumn),
 		},
 		valueColumn: performersURLsJoinTable.Col(performerURLColumn),
+	}
+
+	// Ordered blob-checksum collection for multi-image performers.
+	performersImagesBlobTableMgr = &orderedValueTable[string]{
+		table: table{
+			table:    performerImagesJoinTable,
+			idColumn: performerImagesJoinTable.Col(performerIDColumn),
+		},
+		valueColumn: performerImagesJoinTable.Col(performerImageBlobColumn),
 	}
 
 	performersTagsTableMgr = &joinTable{

@@ -4,6 +4,7 @@ import { GalleriesCriterion } from "src/models/list-filter/criteria/galleries";
 import { ListFilterModel } from "src/models/list-filter/filter";
 import { FilteredImageList } from "src/components/Images/ImageList";
 import {
+  mutateMetadataGenerate,
   mutateRemoveGalleryImages,
   mutateSetGalleryCover,
 } from "src/core/StashService";
@@ -101,6 +102,25 @@ export const GalleryImagesPanel: React.FC<IGalleryDetailsProps> =
         }
       }
 
+      async function generateContactSheetFromSelection(
+        _result: GQL.FindImagesQueryResult,
+        _filter: ListFilterModel,
+        selectedIds: Set<string>
+      ) {
+        try {
+          await mutateMetadataGenerate({
+            galleryIDs: [gallery.id!],
+            imageIDs: Array.from(selectedIds.values()),
+            contactSheets: true,
+            overwrite: true,
+          });
+
+          Toast.success(intl.formatMessage({ id: "toast.started_generating" }));
+        } catch (e) {
+          Toast.error(e);
+        }
+      }
+
       async function removeImages(
         _result: GQL.FindImagesQueryResult,
         _filter: ListFilterModel,
@@ -133,6 +153,15 @@ export const GalleryImagesPanel: React.FC<IGalleryDetailsProps> =
           text: intl.formatMessage({ id: "actions.set_cover" }),
           onClick: setCover,
           isDisplayed: showWhenSingleSelection,
+        },
+        {
+          text: intl.formatMessage({ id: "actions.generate_contact_sheet" }),
+          onClick: generateContactSheetFromSelection,
+          isDisplayed: (
+            _result: GQL.FindImagesQueryResult,
+            _filter: ListFilterModel,
+            selectedIds: Set<string>
+          ) => selectedIds.size >= 2,
         },
         {
           text: intl.formatMessage({ id: "actions.remove_from_gallery" }),

@@ -39,6 +39,13 @@ const (
 	GroupUpdatePost  TriggerEnum = "Group.Update.Post"
 	GroupDestroyPost TriggerEnum = "Group.Destroy.Post"
 
+	ClipCreatePost  TriggerEnum = "Clip.Create.Post"
+	ClipUpdatePost  TriggerEnum = "Clip.Update.Post"
+	ClipDestroyPost TriggerEnum = "Clip.Destroy.Post"
+	// ClipOUpdatePost fires when a clip's o-counter changes
+	// (add/delete/reset), enabling automation on o-counter events.
+	ClipOUpdatePost TriggerEnum = "Clip.OUpdate.Post"
+
 	PerformerCreatePost  TriggerEnum = "Performer.Create.Post"
 	PerformerUpdatePost  TriggerEnum = "Performer.Update.Post"
 	PerformerDestroyPost TriggerEnum = "Performer.Destroy.Post"
@@ -78,6 +85,11 @@ var AllHookTriggerEnum = []TriggerEnum{
 	MovieCreatePost,
 	MovieUpdatePost,
 	MovieDestroyPost,
+
+	ClipCreatePost,
+	ClipUpdatePost,
+	ClipDestroyPost,
+	ClipOUpdatePost,
 
 	PerformerCreatePost,
 	PerformerUpdatePost,
@@ -120,6 +132,11 @@ func (e TriggerEnum) IsValid() bool {
 		MovieCreatePost,
 		MovieUpdatePost,
 		MovieDestroyPost,
+
+		ClipCreatePost,
+		ClipUpdatePost,
+		ClipDestroyPost,
+		ClipOUpdatePost,
 
 		PerformerCreatePost,
 		PerformerUpdatePost,

@@ -28,6 +28,7 @@ export const GenerateOptions: React.FC<IGenerateOptions> = ({
 
   const showSceneOptions = !type || type === "scene";
   const showImageOptions = !type || type === "image" || type === "gallery";
+  const showGalleryOptions = !type || type === "gallery";
 
   return (
     <>
@@ -175,6 +176,15 @@ export const GenerateOptions: React.FC<IGenerateOptions> = ({
             onChange={(v) => setOptions({ imagePhashes: v })}
           />
         </>
+      )}
+      {showGalleryOptions && (
+        <BooleanSetting
+          id="contact-sheet-task"
+          checked={options.contactSheets ?? false}
+          headingID="dialogs.scene_gen.contact_sheets"
+          tooltipID="dialogs.scene_gen.contact_sheets_tooltip"
+          onChange={(v) => setOptions({ contactSheets: v })}
+        />
       )}
       <BooleanSetting
         id="overwrite"

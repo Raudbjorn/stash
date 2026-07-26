@@ -66,6 +66,7 @@ const criterionOptions = [
   RatingCriterionOption,
   OrganizedCriterionOption,
   AverageResolutionCriterionOption,
+  createMandatoryNumberCriterionOption("average_min_resolution"),
   GalleryIsMissingCriterionOption,
   TagsCriterionOption,
   HasChaptersCriterionOption,

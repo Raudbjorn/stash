@@ -1,0 +1,63 @@
+"""
+Clip represents a frame-accurate time-range within a parent Scene.
+"""
+type Clip {
+  id: ID!
+  title: String
+  scene: Scene! # Resolver
+  scene_id: ID!
+  "The start time of the clip (in seconds). Supports decimals."
+  seconds: Float!
+  "The optional end time of the clip (in seconds). Supports decimals."
+  end_seconds: Float
+  # rating expressed as 1-100
+  rating100: Int
+  tags: [Tag!]! # Resolver
+  created_at: Time!
+  updated_at: Time!
+
+  o_counter: Int # Resolver
+  "The last time the play count was updated"
+  last_played_at: Time # Resolver
+  "The number of times the clip has been played"
+  play_count: Int # Resolver
+  "Times the clip was played"
+  play_history: [Time!]! # Resolver
+  "Times the o counter was incremented"
+  o_history: [Time!]! # Resolver
+
+  "The path to stream this clip's generated video"
+  stream: String! # Resolver
+  "The path to the preview video for this clip"
+  preview: String! # Resolver
+}
+
+input ClipCreateInput {
+  title: String
+  scene_id: ID!
+  "The start time of the clip (in seconds). Supports decimals."
+  seconds: Float!
+  "The optional end time of the clip (in seconds). Supports decimals."
+  end_seconds: Float
+  # rating expressed as 1-100
+  rating100: Int
+  tag_ids: [ID!]
+}
+
+input ClipUpdateInput {
+  id: ID!
+  title: String
+  scene_id: ID
+  "The start time of the clip (in seconds). Supports decimals."
+  seconds: Float
+  "The optional end time of the clip (in seconds). Supports decimals."
+  end_seconds: Float
+  # rating expressed as 1-100
+  rating100: Int
+  tag_ids: [ID!]
+}
+
+type FindClipsResultType {
+  count: Int!
+  clips: [Clip!]!
+}

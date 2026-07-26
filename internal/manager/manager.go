@@ -19,6 +19,7 @@ import (
 	"github.com/stashapp/stash/internal/manager/config"
 	"github.com/stashapp/stash/pkg/ffmpeg"
 	"github.com/stashapp/stash/pkg/fsutil"
+	"github.com/stashapp/stash/pkg/imagemagick"
 	"github.com/stashapp/stash/pkg/job"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
@@ -46,6 +47,7 @@ type Manager struct {
 
 	FFMpeg        *ffmpeg.FFMpeg
 	FFProbe       *ffmpeg.FFProbe
+	IMConvert     imagemagick.IMConvert
 	StreamManager *ffmpeg.StreamManager
 
 	JobManager      *job.Manager

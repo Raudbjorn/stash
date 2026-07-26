@@ -15,6 +15,7 @@ type Repository struct {
 	TxnManager TxnManager
 
 	Blob           BlobReader
+	Clip           ClipReaderWriter
 	File           FileReaderWriter
 	Folder         FolderReaderWriter
 	Gallery        GalleryReaderWriter

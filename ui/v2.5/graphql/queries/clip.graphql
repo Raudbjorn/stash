@@ -1,0 +1,14 @@
+query FindClips($filter: FindFilterType, $clip_filter: ClipFilterType) {
+  findClips(filter: $filter, clip_filter: $clip_filter) {
+    count
+    clips {
+      ...SlimClipData
+    }
+  }
+}
+
+query FindClip($id: ID!) {
+  findClip(id: $id) {
+    ...ClipData
+  }
+}

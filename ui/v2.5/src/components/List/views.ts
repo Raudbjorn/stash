@@ -34,4 +34,9 @@ export enum View {
   GroupScenes = "group_scenes",
   GroupSubGroups = "group_sub_groups",
   GroupPerformers = "group_performers",
+
+  FavouriteScenes = "favourite_scenes",
+  FavouriteImages = "favourite_images",
+  FavouriteGalleries = "favourite_galleries",
+  FavouritePerformers = "favourite_performers",
 }

@@ -232,6 +232,34 @@ export const useFindGroup = (id: string) => {
   return GQL.useFindGroupQuery({ variables: { id }, skip });
 };
 
+// --- Clips (fork feature) ---
+// Clips use a simple direct query rather than the FilterMode-based
+// ListFilterModel machinery (there is no FilterMode.Clips).
+export const useFindClip = (id: string) => {
+  const skip = id === "new" || id === "";
+  return GQL.useFindClipQuery({ variables: { id }, skip });
+};
+
+export const useFindClips = (vars?: GQL.FindClipsQueryVariables) =>
+  GQL.useFindClipsQuery({ variables: vars ?? {} });
+
+export const useClipCreate = () =>
+  GQL.useClipCreateMutation({ refetchQueries: ["FindClips"] });
+
+export const useClipUpdate = () => GQL.useClipUpdateMutation();
+
+export const useClipDestroy = () =>
+  GQL.useClipDestroyMutation({ refetchQueries: ["FindClips"] });
+
+export const useClipsDestroy = () =>
+  GQL.useClipsDestroyMutation({ refetchQueries: ["FindClips"] });
+
+export const useClipGenerate = () => GQL.useClipGenerateMutation();
+
+export const useClipAddO = () => GQL.useClipAddOMutation();
+export const useClipResetO = () => GQL.useClipResetOMutation();
+export const useClipAddPlay = () => GQL.useClipAddPlayMutation();
+
 export const useFindGroups = (filter?: ListFilterModel) =>
   GQL.useFindGroupsQuery({
     skip: filter === undefined,

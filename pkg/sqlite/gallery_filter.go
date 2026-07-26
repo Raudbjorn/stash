@@ -100,6 +100,7 @@ func (qb *galleryFilterHandler) criterionHandler() criterionHandler {
 		studioCriterionHandler(galleryTable, filter.Studios),
 		qb.performerTagsCriterionHandler(filter.PerformerTags),
 		qb.averageResolutionCriterionHandler(filter.AverageResolution),
+		qb.averageMinResolutionCriterionHandler(filter.AverageMinResolution),
 		qb.imageCountCriterionHandler(filter.ImageCount),
 		qb.performerFavoriteCriterionHandler(filter.PerformerFavorite),
 		qb.performerAgeCriterionHandler(filter.PerformerAge),
@@ -536,6 +537,21 @@ func (qb *galleryFilterHandler) averageResolutionCriterionHandler(resolution *mo
 			case models.CriterionModifierGreaterThan:
 				f.addHaving(fmt.Sprintf("%s > %d", widthHeight, mx))
 			}
+		}
+	}
+}
+
+func (qb *galleryFilterHandler) averageMinResolutionCriterionHandler(minResolution *models.IntCriterionInput) criterionHandlerFunc {
+	return func(ctx context.Context, f *filterBuilder) {
+		if minResolution != nil && minResolution.Modifier.IsValid() {
+			galleryRepository.images.leftJoin(f, "images_join", "galleries.id")
+			f.addLeftJoin("images", "", "images_join.image_id = images.id")
+			f.addLeftJoin("images_files", "", "images.id = images_files.image_id")
+			f.addLeftJoin("image_files", "", "images_files.file_id = image_files.file_id")
+
+			const widthHeight = "avg(MIN(image_files.width, image_files.height))"
+			clause, args := getIntCriterionWhereClause(widthHeight, *minResolution)
+			f.addHaving(clause, args...)
 		}
 	}
 }

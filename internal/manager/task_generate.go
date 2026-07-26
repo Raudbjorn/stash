@@ -33,6 +33,7 @@ type GenerateMetadataInput struct {
 	InteractiveHeatmapsSpeeds bool `json:"interactiveHeatmapsSpeeds"`
 	ClipPreviews              bool `json:"clipPreviews"`
 	ImageThumbnails           bool `json:"imageThumbnails"`
+	ContactSheets             bool `json:"contactSheets"`
 	// scene ids to generate for
 	SceneIDs []string `json:"sceneIDs"`
 	// marker ids to generate for
@@ -95,6 +96,7 @@ type totalsGenerate struct {
 	interactiveHeatmapSpeeds int64
 	clipPreviews             int64
 	imageThumbnails          int64
+	contactSheets            int64
 	subtitles                int64
 	dubbing                  int64
 
@@ -177,18 +179,35 @@ func (j *GenerateJob) Execute(ctx context.Context, progress *job.Progress) error
 					}
 				}
 
-				if len(j.input.ImageIDs) > 0 {
-					images, err = r.Image.FindMany(ctx, imageIDs)
-					for _, i := range images {
-						if err := i.LoadFiles(ctx, r.Image); err != nil {
-							return err
-						}
+				anyPerImageFlag := j.input.ImageThumbnails || j.input.ClipPreviews || j.input.ImagePhashes
 
-						j.queueImageJob(g, i, queue)
+				// Contact sheet: one task per gallery. A single-gallery
+				// request with explicit imageIDs scopes the sheet to that
+				// subset; otherwise the whole gallery is used.
+				if j.input.ContactSheets {
+					if len(galleryIDs) == 1 && len(imageIDs) > 0 {
+						j.queueGalleryContactSheetJob(galleryIDs[0], imageIDs, queue)
+					} else {
+						for _, galleryID := range galleryIDs {
+							j.queueGalleryContactSheetJob(galleryID, nil, queue)
+						}
 					}
 				}
 
-				if len(j.input.GalleryIDs) > 0 {
+				// Per-image work. Skip the image loading entirely when no
+				// per-image flag is set — queueImageJob would no-op anyway.
+				if anyPerImageFlag {
+					if len(j.input.ImageIDs) > 0 {
+						images, err = r.Image.FindMany(ctx, imageIDs)
+						for _, i := range images {
+							if err := i.LoadFiles(ctx, r.Image); err != nil {
+								return err
+							}
+
+							j.queueImageJob(g, i, queue)
+						}
+					}
+
 					for _, galleryID := range galleryIDs {
 						imgs, err := r.Image.FindByGalleryID(ctx, galleryID)
 						if err != nil {
@@ -250,6 +269,9 @@ func (j *GenerateJob) Execute(ctx context.Context, progress *job.Progress) error
 		}
 		if j.input.ImageThumbnails {
 			logMsg += fmt.Sprintf(" %d image thumbnails", totals.imageThumbnails)
+		}
+		if j.input.ContactSheets {
+			logMsg += fmt.Sprintf(" %d contact sheets", totals.contactSheets)
 		}
 		if j.input.Subtitles {
 			logMsg += fmt.Sprintf(" %d subtitles", totals.subtitles)
@@ -623,6 +645,17 @@ func (j *GenerateJob) queueMarkerJob(g *generate.Generator, marker *models.Scene
 	j.totals.markers++
 	j.totals.tasks++
 	queue <- task
+}
+
+func (j *GenerateJob) queueGalleryContactSheetJob(galleryID int, imageIDs []int, queue chan<- Task) {
+	queue <- &GenerateGalleryContactSheetTask{
+		GalleryID:  galleryID,
+		ImageIDs:   imageIDs,
+		Overwrite:  j.overwrite,
+		repository: j.repository,
+	}
+	j.totals.contactSheets++
+	j.totals.tasks++
 }
 
 func (j *GenerateJob) queueImageJob(g *generate.Generator, image *models.Image, queue chan<- Task) {
