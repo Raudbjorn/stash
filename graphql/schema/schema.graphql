@@ -285,6 +285,10 @@ type Query {
   ollamaModels: [String!]!
   "Check if Ollama service is available"
   ollamaAvailable: Boolean!
+
+  # Scheduled scans
+  "Returns all configured scan schedules"
+  scanSchedules: [ScanSchedule!]!
 }
 
 type Mutation {
@@ -508,6 +512,14 @@ type Mutation {
 
   "Anonymise the database in a separate file. Optionally returns a link to download the database file"
   anonymiseDatabase(input: AnonymiseDatabaseInput!): String
+
+  # Scheduled scan mutations
+  "Create a new scan schedule"
+  scanScheduleCreate(input: ScanScheduleCreateInput!): ScanSchedule!
+  "Update an existing scan schedule"
+  scanScheduleUpdate(input: ScanScheduleUpdateInput!): ScanSchedule!
+  "Delete a scan schedule"
+  scanScheduleDestroy(id: ID!): Boolean!
 
   "Optimises the database. Returns the job ID"
   optimiseDatabase: ID!

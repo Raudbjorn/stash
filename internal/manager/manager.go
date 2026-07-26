@@ -24,6 +24,7 @@ import (
 	"github.com/stashapp/stash/pkg/models/paths"
 	"github.com/stashapp/stash/pkg/pkg"
 	"github.com/stashapp/stash/pkg/plugin"
+	"github.com/stashapp/stash/pkg/scheduler"
 	"github.com/stashapp/stash/pkg/scraper"
 	"github.com/stashapp/stash/pkg/session"
 	"github.com/stashapp/stash/pkg/sqlite"
@@ -59,6 +60,8 @@ type Manager struct {
 	ScraperPackageManager *pkg.Manager
 
 	DLNAService *dlna.Service
+
+	ScanScheduler *scheduler.Scheduler
 
 	Database   *sqlite.Database
 	Repository models.Repository

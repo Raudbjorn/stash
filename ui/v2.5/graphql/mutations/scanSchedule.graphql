@@ -1,0 +1,37 @@
+fragment ScanScheduleData on ScanSchedule {
+  id
+  name
+  spec
+  repeat
+  enabled
+  paths
+  scanOptions {
+    rescan
+    scanGenerateCovers
+    scanGeneratePreviews
+    scanGenerateImagePreviews
+    scanGenerateSprites
+    scanGeneratePhashes
+    scanGenerateImagePhashes
+    scanGenerateThumbnails
+    scanGenerateClipPreviews
+  }
+  lastRunAt
+  nextRunAt
+}
+
+mutation ScanScheduleCreate($input: ScanScheduleCreateInput!) {
+  scanScheduleCreate(input: $input) {
+    ...ScanScheduleData
+  }
+}
+
+mutation ScanScheduleUpdate($input: ScanScheduleUpdateInput!) {
+  scanScheduleUpdate(input: $input) {
+    ...ScanScheduleData
+  }
+}
+
+mutation ScanScheduleDestroy($id: ID!) {
+  scanScheduleDestroy(id: $id)
+}
