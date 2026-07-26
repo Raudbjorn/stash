@@ -48,3 +48,19 @@ type ImagesDestroyInput struct {
 	Checksum string `json:"checksum"`
 	Path     string `json:"path"`
 }
+
+type FileDestroyInput struct {
+	Path      string `json:"path"`
+	FileID    int    `json:"file_id"`
+	IsZipFile bool   `json:"zip_file"`
+	Checksum  string `json:"checksum"`
+}
+
+// FileBestChecksum returns the best available checksum from a Fingerprints set,
+// preferring MD5, then OSHash, then empty string.
+func FileBestChecksum(fps models.Fingerprints) string {
+	if c := fps.GetString(models.FingerprintTypeMD5); c != "" {
+		return c
+	}
+	return fps.GetString(models.FingerprintTypeOshash)
+}
