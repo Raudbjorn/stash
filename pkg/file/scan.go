@@ -805,13 +805,19 @@ func (s *Scanner) setMissingFingerprints(ctx context.Context, f ScannedFile, exi
 }
 
 // returns a file only if it was updated
+// hasFileChanged reports whether a scanned file differs from its existing record
+// in a way that warrants a rescan: a changed mod time, a changed basename
+// (#6326), or a same-path replacement with a different size.
+func hasFileChanged(f ScannedFile, base *models.BaseFile) bool {
+	return !f.ModTime.Equal(base.ModTime) || base.Basename != f.Basename || base.Size != f.Size
+}
+
 func (s *Scanner) onExistingFile(ctx context.Context, f ScannedFile, existing models.File) (*ScanFileResult, error) {
 	base := existing.Base()
 	path := base.Path
 
 	fileModTime := f.ModTime
-	// #6326 - also force a rescan if the basename changed
-	updated := !fileModTime.Equal(base.ModTime) || base.Basename != f.Basename
+	updated := hasFileChanged(f, base)
 	forceRescan := s.Rescan
 
 	if !updated && !forceRescan {
