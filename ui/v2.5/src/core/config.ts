@@ -2,6 +2,7 @@ import { IntlShape } from "react-intl";
 import { ITypename } from "src/utils/data";
 import { ImageWallOptions } from "src/utils/imageWall";
 import { RatingSystemOptions } from "src/utils/rating";
+import { ImageLightboxDisplayMode, ImageLightboxScrollMode } from "./enums";
 import {
   FilterMode,
   SavedFilterDataFragment,
@@ -76,6 +77,16 @@ export interface IUIConfig {
 
   // if true the slideshow autostarts when opening a gallery's lightbox from the galleries page
   autostartGallerySlideshow?: boolean;
+
+  imageLightbox?: {
+    slideshowDelay?: number;
+    displayMode?: ImageLightboxDisplayMode;
+    scaleUp?: boolean;
+    resetZoomOnNav?: boolean;
+    scrollMode?: ImageLightboxScrollMode;
+    scrollAttemptsBeforeChange?: number;
+    disableAnimation?: boolean;
+  };
 
   // if true the fullscreen mobile media auto-rotate option will be disabled
   disableMobileMediaAutoRotateEnabled?: boolean;

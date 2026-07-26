@@ -1,7 +1,13 @@
-import {
-  ImageLightboxDisplayMode,
-  ImageLightboxScrollMode,
-} from "../core/generated-graphql";
+export enum ImageLightboxDisplayMode {
+  Original = "ORIGINAL",
+  FitXy = "FIT_XY",
+  FitX = "FIT_X",
+}
+
+export enum ImageLightboxScrollMode {
+  Zoom = "ZOOM",
+  PanY = "PAN_Y",
+}
 
 export const imageLightboxDisplayModeIntlMap = new Map<
   ImageLightboxDisplayMode,

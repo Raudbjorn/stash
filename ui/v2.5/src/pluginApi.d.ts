@@ -87,8 +87,6 @@ declare namespace PluginApi {
     const ImageDestroyDocument: { [key: string]: any };
     const ImageFileDataFragmentDoc: { [key: string]: any };
     const ImageIncrementODocument: { [key: string]: any };
-    const ImageLightboxDisplayMode: { [key: string]: any };
-    const ImageLightboxScrollMode: { [key: string]: any };
     const ImageResetODocument: { [key: string]: any };
     const ImageUpdateDocument: { [key: string]: any };
     const ImagesDestroyDocument: { [key: string]: any };

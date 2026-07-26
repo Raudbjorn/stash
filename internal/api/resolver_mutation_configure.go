@@ -511,21 +511,6 @@ func (r *mutationResolver) ConfigureInterface(ctx context.Context, input ConfigI
 
 	r.setConfigString(config.Language, input.Language)
 
-	if input.ImageLightbox != nil {
-		options := input.ImageLightbox
-
-		r.setConfigInt(config.ImageLightboxSlideshowDelay, options.SlideshowDelay)
-
-		r.setConfigString(config.ImageLightboxDisplayModeKey, (*string)(options.DisplayMode))
-		r.setConfigBool(config.ImageLightboxScaleUp, options.ScaleUp)
-		r.setConfigBool(config.ImageLightboxResetZoomOnNav, options.ResetZoomOnNav)
-		r.setConfigString(config.ImageLightboxScrollModeKey, (*string)(options.ScrollMode))
-
-		r.setConfigInt(config.ImageLightboxScrollAttemptsBeforeChange, options.ScrollAttemptsBeforeChange)
-
-		r.setConfigBool(config.ImageLightboxDisableAnimation, options.DisableAnimation)
-	}
-
 	if input.CSS != nil {
 		c.SetCSS(*input.CSS)
 	}
