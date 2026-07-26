@@ -2,12 +2,16 @@ package embedding
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
 	"sync"
 
 	ort "github.com/yalue/onnxruntime_go"
 )
+
+// ErrModelClosed is returned by Embed once the model has been closed.
+var ErrModelClosed = errors.New("embedding model is closed")
 
 // maxSeqLen bounds tokenized input length. Candidates handed to this
 // package are always short (title-case word pairs from
@@ -23,6 +27,7 @@ const embeddingDim = 384
 // goes through mu.
 type Model struct {
 	mu        sync.Mutex
+	closed    bool
 	tokenizer *Tokenizer
 	session   *ort.AdvancedSession
 
@@ -105,12 +110,18 @@ func Load(libraryPath string) (*Model, error) {
 }
 
 // Close releases the session, tensors, and the process-wide onnxruntime
-// environment. Only one Model is ever loaded per process (see
-// internal/manager/task_analyze_scene_metadata.go), so owning the
-// environment lifecycle here is safe.
+// environment. Only one Model is ever live per process (see
+// internal/manager/name_plausibility_scorer.go, which closes a Model before
+// loading its replacement), so owning the environment lifecycle here is
+// safe. Close is idempotent - calling it more than once is a no-op.
 func (m *Model) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if m.closed {
+		return nil
+	}
+	m.closed = true
 
 	err := m.session.Destroy()
 	m.inputIDsTensor.Destroy()
@@ -126,10 +137,17 @@ func (m *Model) Close() error {
 // Embed tokenizes text and returns its mean-pooled, L2-normalized 384-dim
 // sentence embedding, following all-MiniLM-L6-v2's documented pooling
 // recipe (mean over token embeddings, weighted by the attention mask, then
-// normalized to unit length).
+// normalized to unit length). Returns ErrModelClosed if the model has
+// already been closed - a caller that cached a reference to a Model across
+// a name-plausibility-scorer reload can hit this rather than running
+// inference against a destroyed session.
 func (m *Model) Embed(text string) ([]float32, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if m.closed {
+		return nil, ErrModelClosed
+	}
 
 	inputIDs, attentionMask, tokenTypeIDs := m.tokenizer.Encode(text, maxSeqLen)
 

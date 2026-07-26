@@ -423,8 +423,10 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 		r.setConfigString(config.PythonPath, input.PythonPath)
 	}
 
+	refreshNamePlausibilityScorer := false
 	if input.OnnxRuntimeLibPath != nil {
 		r.setConfigString(config.OnnxRuntimeLibPath, input.OnnxRuntimeLibPath)
+		refreshNamePlausibilityScorer = true
 	}
 
 	if input.TranscodeInputArgs != nil {
@@ -483,6 +485,9 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 	}
 	if refreshPluginSource {
 		manager.GetInstance().RefreshPluginSourceManager()
+	}
+	if refreshNamePlausibilityScorer {
+		manager.GetInstance().RefreshNamePlausibilityScorer()
 	}
 
 	return makeConfigGeneralResult(), nil
