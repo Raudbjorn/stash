@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stashapp/stash/pkg/job"
+	"github.com/stashapp/stash/pkg/models"
 	"github.com/stashapp/stash/pkg/scraper"
 )
 
@@ -32,6 +34,37 @@ func TestVerifyAndCreatePerformersStopsAfterCancellation(t *testing.T) {
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("verifyAndCreatePerformers() error = %v, want context.Canceled", err)
+	}
+	if cache.calls != 1 {
+		t.Fatalf("scraper calls = %d, want 1", cache.calls)
+	}
+}
+
+func TestAnalyzeSceneMetadataExecuteStopsAfterCancellation(t *testing.T) {
+	r := newTestRepository(t)
+	setupCtx := context.Background()
+	if err := r.WithTxn(setupCtx, func(ctx context.Context) error {
+		for _, title := range []string{"Alice Smith", "Betty Jones"} {
+			scene := models.NewScene()
+			scene.Title = title
+			if err := r.Scene.Create(ctx, &scene, nil); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("creating scenes: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cache := &cancelingPerformerScraperCache{cancel: cancel}
+	j := &analyzeSceneMetadataJob{
+		repository:   r,
+		scraperCache: cache,
+	}
+
+	if err := j.Execute(ctx, &job.Progress{}); err != nil {
+		t.Fatalf("Execute() error = %v, want nil for canceled job", err)
 	}
 	if cache.calls != 1 {
 		t.Fatalf("scraper calls = %d, want 1", cache.calls)

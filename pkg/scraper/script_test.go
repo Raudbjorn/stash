@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stashapp/stash/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -47,6 +48,34 @@ func TestRunScraperScriptReturnsCanceledBeforeStart(t *testing.T) {
 	err := s.runScraperScript(ctx, []string{os.Args[0]}, `{"name":"candidate"}`, &output)
 
 	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestRunScraperScriptWaitsForProcessAfterDecodeError(t *testing.T) {
+	t.Setenv("STASH_SCRAPER_TEST_HELPER", "1")
+	marker := t.TempDir() + "/process-finished"
+
+	var output []models.ScrapedPerformer
+	s := &scriptScraper{}
+	err := s.runScraperScript(
+		context.Background(),
+		[]string{os.Args[0], "-test.run=^TestScraperScriptDecodeErrorHelper$", "--", marker},
+		`{"name":"candidate"}`,
+		&output,
+	)
+
+	assert.ErrorContains(t, err, "could not unmarshal json from script output")
+	assert.FileExists(t, marker, "runScraperScript returned before reaping the scraper process")
+}
+
+func TestScraperScriptDecodeErrorHelper(t *testing.T) {
+	if os.Getenv("STASH_SCRAPER_TEST_HELPER") != "1" {
+		return
+	}
+
+	marker := os.Args[len(os.Args)-1]
+	_, _ = fmt.Fprint(os.Stdout, "not-json")
+	time.Sleep(50 * time.Millisecond)
+	assert.NoError(t, os.WriteFile(marker, nil, 0o600))
 }
 
 func getImageStringValue(index int, field string) string {

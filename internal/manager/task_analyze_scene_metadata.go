@@ -68,7 +68,9 @@ type analyzeSceneMetadataJob struct {
 
 func (j *analyzeSceneMetadataJob) Execute(ctx context.Context, progress *job.Progress) error {
 	r := j.repository
-	j.scraperCache = instance.ScraperCache
+	if j.scraperCache == nil {
+		j.scraperCache = instance.ScraperCache
+	}
 
 	sceneIDs, err := stringslice.StringSliceToIntSlice(j.input.SceneIDs)
 	if err != nil {
@@ -371,7 +373,9 @@ func (j *analyzeSceneMetadataJob) verifyAndCreatePerformers(ctx context.Context,
 
 	for _, candidate := range candidates {
 		if err := ctx.Err(); err != nil {
-			return createdIDs, err
+			// Creations commit individually; a later run matches and links any
+			// performers left unlinked by cancellation.
+			return nil, err
 		}
 		if j.input.DryRun {
 			logger.Infof("[scene metadata] dry run: would look up new performer candidate %q", candidate)
@@ -380,7 +384,7 @@ func (j *analyzeSceneMetadataJob) verifyAndCreatePerformers(ctx context.Context,
 
 		verified, err := j.scrapeVerifyPerformer(ctx, scrapers, candidate)
 		if ctx.Err() != nil {
-			return createdIDs, ctx.Err()
+			return nil, ctx.Err()
 		}
 		if err != nil {
 			logger.Warnf("[scene metadata] error verifying performer candidate %q: %v", candidate, err)
@@ -392,7 +396,9 @@ func (j *analyzeSceneMetadataJob) verifyAndCreatePerformers(ctx context.Context,
 
 		id, err := j.createPerformer(ctx, verified)
 		if ctx.Err() != nil {
-			return createdIDs, ctx.Err()
+			// createPerformer may have committed just before cancellation. A
+			// later run will match and link that performer to the scene.
+			return nil, ctx.Err()
 		}
 		if err != nil {
 			logger.Warnf("[scene metadata] error creating performer %q: %v", verified, err)

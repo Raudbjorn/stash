@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	stashExec "github.com/stashapp/stash/pkg/exec"
 	"github.com/stashapp/stash/pkg/logger"
@@ -279,6 +280,7 @@ func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, 
 	}
 
 	cmd.Dir = filepath.Dir(s.definition.path)
+	cmd.WaitDelay = 5 * time.Second
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
