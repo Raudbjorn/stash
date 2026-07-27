@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	stashExec "github.com/stashapp/stash/pkg/exec"
 	"github.com/stashapp/stash/pkg/logger"
@@ -279,67 +281,70 @@ func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, 
 	}
 
 	cmd.Dir = filepath.Dir(s.definition.path)
+	cmd.WaitDelay = 5 * time.Second
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return err
 	}
 
-	go func() {
-		defer stdin.Close()
-
-		if n, err := io.WriteString(stdin, inString); err != nil {
-			logger.Warnf("failure to write full input to script (wrote %v bytes out of %v): %v", n, len(inString), err)
-		}
-	}()
-
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		logger.Error("Scraper stderr not available: " + err.Error())
 	}
 
-	stdout, err := cmd.StdoutPipe()
-	if nil != err {
-		logger.Error("Scraper stdout not available: " + err.Error())
-	}
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
 
 	if err = cmd.Start(); err != nil {
-		logger.Error("Error running scraper script: " + err.Error())
-		return errors.New("error running scraper script")
+		return fmt.Errorf("starting scraper script: %w", err)
 	}
+
+	go func() {
+		defer stdin.Close()
+
+		if n, err := io.WriteString(stdin, inString); err != nil && ctx.Err() == nil {
+			logger.Warnf("failure to write full input to script (wrote %v bytes out of %v): %v", n, len(inString), err)
+		}
+	}()
 
 	go handleScraperStderr(s.definition.Name, stderr)
 
 	logger.Debugf("Scraper script <%s> started", strings.Join(cmd.Args, " "))
 
-	// TODO - add a timeout here
-	// Make a copy of stdout here. This allows us to decode it twice.
-	var sb strings.Builder
-	tr := io.TeeReader(stdout, &sb)
-
-	// First, perform a decode where unknown fields are disallowed.
-	d := json.NewDecoder(tr)
-	d.DisallowUnknownFields()
-	strictErr := d.Decode(out)
-
-	if strictErr != nil {
-		// The decode failed for some reason, use the built string
-		// and allow unknown fields in the decode.
-		s := sb.String()
-		lenientErr := json.NewDecoder(strings.NewReader(s)).Decode(out)
-		if lenientErr != nil {
-			// The error is genuine, so return it
-			logger.Errorf("could not unmarshal json from script output: %v", lenientErr)
-			return fmt.Errorf("could not unmarshal json from script output: %w", lenientErr)
-		}
-
-		// Lenient decode succeeded, print a warning, but use the decode
-		logger.Warnf("reading script result: %v", strictErr)
-	}
-
 	err = cmd.Wait()
 	logger.Debugf("Scraper script finished")
 
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+
+	// Decode only after Wait has finished. cmd.Stdout's internal copy
+	// goroutine drains the pipe while the process runs, so malformed output
+	// cannot fill the pipe and deadlock the child against Wait.
+	d := json.NewDecoder(bytes.NewReader(stdout.Bytes()))
+	d.DisallowUnknownFields()
+	strictErr := d.Decode(out)
+
+	var decodeErr error
+	var strictWarning error
+	if strictErr != nil {
+		lenientErr := json.NewDecoder(bytes.NewReader(stdout.Bytes())).Decode(out)
+		if lenientErr != nil {
+			decodeErr = fmt.Errorf("could not unmarshal json from script output: %w", lenientErr)
+		} else {
+			strictWarning = strictErr
+		}
+	}
+
+	if decodeErr != nil {
+		logger.Error(decodeErr)
+		return decodeErr
+	}
+	if strictWarning != nil {
+		// Lenient decode succeeded, print a warning, but use the decode.
+		logger.Warnf("reading script result: %v", strictWarning)
+	}
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrScraperScript, err)
 	}
