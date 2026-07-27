@@ -1,7 +1,9 @@
 package scraper
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/stashapp/stash/pkg/models"
@@ -34,6 +36,17 @@ func Test_imageInputFromImage_worksWithMultipleFiles(t *testing.T) {
 	assert.Equal(t, "Photographer", input.Photographer)
 	assert.Equal(t, "/data/images/image_0001_.png", input.Files[0].Path)
 	assert.Equal(t, "/data/images/image_0002_.png", input.Files[1].Path)
+}
+
+func TestRunScraperScriptReturnsCanceledBeforeStart(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var output []models.ScrapedPerformer
+	s := &scriptScraper{}
+	err := s.runScraperScript(ctx, []string{os.Args[0]}, `{"name":"candidate"}`, &output)
+
+	assert.ErrorIs(t, err, context.Canceled)
 }
 
 func getImageStringValue(index int, field string) string {
