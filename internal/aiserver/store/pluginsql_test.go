@@ -19,6 +19,7 @@ func TestValidatePluginSQLNamespacing(t *testing.T) {
 		{"own table bracketed", "SELECT * FROM [p_demo_items]", true, false},
 		{"case insensitive prefix", "SELECT * FROM P_DEMO_Items", true, false},
 		{"join within namespace", "SELECT a.x FROM p_demo_a a JOIN p_demo_b b ON a.id = b.id", true, false},
+		{"unambiguous namespace", "SELECT * FROM p_demo__multi_word", true, false},
 
 		// The whole point: a plugin must not reach the server's tables, another
 		// plugin's tables, or Stash's.
@@ -49,6 +50,32 @@ func TestValidatePluginSQLNamespacing(t *testing.T) {
 			}
 			if !tc.wantErr && err != nil {
 				t.Errorf("ValidatePluginSQL rejected %q: %v", tc.query, err)
+			}
+		})
+	}
+}
+
+func TestValidatePluginSQLRejectsNamespaceBypasses(t *testing.T) {
+	for name, test := range map[string]struct {
+		plugin string
+		query  string
+	}{
+		"comma join": {
+			plugin: "mine",
+			query:  "SELECT * FROM p_mine_items, plugins",
+		},
+		"prefix confusion": {
+			plugin: "foo",
+			query:  "SELECT * FROM p_foo_bar_secrets",
+		},
+		"name collision": {
+			plugin: "a-b",
+			query:  "SELECT * FROM p_a_b_t",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := ValidatePluginSQL(test.plugin, test.query, 0, true); err == nil {
+				t.Fatalf("ValidatePluginSQL accepted namespace bypass %q", test.query)
 			}
 		})
 	}

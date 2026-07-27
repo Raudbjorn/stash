@@ -35,6 +35,9 @@ type Manager struct {
 // ErrAlreadyInstalled reports an install that would overwrite without asking.
 var ErrAlreadyInstalled = errors.New("plugin is already installed")
 
+// ErrInvalidPluginName rejects names that would alias another SQL namespace.
+var ErrInvalidPluginName = errors.New("plugin name must contain only lowercase letters, digits, and underscores")
+
 // RefreshResult summarises a catalog refresh.
 //
 // The field names match what the settings UI renders.
@@ -244,6 +247,9 @@ type InstallResult struct {
 // both surprise a user who did not expect them.
 func (m *Manager) Install(ctx context.Context, name, sourceName string, overwrite, installDependencies bool) (InstallResult, error) {
 	result := InstallResult{Plugin: name, Status: "installed", Installed: [][2]string{}}
+	if !store.ValidPluginIdentifier(name) {
+		return result, fmt.Errorf("%w: %q", ErrInvalidPluginName, name)
+	}
 
 	plan, err := m.PlanInstall(ctx, name, sourceName)
 	if err != nil {
@@ -277,6 +283,12 @@ func (m *Manager) Install(ctx context.Context, name, sourceName string, overwrit
 		return result, &DependenciesRequiredError{Dependencies: dependencies}
 	}
 
+	for _, target := range targets {
+		if !store.ValidPluginIdentifier(target) {
+			return result, fmt.Errorf("%w: %q", ErrInvalidPluginName, target)
+		}
+	}
+
 	preferred, err := m.sourceID(ctx, sourceName)
 	if err != nil {
 		return result, err
@@ -306,6 +318,9 @@ func (m *Manager) installOne(ctx context.Context, name string, preferredSource i
 	db := m.DB()
 	if db == nil {
 		return "", false, errors.New("the AI database is not available")
+	}
+	if !store.ValidPluginIdentifier(name) {
+		return "", false, fmt.Errorf("%w: %q", ErrInvalidPluginName, name)
 	}
 
 	entries, err := db.FindCatalogEntries(ctx, name)

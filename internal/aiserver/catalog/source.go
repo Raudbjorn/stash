@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -45,6 +46,9 @@ const (
 // invitation to swap it in transit. Localhost is exempt: a developer serving a
 // catalog from their own machine is not exposed to that.
 var ErrInsecureSource = errors.New("plugin sources must use https")
+
+// ErrUnsafeRedirect rejects a catalog redirect into a local network.
+var ErrUnsafeRedirect = errors.New("catalog redirect must target a public host")
 
 // ErrSchemaMismatch reports an index this build cannot read.
 var ErrSchemaMismatch = errors.New("unsupported catalog schema version")
@@ -161,10 +165,33 @@ type Client struct {
 }
 
 func (c *Client) httpClient() *http.Client {
+	var client http.Client
 	if c.HTTP != nil {
-		return c.HTTP
+		client = *c.HTTP
+	} else {
+		client.Timeout = fetchTimeout
 	}
-	return &http.Client{Timeout: fetchTimeout}
+	previous := client.CheckRedirect
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if err := ValidateSourceURL(req.URL.String()); err != nil {
+			return err
+		}
+		localDevelopmentRedirect := len(via) > 0 &&
+			via[0].URL.Scheme == "http" && isLoopback(via[0].URL.Hostname())
+		if !localDevelopmentRedirect || !isLoopback(req.URL.Hostname()) {
+			if err := validatePublicHost(req.Context(), req.URL.Hostname()); err != nil {
+				return err
+			}
+		}
+		if previous != nil {
+			return previous(req, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return nil
+	}
+	return &client
 }
 
 // ValidateSourceURL rejects a source that cannot be trusted to serve code.
@@ -189,7 +216,33 @@ func ValidateSourceURL(raw string) error {
 }
 
 func isLoopback(host string) bool {
-	return host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]"
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func validatePublicHost(ctx context.Context, host string) error {
+	if host == "" {
+		return fmt.Errorf("%w: empty host", ErrUnsafeRedirect)
+	}
+	addresses, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return fmt.Errorf("%w: resolve %q: %v", ErrUnsafeRedirect, host, err)
+	}
+	if len(addresses) == 0 {
+		return fmt.Errorf("%w: %q has no addresses", ErrUnsafeRedirect, host)
+	}
+	for _, address := range addresses {
+		ip := address.IP
+		if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() ||
+			ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			return fmt.Errorf("%w: %s resolves to %s", ErrUnsafeRedirect, host, ip)
+		}
+	}
+	return nil
 }
 
 // FetchIndex retrieves and parses a source's plugin index.

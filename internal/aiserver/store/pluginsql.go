@@ -19,12 +19,13 @@ import (
 // So plugins get a deliberately small door: one statement per call, always
 // parameterised, and only against tables they own.
 
-// PluginTablePrefix returns the namespace a plugin's tables must live in.
+// PluginTablePrefix returns the unambiguous namespace a plugin's tables use.
 //
-// The prefix is part of the contract, not an implementation detail: a plugin's
-// migrations create p_<plugin>_* tables and its queries may name nothing else.
+// The doubled separator is deliberate: p_foo__ cannot be a prefix of
+// p_foo_bar__, so one plugin name cannot shadow another. Plugin identifiers
+// themselves must already consist of letters, digits, and underscores.
 func PluginTablePrefix(plugin string) string {
-	return "p_" + sanitizeIdentifier(plugin) + "_"
+	return "p_" + sanitizeIdentifier(plugin) + "__"
 }
 
 // Limits on a single plugin query. Generous enough that no reasonable plugin
@@ -48,6 +49,7 @@ var (
 	ErrPluginSQLMultiple    = errors.New("only one statement per call")
 	ErrPluginSQLForbidden   = errors.New("statement is not permitted")
 	ErrPluginSQLTooManyArgs = errors.New("too many parameters")
+	ErrPluginSQLName        = errors.New("plugin name is not a safe SQL identifier")
 	ErrPluginSQLReadOnly    = errors.New("query must be a SELECT")
 )
 
@@ -89,11 +91,21 @@ var tableRefPattern = regexp.MustCompile(
 // cannot be hidden behind one.
 var commentPattern = regexp.MustCompile(`(?s)--[^\n]*|/\*.*?\*/`)
 
+// fromClausePattern isolates table-source lists. Comma joins need an explicit
+// check because tableRefPattern only sees identifiers introduced by keywords.
+// The filter is intentionally conservative: a complex FROM expression with a
+// comma must use explicit JOIN syntax instead.
+var fromClausePattern = regexp.MustCompile(
+	`(?is)\bfrom\b(.*?)(?:\bwhere\b|\bjoin\b|\bgroup\s+by\b|\border\s+by\b|\blimit\b|\bunion\b|\bexcept\b|\bintersect\b|\breturning\b|$)`)
+
 // ValidatePluginSQL checks a statement against the plugin sandbox rules.
 //
 // readOnly additionally requires a SELECT, which is what separates Query from
 // Execute on the bridge.
 func ValidatePluginSQL(plugin, query string, params int, readOnly bool) error {
+	if !ValidPluginIdentifier(plugin) {
+		return fmt.Errorf("%w: %q", ErrPluginSQLName, plugin)
+	}
 	if len(query) > maxPluginSQLLength {
 		return ErrPluginSQLTooLong
 	}
@@ -128,8 +140,14 @@ func ValidatePluginSQL(plugin, query string, params int, readOnly bool) error {
 		return ErrPluginSQLReadOnly
 	}
 
-	prefix := PluginTablePrefix(plugin)
-	for _, match := range tableRefPattern.FindAllStringSubmatch(blankStringLiterals(trimmed), -1) {
+	inspected := blankStringLiterals(trimmed)
+	for _, clause := range fromClausePattern.FindAllStringSubmatch(inspected, -1) {
+		if strings.Contains(clause[1], ",") {
+			return fmt.Errorf("%w: comma-separated FROM sources require explicit JOIN", ErrPluginSQLForbidden)
+		}
+	}
+
+	for _, match := range tableRefPattern.FindAllStringSubmatch(inspected, -1) {
 		table := unquoteIdentifier(match[1])
 
 		// A CTE or subquery alias is not a table. `FROM (SELECT ...)` produces
@@ -137,7 +155,7 @@ func ValidatePluginSQL(plugin, query string, params int, readOnly bool) error {
 		if strings.EqualFold(table, "if") || strings.EqualFold(table, "exists") {
 			continue
 		}
-		if !strings.HasPrefix(strings.ToLower(table), prefix) {
+		if !ownsPluginTable(plugin, table) {
 			return ErrPluginTable{Plugin: plugin, Table: table}
 		}
 	}
@@ -242,6 +260,28 @@ func (db *DB) PluginExecuteBatch(ctx context.Context, plugin string, statements 
 		return nil
 	})
 	return total, err
+}
+
+func ownsPluginTable(plugin, table string) bool {
+	table = strings.ToLower(table)
+	prefix := PluginTablePrefix(plugin)
+	if suffix, ok := strings.CutPrefix(table, prefix); ok {
+		return suffix != "" && sanitizeIdentifier(suffix) == suffix
+	}
+
+	// Compatibility for the pre-delimiter namespace. It is safe only for a
+	// single-component table suffix; allowing underscores recreates the
+	// p_foo_ / p_foo_bar_ prefix-confusion bug.
+	legacy := "p_" + sanitizeIdentifier(plugin) + "_"
+	suffix, ok := strings.CutPrefix(table, legacy)
+	return ok && suffix != "" && !strings.Contains(suffix, "_") && sanitizeIdentifier(suffix) == suffix
+}
+
+// ValidPluginIdentifier reports whether a name has one stable SQL and
+// filesystem spelling. Rejecting lossy sanitisation prevents two plugins from
+// being mapped to the same namespace.
+func ValidPluginIdentifier(name string) bool {
+	return name != "" && name == strings.ToLower(name) && sanitizeIdentifier(name) == name
 }
 
 // sanitizeIdentifier reduces a plugin name to characters legal in a table name.

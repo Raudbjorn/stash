@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/stashapp/stash/internal/aiserver/store"
@@ -31,6 +32,9 @@ var ErrUnsafePath = errors.New("refusing a plugin file path outside its director
 // ErrDigestMismatch reports a file that is not what the catalog promised.
 var ErrDigestMismatch = errors.New("downloaded file does not match its published checksum")
 
+// ErrUnverifiedManifest rejects a declared file list with missing digests.
+var ErrUnverifiedManifest = errors.New("catalog file manifest must checksum every file")
+
 // DownloadedFile is one file fetched for a plugin.
 type DownloadedFile struct {
 	// RelPath is the path within the plugin directory, always slash-separated
@@ -47,8 +51,15 @@ func (c *Client) Download(ctx context.Context, sourceURL string, entry store.Cat
 		return nil, err
 	}
 
-	pluginPath, files := readManifestLocation(entry)
-	if len(files) > 0 {
+	pluginPath, files, declared, err := readManifestLocation(entry)
+	if err != nil {
+		return nil, err
+	}
+	pluginPath, err = safeRelPath(pluginPath)
+	if err != nil {
+		return nil, fmt.Errorf("plugin manifest path: %w", err)
+	}
+	if declared {
 		return c.downloadListed(ctx, sourceURL, pluginPath, files)
 	}
 	return c.downloadTree(ctx, sourceURL, pluginPath)
@@ -60,28 +71,32 @@ func (c *Client) Download(ctx context.Context, sourceURL string, entry store.Cat
 // The manifest is stored as opaque JSON so a newer catalog can carry fields
 // this build does not model; reading it back is therefore defensive rather than
 // typed.
-func readManifestLocation(entry store.CatalogEntry) (string, []IndexFile) {
+func readManifestLocation(entry store.CatalogEntry) (string, []IndexFile, bool, error) {
 	pluginPath := entry.PluginName
-	if raw, ok := entry.Manifest["path"].(string); ok && raw != "" {
-		pluginPath = raw
+	if raw, ok := entry.Manifest["path"]; ok {
+		pathValue, valid := raw.(string)
+		if !valid || pathValue == "" {
+			return "", nil, false, fmt.Errorf("catalog path for %s is not a non-empty string", entry.PluginName)
+		}
+		pluginPath = pathValue
 	}
 
-	rawFiles, ok := entry.Manifest["files_manifest"]
-	if !ok {
-		return pluginPath, nil
+	rawFiles, declared := entry.Manifest["files_manifest"]
+	if !declared {
+		return pluginPath, nil, false, nil
 	}
-
-	// Round-tripped through JSON rather than type-asserted element by element:
-	// the value came from a decoded document, so its shape is []any of maps.
 	encoded, err := json.Marshal(rawFiles)
 	if err != nil {
-		return pluginPath, nil
+		return "", nil, true, fmt.Errorf("encode file manifest for %s: %w", entry.PluginName, err)
 	}
 	var files []IndexFile
 	if err := json.Unmarshal(encoded, &files); err != nil {
-		return pluginPath, nil
+		return "", nil, true, fmt.Errorf("decode file manifest for %s: %w", entry.PluginName, err)
 	}
-	return pluginPath, files
+	if len(files) == 0 {
+		return "", nil, true, fmt.Errorf("%w: %s declares no files", ErrUnverifiedManifest, entry.PluginName)
+	}
+	return pluginPath, files, true, nil
 }
 
 // downloadListed fetches exactly the files the index named, verifying each.
@@ -92,6 +107,12 @@ func readManifestLocation(entry store.CatalogEntry) (string, []IndexFile) {
 func (c *Client) downloadListed(ctx context.Context, sourceURL, pluginPath string, files []IndexFile) ([]DownloadedFile, error) {
 	if len(files) > maxFileCount {
 		return nil, fmt.Errorf("plugin declares %d files, more than the %d limit", len(files), maxFileCount)
+	}
+	for _, file := range files {
+		decoded, err := hex.DecodeString(file.SHA256)
+		if err != nil || len(decoded) != sha256.Size {
+			return nil, fmt.Errorf("%w: %s", ErrUnverifiedManifest, file.Path)
+		}
 	}
 
 	base := strings.TrimRight(sourceURL, "/")
@@ -118,11 +139,13 @@ func (c *Client) downloadListed(ctx context.Context, sourceURL, pluginPath strin
 			return nil, err
 		}
 
-		if file.SHA256 != "" {
-			sum := sha256.Sum256(data)
-			if !strings.EqualFold(hex.EncodeToString(sum[:]), file.SHA256) {
-				return nil, fmt.Errorf("%w: %s", ErrDigestMismatch, rel)
-			}
+		sum := sha256.Sum256(data)
+		if !strings.EqualFold(hex.EncodeToString(sum[:]), file.SHA256) {
+			return nil, fmt.Errorf("%w: %s", ErrDigestMismatch, rel)
+		}
+		if file.Size > 0 && int64(len(data)) != file.Size {
+			return nil, fmt.Errorf("catalog file %s: expected %d bytes, got %d",
+				rel, file.Size, len(data))
 		}
 
 		total += int64(len(data))
@@ -133,7 +156,7 @@ func (c *Client) downloadListed(ctx context.Context, sourceURL, pluginPath strin
 		out = append(out, DownloadedFile{
 			RelPath:  rel,
 			Data:     data,
-			Verified: file.SHA256 != "",
+			Verified: true,
 		})
 	}
 	return out, nil
@@ -295,7 +318,8 @@ func safeRelPath(raw string) (string, error) {
 		return unsafe()
 	}
 	// Absolute, or drive-qualified on Windows.
-	if strings.HasPrefix(normalised, "/") || filepath.IsAbs(raw) || strings.Contains(raw, ":") {
+	if strings.HasPrefix(normalised, "/") || filepath.IsAbs(raw) ||
+		(runtime.GOOS == "windows" && strings.Contains(raw, ":")) {
 		return unsafe()
 	}
 

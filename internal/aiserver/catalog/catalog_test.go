@@ -249,6 +249,79 @@ func TestInstallRejectsATamperedFile(t *testing.T) {
 	}
 }
 
+func TestInstallRejectsPartiallyChecksummedManifest(t *testing.T) {
+	source := demoSource()
+	source.index.Plugins[0].Files[1].SHA256 = ""
+	server := source.start(t)
+	manager, _, pluginDir := newManager(t, server.URL)
+	ctx := context.Background()
+	if _, err := manager.Refresh(ctx, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := manager.Install(ctx, "demo", "test", false, false)
+	if !errors.Is(err, ErrUnverifiedManifest) {
+		t.Fatalf("Install = %v, want ErrUnverifiedManifest", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(pluginDir, "demo")); !os.IsNotExist(statErr) {
+		t.Fatal("partially checksummed plugin reached the install directory")
+	}
+}
+
+func TestDownloadRejectsMalformedDeclaredManifest(t *testing.T) {
+	client := &Client{}
+	for name, manifest := range map[string]map[string]any{
+		"bad files":   {"files_manifest": "not a list"},
+		"empty files": {"files_manifest": []any{}},
+		"bad path": {
+			"path": "../other-plugin",
+			"files_manifest": []any{
+				map[string]any{"path": "plugin.py", "sha256": digest(nil)},
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := client.Download(context.Background(), "https://example.com", store.CatalogEntry{
+				PluginName: "demo",
+				Manifest:   manifest,
+			})
+			if err == nil {
+				t.Fatal("malformed declared manifest fell back to an unverified download")
+			}
+		})
+	}
+}
+
+func TestCatalogRedirectRejectsInternalHost(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://127.0.0.2/private", http.StatusFound)
+	}))
+	defer server.Close()
+
+	_, err := (&Client{HTTP: server.Client()}).FetchIndex(context.Background(), server.URL)
+	if !errors.Is(err, ErrUnsafeRedirect) {
+		t.Fatalf("FetchIndex = %v, want ErrUnsafeRedirect", err)
+	}
+}
+
+func TestLoopbackValidationCoversTheWholeAddressRange(t *testing.T) {
+	for _, host := range []string{"localhost", "LOCALHOST.", "127.0.0.1", "127.0.0.2", "::1"} {
+		if !isLoopback(host) {
+			t.Errorf("isLoopback(%q) = false", host)
+		}
+	}
+}
+
+func TestInstallRejectsLossyPluginNames(t *testing.T) {
+	manager, _, _ := newManager(t, "")
+	for _, name := range []string{"a-b", "A_B", "../escape"} {
+		_, err := manager.Install(context.Background(), name, "", false, false)
+		if !errors.Is(err, ErrInvalidPluginName) {
+			t.Errorf("Install(%q) = %v, want ErrInvalidPluginName", name, err)
+		}
+	}
+}
+
 // A catalog entry naming a path outside its directory must be refused before
 // anything is written.
 func TestDownloadRejectsPathTraversal(t *testing.T) {
