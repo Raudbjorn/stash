@@ -2,8 +2,11 @@ package scraper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +14,67 @@ import (
 	"github.com/stashapp/stash/pkg/models"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestScraperCommandResultPreservesFailureWhenCancellationLosesRace(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	processErr := errors.New("exit status 7")
+	cancel()
+
+	err := scraperCommandResult(ctx, processErr, false)
+
+	assert.ErrorIs(t, err, ErrScraperScript)
+	assert.NotErrorIs(t, err, context.Canceled)
+}
+
+func TestScraperCommandResultReturnsCancellationWhenItKilledCommand(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := scraperCommandResult(ctx, errors.New("signal: killed"), true)
+
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.NotErrorIs(t, err, ErrScraperScript)
+}
+
+func TestRunScraperScriptReturnsCancellationWhenContextKillsProcess(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper uses a POSIX shell")
+	}
+
+	startedPath := filepath.Join(t.TempDir(), "started")
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() {
+		var out map[string]interface{}
+		s := &scriptScraper{}
+		result <- s.runScraperScript(
+			ctx,
+			[]string{"sh", "-c", `printf '{}'; : > "$1"; exec sleep 30`, "sh", startedPath},
+			"{}",
+			&out,
+		)
+	}()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(startedPath); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("scraper helper did not start")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+
+	select {
+	case err := <-result:
+		assert.ErrorIs(t, err, context.Canceled)
+		assert.NotErrorIs(t, err, ErrScraperScript)
+	case <-time.After(5 * time.Second):
+		t.Fatal("scraper did not return after cancellation")
+	}
+}
 
 func Test_imageInputFromImage_worksWithMultipleFiles(t *testing.T) {
 

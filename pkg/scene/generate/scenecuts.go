@@ -3,9 +3,7 @@ package generate
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -38,11 +36,14 @@ func (g Generator) DetectSceneCuts(ctx context.Context, input string, options tr
 	lockCtx.AttachCommand(cmd)
 
 	if err := cmd.Wait(); err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			exitErr.Stderr = stderr.Bytes()
-			err = exitErr
+		if ctxErr := lockCtx.Err(); ctxErr != nil {
+			return nil, ctxErr
 		}
+
+		if stderrMessage := strings.TrimSpace(stderr.String()); stderrMessage != "" {
+			return nil, fmt.Errorf("error running ffmpeg command <%s>: %w: %s", strings.Join(args, " "), err, stderrMessage)
+		}
+
 		return nil, fmt.Errorf("error running ffmpeg command <%s>: %w", strings.Join(args, " "), err)
 	}
 

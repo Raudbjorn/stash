@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 
@@ -99,11 +100,21 @@ func (j *detectSceneCutsJob) Execute(ctx context.Context, progress *job.Progress
 			return nil
 		}
 
+		var processErr error
 		progress.ExecuteTask(fmt.Sprintf("Detecting scene cuts for %s", sc.GetTitle()), func() {
-			if err := j.processScene(ctx, g, sc, tagID, threshold, downscaleWidth); err != nil {
-				logger.Errorf("[scene cuts] error processing scene %d: %v", sc.ID, err)
-			}
+			processErr = j.processScene(ctx, g, sc, tagID, threshold, downscaleWidth)
 		})
+
+		if processErr != nil {
+			if errors.Is(processErr, context.Canceled) || errors.Is(processErr, context.DeadlineExceeded) {
+				if job.IsCancelled(ctx) {
+					return nil
+				}
+				logger.Debugf("[scene cuts] processing scene %d was canceled: %v", sc.ID, processErr)
+			} else {
+				logger.Errorf("[scene cuts] error processing scene %d: %v", sc.ID, processErr)
+			}
+		}
 
 		progress.Increment()
 	}
