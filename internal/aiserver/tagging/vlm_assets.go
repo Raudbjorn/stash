@@ -58,29 +58,38 @@ func resolveVLMArtifacts(settings Settings) (vlmArtifacts, error) {
 			"llama-server %s (%s) is not installed or verified at %s; download the pinned %s asset from the AI settings",
 			assets.DefaultServerVersion, serverAsset.License, serverPath, serverAsset.Name)
 	}
+	if err := requireVLMPair(downloader, pair); err != nil {
+		return vlmArtifacts{}, err
+	}
 	modelPath := downloader.Path(pair.Primary)
 	mmprojPath := downloader.Path(pair.Companion)
-	if !downloader.PairInstalled(pair) {
-		missing := make([]string, 0, 2)
-		for _, path := range []string{modelPath, mmprojPath} {
-			if _, statErr := os.Stat(path); statErr != nil {
-				missing = append(missing, path)
-			}
-		}
-		if len(missing) > 0 {
-			return vlmArtifacts{}, fmt.Errorf(
-				"VLM pair %s (%s) is not installed; missing %v; download both pinned GGUF files from the AI settings",
-				pair.Name, pair.License, missing)
-		}
-		return vlmArtifacts{}, fmt.Errorf(
-			"VLM pair %s (%s) failed checksum verification at %s and %s; re-download both pinned GGUF files",
-			pair.Name, pair.License, modelPath, mmprojPath)
-	}
 
 	return vlmArtifacts{
 		pair: pair, serverPath: serverPath, modelPath: modelPath,
 		mmprojPath: mmprojPath, contextTokens: contextTokens,
 	}, nil
+}
+
+func requireVLMPair(downloader *assets.Downloader, pair assets.Pair) error {
+	modelPath := downloader.Path(pair.Primary)
+	mmprojPath := downloader.Path(pair.Companion)
+	if downloader.PairInstalled(pair) {
+		return nil
+	}
+	missing := make([]string, 0, 2)
+	for _, path := range []string{modelPath, mmprojPath} {
+		if _, statErr := os.Stat(path); statErr != nil {
+			missing = append(missing, path)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf(
+			"VLM pair %s (%s) is not installed; missing %v; download both pinned GGUF files from the AI settings",
+			pair.Name, pair.License, missing)
+	}
+	return fmt.Errorf(
+		"VLM pair %s (%s) failed checksum verification at %s and %s; re-download both pinned GGUF files",
+		pair.Name, pair.License, modelPath, mmprojPath)
 }
 
 func serverAssetForGPU(gpuLayers int) (assets.Asset, error) {

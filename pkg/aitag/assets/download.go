@@ -13,14 +13,17 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -29,11 +32,17 @@ import (
 // ErrChecksumMismatch reports an artefact that is not what was published.
 var ErrChecksumMismatch = errors.New("downloaded file does not match its published checksum")
 
+// ErrSizeMismatch reports a response outside its catalogued byte count.
+var ErrSizeMismatch = errors.New("downloaded file size does not match its published size")
+
 // ErrInsecureURL rejects a plaintext download.
 var ErrInsecureURL = errors.New("model downloads must use https")
 
 // ErrUnsafePath rejects an archive entry that would escape its destination.
 var ErrUnsafePath = errors.New("refusing an archive path outside the destination")
+
+// ErrUnsafeRedirect rejects a redirect to a local or otherwise non-public host.
+var ErrUnsafeRedirect = errors.New("download redirect must target a public host")
 
 // Licence identifiers, shown before a download is offered.
 //
@@ -85,13 +94,37 @@ type Downloader struct {
 	HTTP *http.Client
 }
 
+const integrityFile = ".asset-integrity.json"
+
+type archiveIntegrity struct {
+	ArchiveSHA256 string `json:"archive_sha256"`
+	TreeSHA256    string `json:"tree_sha256"`
+}
+
 func (d *Downloader) client() *http.Client {
+	var client http.Client
 	if d.HTTP != nil {
-		return d.HTTP
+		client = *d.HTTP
+	}
+	previous := client.CheckRedirect
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if err := validateURL(req.URL.String()); err != nil {
+			return err
+		}
+		if err := validatePublicRedirect(req); err != nil {
+			return err
+		}
+		if previous != nil {
+			return previous(req, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return nil
 	}
 	// No overall timeout: a model is hundreds of megabytes and a slow link is
 	// not a failure. The context is the deadline.
-	return &http.Client{Timeout: 0}
+	return &client
 }
 
 // Path returns where an asset lives once installed.
@@ -106,20 +139,26 @@ func (d *Downloader) Path(asset Asset) string {
 }
 
 // Installed reports whether an asset is already present and verified.
-//
-// For a plain file the digest is re-checked, so a truncated or corrupted cache
-// is detected rather than loaded. For an archive only presence is checked: the
-// extracted tree's digest is not the published one, and re-hashing hundreds of
-// megabytes on every startup would be worse than the risk it removes.
 func (d *Downloader) Installed(asset Asset) bool {
-	path := d.Path(asset)
-	info, err := os.Stat(path)
+	installedPath := d.Path(asset)
+	info, err := os.Stat(installedPath)
 	if err != nil {
 		return false
 	}
 
 	if asset.Archive != "" {
-		return true
+		root := filepath.Join(d.Dir, asset.Name)
+		data, err := os.ReadFile(filepath.Join(root, integrityFile))
+		if err != nil {
+			return false
+		}
+		var integrity archiveIntegrity
+		if json.Unmarshal(data, &integrity) != nil ||
+			!strings.EqualFold(integrity.ArchiveSHA256, asset.SHA256) {
+			return false
+		}
+		sum, err := treeDigest(root)
+		return err == nil && strings.EqualFold(sum, integrity.TreeSHA256)
 	}
 	if asset.Size > 0 && info.Size() != asset.Size {
 		return false
@@ -128,7 +167,7 @@ func (d *Downloader) Installed(asset Asset) bool {
 		return true
 	}
 
-	sum, err := fileDigest(path)
+	sum, err := fileDigest(installedPath)
 	if err != nil {
 		return false
 	}
@@ -222,6 +261,24 @@ func (d *Downloader) Fetch(ctx context.Context, asset Asset, progress Progress) 
 		return "", fmt.Errorf("archive %s does not contain %s", asset.Name, asset.ExtractPath)
 	}
 
+	treeSHA256, err := treeDigest(stage)
+	if err != nil {
+		return "", fmt.Errorf("verify extracted %s: %w", asset.Name, err)
+	}
+	integrity, err := json.Marshal(archiveIntegrity{
+		ArchiveSHA256: strings.ToLower(asset.SHA256),
+		TreeSHA256:    treeSHA256,
+	})
+	if err != nil {
+		return "", err
+	}
+	if err := os.Remove(filepath.Join(stage, integrityFile)); err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(stage, integrityFile), integrity, 0o600); err != nil {
+		return "", err
+	}
+
 	// Directory replacement is deliberately staged, not claimed to be
 	// portable-atomic: all extraction and validation completes before the old
 	// destination is removed.
@@ -263,12 +320,19 @@ func (d *Downloader) download(ctx context.Context, asset Asset, w io.Writer, pro
 	hasher := sha256.New()
 	counter := &countingWriter{progress: progress, total: total}
 
-	// The context is checked by the reader, so a cancelled download stops
-	// promptly rather than at the end of a very large file.
-	body := &contextReader{ctx: ctx, reader: resp.Body}
-
-	if _, err := io.Copy(io.MultiWriter(w, hasher, counter), body); err != nil {
+	// LimitReader bounds disk use even when a server ignores Content-Length.
+	// One extra byte distinguishes an exact response from an oversized one.
+	body := io.Reader(&contextReader{ctx: ctx, reader: resp.Body})
+	if asset.Size > 0 {
+		body = io.LimitReader(body, asset.Size+1)
+	}
+	n, err := io.Copy(io.MultiWriter(w, hasher, counter), body)
+	if err != nil {
 		return "", fmt.Errorf("download %s: %w", asset.Name, err)
+	}
+	if asset.Size > 0 && n != asset.Size {
+		return "", fmt.Errorf("%w: %s: expected %d bytes, got %d",
+			ErrSizeMismatch, asset.Name, asset.Size, n)
 	}
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
@@ -540,6 +604,84 @@ func writeFile(path string, src io.Reader, mode os.FileMode) error {
 	// OpenFile applies mode only when creating. Explicit chmod also preserves
 	// archive mode bits when a later entry replaces an earlier path.
 	return os.Chmod(path, mode)
+}
+
+func validatePublicRedirect(req *http.Request) error {
+	host := req.URL.Hostname()
+	if host == "" {
+		return fmt.Errorf("%w: empty host", ErrUnsafeRedirect)
+	}
+	addresses, err := net.DefaultResolver.LookupIPAddr(req.Context(), host)
+	if err != nil {
+		return fmt.Errorf("%w: resolve %q: %v", ErrUnsafeRedirect, host, err)
+	}
+	if len(addresses) == 0 {
+		return fmt.Errorf("%w: %q has no addresses", ErrUnsafeRedirect, host)
+	}
+	for _, address := range addresses {
+		ip := address.IP
+		if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() ||
+			ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			return fmt.Errorf("%w: %s resolves to %s", ErrUnsafeRedirect, host, ip)
+		}
+	}
+	return nil
+}
+
+func treeDigest(root string) (string, error) {
+	hash := sha256.New()
+	err := filepath.WalkDir(root, func(current string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(root, current)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		if relative == "." || relative == integrityFile {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		io.WriteString(hash, strconv.Itoa(len(relative)))
+		io.WriteString(hash, ":")
+		io.WriteString(hash, relative)
+		io.WriteString(hash, "\x00")
+		io.WriteString(hash, info.Mode().Type().String())
+		io.WriteString(hash, ":")
+		io.WriteString(hash, info.Mode().Perm().String())
+		io.WriteString(hash, "\x00")
+		switch {
+		case info.Mode()&os.ModeSymlink != 0:
+			target, err := os.Readlink(current)
+			if err != nil {
+				return err
+			}
+			io.WriteString(hash, target)
+		case info.Mode().IsRegular():
+			file, err := os.Open(current)
+			if err != nil {
+				return err
+			}
+			_, copyErr := io.Copy(hash, file)
+			closeErr := file.Close()
+			if copyErr != nil {
+				return copyErr
+			}
+			if closeErr != nil {
+				return closeErr
+			}
+		}
+		io.WriteString(hash, "\x00")
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // writeLink creates a symlink whose target is checked to stay inside dest.

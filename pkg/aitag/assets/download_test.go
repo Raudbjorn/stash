@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -132,6 +133,38 @@ func TestFetchRefusesPlaintextURLs(t *testing.T) {
 	}, nil)
 	if err == nil {
 		t.Error("a file:// URL was accepted")
+	}
+}
+
+func TestFetchRejectsRedirectsToInternalHosts(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://127.0.0.1/private", http.StatusFound)
+	}))
+	defer server.Close()
+
+	d := newDownloader(t, server)
+	_, err := d.Fetch(context.Background(), Asset{
+		Name: "model.onnx", URL: server.URL, SHA256: digest(nil),
+	}, nil)
+	if !errors.Is(err, ErrUnsafeRedirect) {
+		t.Fatalf("Fetch = %v, want ErrUnsafeRedirect", err)
+	}
+}
+
+func TestFetchEnforcesPublishedSize(t *testing.T) {
+	content := []byte("12345")
+	for _, size := range []int64{4, 6} {
+		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			server := serveBytes(t, content)
+			d := newDownloader(t, server)
+			_, err := d.Fetch(context.Background(), Asset{
+				Name: "model.onnx", URL: server.URL + "/file",
+				SHA256: digest(content), Size: size,
+			}, nil)
+			if !errors.Is(err, ErrSizeMismatch) {
+				t.Fatalf("Fetch = %v, want ErrSizeMismatch", err)
+			}
+		})
 	}
 }
 
@@ -265,6 +298,29 @@ func TestFetchExtractsATarGz(t *testing.T) {
 	}
 	if string(got) != "ELF..." {
 		t.Errorf("extracted content = %q", got)
+	}
+}
+
+func TestInstalledRejectsModifiedArchiveTree(t *testing.T) {
+	archive := buildTarGz(t, map[string]string{"pkg/model": "verified"})
+	server := serveBytes(t, archive)
+	d := newDownloader(t, server)
+	asset := Asset{
+		Name: "archive", URL: server.URL + "/file", SHA256: digest(archive),
+		Archive: "tgz", ExtractPath: "pkg/model",
+	}
+	path, err := d.Fetch(context.Background(), asset, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.Installed(asset) {
+		t.Fatal("fresh archive does not report installed")
+	}
+	if err := os.WriteFile(path, []byte("tampered"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if d.Installed(asset) {
+		t.Fatal("modified extracted native artifact reports installed")
 	}
 }
 
@@ -426,7 +482,7 @@ func TestExtractRefusesPathTraversal(t *testing.T) {
 
 func TestFailedExtractionLeavesNoInstalledTreeOrStaging(t *testing.T) {
 	archive := buildTarGz(t, map[string]string{
-		"partial/file":    "written before failure",
+		"partial/file":     "written before failure",
 		"../../escape.txt": "rejected",
 	})
 	server := serveBytes(t, archive)
@@ -791,7 +847,6 @@ func TestPairNeedsBothHalves(t *testing.T) {
 		t.Error("a pair with a missing projector reports as installed")
 	}
 }
-
 
 // The default embedder is a NAME, so reordering the catalog cannot change which
 // model heads are trained against. A head is a set of weights over one model's

@@ -2,8 +2,6 @@ package tagging
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -27,14 +25,8 @@ func TestResolveVLMArtifactsReportsExactMissingPaths(t *testing.T) {
 		t.Errorf("server error does not name path and licence: %v", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(serverPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(serverPath, []byte("server"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	pair, _ := assets.FindPair(assets.DefaultVisionPair)
-	_, err = resolveVLMArtifacts(settings)
+	err = requireVLMPair(downloader, pair)
 	if err == nil {
 		t.Fatal("missing VLM pair was accepted")
 	}
