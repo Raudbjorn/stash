@@ -83,6 +83,9 @@ func requireFFmpeg(t *testing.T) string {
 	if err != nil {
 		t.Skip("ffmpeg not available")
 	}
+	if output, err := exec.Command(path, "-version").CombinedOutput(); err != nil {
+		t.Skipf("ffmpeg is installed but unusable: %v: %s", err, output)
+	}
 	return path
 }
 

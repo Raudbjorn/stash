@@ -661,3 +661,16 @@ func TestSubmitWithoutServiceIsRejected(t *testing.T) {
 		t.Error("submitting an action with no service should fail")
 	}
 }
+
+func TestReleaseSlotDoesNotDependOnTaskRecord(t *testing.T) {
+	m := NewManager(Options{})
+	m.running["service"] = 1
+
+	m.mu.Lock()
+	m.releaseSlotLocked("service", "already-cleaned", false)
+	m.mu.Unlock()
+
+	if got := m.running["service"]; got != 0 {
+		t.Fatalf("running slots = %d, want 0 after record removal", got)
+	}
+}

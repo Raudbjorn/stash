@@ -10,6 +10,7 @@ package tagging
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -114,7 +115,7 @@ func (w *Writer) Write(ctx context.Context, service string, sceneID int, runID i
 	for name := range missing {
 		result.MissingTags = append(result.MissingTags, name)
 	}
-	sortStrings(result.MissingTags)
+	sort.Strings(result.MissingTags)
 
 	var previous []int
 	if opts.ReplacePrevious && w.db != nil {
@@ -272,12 +273,4 @@ func (w *Writer) InvalidateTagCache() {
 	w.mu.Lock()
 	w.tagCache = map[string]*int{}
 	w.mu.Unlock()
-}
-
-func sortStrings(values []string) {
-	for i := 1; i < len(values); i++ {
-		for j := i; j > 0 && values[j] < values[j-1]; j-- {
-			values[j], values[j-1] = values[j-1], values[j]
-		}
-	}
 }

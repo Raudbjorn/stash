@@ -10,6 +10,7 @@ written.
 """
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
@@ -162,8 +163,8 @@ class HostBus:
     def _hello(self, conn, params, invocation) -> None:
         token, protocol = params.unpack()
 
-        # Compared in full; a mismatch reveals nothing about the real token.
-        if token != self._token:
+        # Constant-time comparison keeps the local capability check honest.
+        if not hmac.compare_digest(token, self._token):
             _log.warning("rejected a peer presenting a bad token")
             invocation.return_dbus_error(ERR_UNAUTHORIZED, "token mismatch")
             return

@@ -305,11 +305,20 @@ func TestAnalyzeImagesKeepsPerPathErrors(t *testing.T) {
 	}
 }
 
-func TestAnalyzeVideoStreamsFramesSequentially(t *testing.T) {
+func requireUsableFFmpeg(t *testing.T) string {
+	t.Helper()
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		t.Skip("ffmpeg is not installed")
 	}
+	if output, err := exec.Command(ffmpeg, "-version").CombinedOutput(); err != nil {
+		t.Skipf("ffmpeg is installed but unusable: %v: %s", err, output)
+	}
+	return ffmpeg
+}
+
+func TestAnalyzeVideoStreamsFramesSequentially(t *testing.T) {
+	ffmpeg := requireUsableFFmpeg(t)
 	if _, err := exec.LookPath("ffprobe"); err != nil {
 		t.Skip("ffprobe is not installed")
 	}

@@ -126,6 +126,9 @@ func TestStopAndWaitAreRepeatable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if got := process.ExitCode(); got != -1 {
+		t.Fatalf("live process ExitCode = %d, want -1", got)
+	}
 	first := process.Stop(10 * time.Millisecond)
 	second := process.Stop(10 * time.Millisecond)
 	if (first == nil) != (second == nil) {

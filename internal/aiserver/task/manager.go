@@ -580,7 +580,7 @@ func (m *Manager) run(ctx context.Context, id string, handler action.Handler) {
 		m.mu.Unlock()
 		return
 	}
-	inCtx, params, service := rec.Context, rec.Params, rec.Service
+	inCtx, params, service, skipConcurrency := rec.Context, rec.Params, rec.Service, rec.SkipConcurrency
 	m.mu.Unlock()
 
 	var (
@@ -601,7 +601,7 @@ func (m *Manager) run(ctx context.Context, id string, handler action.Handler) {
 	m.mu.Lock()
 	rec, ok = m.tasks[id]
 	if !ok {
-		m.releaseSlotLocked(service, id)
+		m.releaseSlotLocked(service, id, skipConcurrency)
 		m.mu.Unlock()
 		m.nudge()
 		return
@@ -627,7 +627,7 @@ func (m *Manager) run(ctx context.Context, id string, handler action.Handler) {
 		event = EventCompleted
 	}
 
-	m.releaseSlotLocked(service, id)
+	m.releaseSlotLocked(service, id, skipConcurrency)
 	snapshot := *rec
 	m.mu.Unlock()
 
@@ -638,8 +638,8 @@ func (m *Manager) run(ctx context.Context, id string, handler action.Handler) {
 
 // releaseSlotLocked frees a task's concurrency slot and per-task bookkeeping.
 // Caller must hold the mutex.
-func (m *Manager) releaseSlotLocked(service, id string) {
-	if rec, ok := m.tasks[id]; ok && !rec.SkipConcurrency {
+func (m *Manager) releaseSlotLocked(service, id string, skipConcurrency bool) {
+	if !skipConcurrency {
 		if n := m.running[service]; n > 0 {
 			m.running[service] = n - 1
 		}

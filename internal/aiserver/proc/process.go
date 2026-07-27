@@ -255,10 +255,18 @@ func (p *Process) Exited() <-chan struct{} {
 
 // ExitCode returns -1 when the process was signalled or has not exited.
 func (p *Process) ExitCode() int {
-	if p == nil || p.cmd == nil || p.cmd.ProcessState == nil {
+	if p == nil || p.cmd == nil {
 		return -1
 	}
-	return p.cmd.ProcessState.ExitCode()
+	select {
+	case <-p.exited:
+		if p.cmd.ProcessState == nil {
+			return -1
+		}
+		return p.cmd.ProcessState.ExitCode()
+	default:
+		return -1
+	}
 }
 
 // PID returns the child process ID, or zero when unavailable.

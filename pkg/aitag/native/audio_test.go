@@ -130,10 +130,7 @@ func TestScorePatchesPropagatesErrors(t *testing.T) {
 // Audio extraction is checked against a real generated file: the sample rate,
 // channel count and scaling are all things ffmpeg gets right or wrong for us.
 func TestReadPatchesFromRealAudio(t *testing.T) {
-	ffmpeg, err := exec.LookPath("ffmpeg")
-	if err != nil {
-		t.Skip("ffmpeg not available")
-	}
+	ffmpeg := requireFFmpeg(t)
 
 	path := filepath.Join(t.TempDir(), "tone.mp4")
 	cmd := exec.Command(ffmpeg,
@@ -182,27 +179,21 @@ func TestReadPatchesFromRealAudio(t *testing.T) {
 // A file with no audio must say so rather than producing an empty analysis a
 // caller would read as "this scene is silent".
 func TestReadPatchesReportsMissingAudio(t *testing.T) {
-	ffmpeg, err := exec.LookPath("ffmpeg")
-	if err != nil {
-		t.Skip("ffmpeg not available")
-	}
+	ffmpeg := requireFFmpeg(t)
 
 	video := makeVideo(t, ffmpeg, 3, 64, 64)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	_, err = ReadPatches(ctx, ffmpeg, video, 0)
+	_, err := ReadPatches(ctx, ffmpeg, video, 0)
 	if !errors.Is(err, ErrNoAudio) {
 		t.Errorf("ReadPatches on a silent file = %v, want ErrNoAudio", err)
 	}
 }
 
 func TestReadPatchesHonoursTheLimit(t *testing.T) {
-	ffmpeg, err := exec.LookPath("ffmpeg")
-	if err != nil {
-		t.Skip("ffmpeg not available")
-	}
+	ffmpeg := requireFFmpeg(t)
 
 	path := filepath.Join(t.TempDir(), "long.mp4")
 	cmd := exec.Command(ffmpeg,
