@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,16 +34,6 @@ func TestScraperCommandResultReturnsCancellationWhenItKilledCommand(t *testing.T
 
 	assert.ErrorIs(t, err, context.Canceled)
 	assert.NotErrorIs(t, err, ErrScraperScript)
-}
-
-func TestRunScraperScriptReturnsCanceledContextBeforeStarting(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	s := &scriptScraper{}
-	err := s.runScraperScript(ctx, []string{"/command/that/does/not/exist"}, "{}", nil)
-
-	assert.ErrorIs(t, err, context.Canceled)
 }
 
 func TestRunScraperScriptReturnsCancellationWhenContextKillsProcess(t *testing.T) {
@@ -111,6 +102,47 @@ func Test_imageInputFromImage_worksWithMultipleFiles(t *testing.T) {
 	assert.Equal(t, "Photographer", input.Photographer)
 	assert.Equal(t, "/data/images/image_0001_.png", input.Files[0].Path)
 	assert.Equal(t, "/data/images/image_0002_.png", input.Files[1].Path)
+}
+
+func TestRunScraperScriptReturnsCanceledBeforeStart(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var output []models.ScrapedPerformer
+	s := &scriptScraper{}
+	err := s.runScraperScript(ctx, []string{os.Args[0]}, `{"name":"candidate"}`, &output)
+
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestRunScraperScriptWaitsForProcessAfterDecodeError(t *testing.T) {
+	t.Setenv("STASH_SCRAPER_TEST_HELPER", "1")
+	marker := t.TempDir() + "/process-finished"
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var output []models.ScrapedPerformer
+	s := &scriptScraper{}
+	err := s.runScraperScript(
+		ctx,
+		[]string{os.Args[0], "-test.run=^TestScraperScriptDecodeErrorHelper$", "--", marker},
+		`{"name":"candidate"}`,
+		&output,
+	)
+
+	assert.ErrorContains(t, err, "could not unmarshal json from script output")
+	assert.FileExists(t, marker, "runScraperScript returned before reaping the scraper process")
+}
+
+func TestScraperScriptDecodeErrorHelper(t *testing.T) {
+	if os.Getenv("STASH_SCRAPER_TEST_HELPER") != "1" {
+		return
+	}
+
+	marker := os.Args[len(os.Args)-1]
+	_, _ = fmt.Fprint(os.Stdout, strings.Repeat("x", 1<<20))
+	time.Sleep(50 * time.Millisecond)
+	assert.NoError(t, os.WriteFile(marker, nil, 0o600))
 }
 
 func getImageStringValue(index int, field string) string {

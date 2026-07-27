@@ -55,15 +55,22 @@ func (s *Manager) AnalyzeSceneMetadata(ctx context.Context, input AnalyzeSceneMe
 	return s.JobManager.Add(ctx, "Analyzing scene metadata...", j)
 }
 
+type performerScraperCache interface {
+	ListScrapers([]scraper.ScrapeContentType) []*scraper.Scraper
+	ScrapeName(context.Context, string, string, scraper.ScrapeContentType) ([]scraper.ScrapedContent, error)
+}
+
 type analyzeSceneMetadataJob struct {
 	repository   models.Repository
 	input        AnalyzeSceneMetadataInput
-	scraperCache *scraper.Cache
+	scraperCache performerScraperCache
 }
 
 func (j *analyzeSceneMetadataJob) Execute(ctx context.Context, progress *job.Progress) error {
 	r := j.repository
-	j.scraperCache = instance.ScraperCache
+	if j.scraperCache == nil {
+		j.scraperCache = instance.ScraperCache
+	}
 
 	sceneIDs, err := stringslice.StringSliceToIntSlice(j.input.SceneIDs)
 	if err != nil {
@@ -80,6 +87,9 @@ func (j *analyzeSceneMetadataJob) Execute(ctx context.Context, progress *job.Pro
 		scenes, err = r.Scene.All(ctx)
 		return err
 	}); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
 		return fmt.Errorf("finding scenes: %w", err)
 	}
 
@@ -90,11 +100,16 @@ func (j *analyzeSceneMetadataJob) Execute(ctx context.Context, progress *job.Pro
 			return nil
 		}
 
+		var processErr error
 		progress.ExecuteTask(fmt.Sprintf("Analyzing metadata for %s", sc.GetTitle()), func() {
-			if err := j.processScene(ctx, sc); err != nil {
-				logger.Errorf("[scene metadata] error processing scene %d: %v", sc.ID, err)
-			}
+			processErr = j.processScene(ctx, sc)
 		})
+		if processErr != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			logger.Errorf("[scene metadata] error processing scene %d: %v", sc.ID, processErr)
+		}
 
 		progress.Increment()
 	}
@@ -287,6 +302,9 @@ func (j *analyzeSceneMetadataJob) identifyPerformers(ctx context.Context, source
 	candidateSet := map[string]struct{}{}
 
 	if err := r.WithReadTxn(ctx, func(ctx context.Context) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		for _, src := range sources {
 			performers, err := match.PathToPerformers(ctx, src.text, r.Performer, nil, false)
 			if err != nil {
@@ -307,12 +325,18 @@ func (j *analyzeSceneMetadataJob) identifyPerformers(ctx context.Context, source
 	}
 
 	for _, src := range sources {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
 		candidates := metadata.ExtractNameCandidates(src.text, func(c string) bool {
 			_, excluded := studioNames[c]
 			return excluded
 		})
 
 		for _, c := range candidates {
+			if err := ctx.Err(); err != nil {
+				return nil, nil, err
+			}
 			key := strings.ToLower(c)
 			if _, ok := candidateSet[key]; ok {
 				continue
@@ -348,12 +372,20 @@ func (j *analyzeSceneMetadataJob) verifyAndCreatePerformers(ctx context.Context,
 	var createdIDs []int
 
 	for _, candidate := range candidates {
+		if err := ctx.Err(); err != nil {
+			// Creations commit individually; a later run matches and links any
+			// performers left unlinked by cancellation.
+			return nil, err
+		}
 		if j.input.DryRun {
 			logger.Infof("[scene metadata] dry run: would look up new performer candidate %q", candidate)
 			continue
 		}
 
 		verified, err := j.scrapeVerifyPerformer(ctx, scrapers, candidate)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if err != nil {
 			logger.Warnf("[scene metadata] error verifying performer candidate %q: %v", candidate, err)
 			continue
@@ -363,6 +395,11 @@ func (j *analyzeSceneMetadataJob) verifyAndCreatePerformers(ctx context.Context,
 		}
 
 		id, err := j.createPerformer(ctx, verified)
+		if ctx.Err() != nil {
+			// createPerformer may have committed just before cancellation. A
+			// later run will match and link that performer to the scene.
+			return nil, ctx.Err()
+		}
 		if err != nil {
 			logger.Warnf("[scene metadata] error creating performer %q: %v", verified, err)
 			continue
@@ -376,6 +413,9 @@ func (j *analyzeSceneMetadataJob) verifyAndCreatePerformers(ctx context.Context,
 
 func (j *analyzeSceneMetadataJob) scrapeVerifyPerformer(ctx context.Context, scrapers []*scraper.Scraper, candidate string) (string, error) {
 	for _, s := range scrapers {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		content, err := j.scraperCache.ScrapeName(ctx, s.ID, candidate, scraper.ScrapeContentTypePerformer)
 		if err != nil {
 			logger.Debugf("[scene metadata] scraper %s lookup for %q failed: %v", s.ID, candidate, err)
