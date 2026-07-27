@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -292,10 +293,8 @@ func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, 
 		logger.Error("Scraper stderr not available: " + err.Error())
 	}
 
-	stdout, err := cmd.StdoutPipe()
-	if nil != err {
-		logger.Error("Scraper stdout not available: " + err.Error())
-	}
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
 
 	if err = cmd.Start(); err != nil {
 		return fmt.Errorf("starting scraper script: %w", err)
@@ -313,23 +312,24 @@ func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, 
 
 	logger.Debugf("Scraper script <%s> started", strings.Join(cmd.Args, " "))
 
-	// TODO - add a timeout here
-	// Make a copy of stdout here. This allows us to decode it twice.
-	var sb strings.Builder
-	tr := io.TeeReader(stdout, &sb)
+	err = cmd.Wait()
+	logger.Debugf("Scraper script finished")
 
-	// First, perform a decode where unknown fields are disallowed.
-	d := json.NewDecoder(tr)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+
+	// Decode only after Wait has finished. cmd.Stdout's internal copy
+	// goroutine drains the pipe while the process runs, so malformed output
+	// cannot fill the pipe and deadlock the child against Wait.
+	d := json.NewDecoder(bytes.NewReader(stdout.Bytes()))
 	d.DisallowUnknownFields()
 	strictErr := d.Decode(out)
 
 	var decodeErr error
 	var strictWarning error
 	if strictErr != nil {
-		// The decode failed for some reason, use the built string
-		// and allow unknown fields in the decode.
-		s := sb.String()
-		lenientErr := json.NewDecoder(strings.NewReader(s)).Decode(out)
+		lenientErr := json.NewDecoder(bytes.NewReader(stdout.Bytes())).Decode(out)
 		if lenientErr != nil {
 			decodeErr = fmt.Errorf("could not unmarshal json from script output: %w", lenientErr)
 		} else {
@@ -337,12 +337,6 @@ func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, 
 		}
 	}
 
-	err = cmd.Wait()
-	logger.Debugf("Scraper script finished")
-
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		return ctxErr
-	}
 	if decodeErr != nil {
 		logger.Error(decodeErr)
 		return decodeErr

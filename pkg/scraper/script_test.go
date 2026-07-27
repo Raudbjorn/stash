@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -53,11 +54,13 @@ func TestRunScraperScriptReturnsCanceledBeforeStart(t *testing.T) {
 func TestRunScraperScriptWaitsForProcessAfterDecodeError(t *testing.T) {
 	t.Setenv("STASH_SCRAPER_TEST_HELPER", "1")
 	marker := t.TempDir() + "/process-finished"
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 
 	var output []models.ScrapedPerformer
 	s := &scriptScraper{}
 	err := s.runScraperScript(
-		context.Background(),
+		ctx,
 		[]string{os.Args[0], "-test.run=^TestScraperScriptDecodeErrorHelper$", "--", marker},
 		`{"name":"candidate"}`,
 		&output,
@@ -73,7 +76,7 @@ func TestScraperScriptDecodeErrorHelper(t *testing.T) {
 	}
 
 	marker := os.Args[len(os.Args)-1]
-	_, _ = fmt.Fprint(os.Stdout, "not-json")
+	_, _ = fmt.Fprint(os.Stdout, strings.Repeat("x", 1<<20))
 	time.Sleep(50 * time.Millisecond)
 	assert.NoError(t, os.WriteFile(marker, nil, 0o600))
 }
