@@ -8,28 +8,21 @@ import (
 	"strings"
 	"testing"
 
-	_ "turso.tech/database/tursogo"
+	_ "github.com/mattn/go-sqlite3"
 )
 
-// These tests are the Phase 0 gate for the AI datastore. Every SQL feature the
-// ported schema and queries rely on is exercised here against the real engine,
-// because Turso is pre-1.0 and its SQLite coverage is documented as partial.
-//
-// If any of these fail, the store must fall back to mattn/go-sqlite3 - which is
-// a one-line change in open(), since everything here is plain database/sql.
+// These tests pin the SQLite features used by the schema and query layer.
 
 func openSpike(t *testing.T) *sql.DB {
 	t.Helper()
 
 	path := filepath.Join(t.TempDir(), "spike.db")
-	db, err := sql.Open("turso", path)
+	db, err := sql.Open(driverName, databaseDSN(path))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	// Single writer: Turso's engine is single-writer and pre-1.0. Correctness
-	// over read parallelism until the ingest path is load-tested.
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+	db.SetMaxOpenConns(4)
+	db.SetMaxIdleConns(4)
 	t.Cleanup(func() { _ = db.Close() })
 
 	if err := db.Ping(); err != nil {
@@ -62,7 +55,7 @@ CREATE TABLE ai_result_aggregates (
 CREATE UNIQUE INDEX ux_agg ON ai_result_aggregates (run_id, payload_type, str_value, metric);
 `
 
-func TestTursoSchemaAndStrictTables(t *testing.T) {
+func TestSQLiteSchemaAndStrictTables(t *testing.T) {
 	db := openSpike(t)
 
 	if _, err := db.Exec(spikeSchema); err != nil {
@@ -78,7 +71,7 @@ func TestTursoSchemaAndStrictTables(t *testing.T) {
 	}
 }
 
-func TestTursoInsertReturning(t *testing.T) {
+func TestSQLiteInsertReturning(t *testing.T) {
 	db := openSpike(t)
 	mustExec(t, db, spikeSchema)
 
@@ -96,7 +89,7 @@ func TestTursoInsertReturning(t *testing.T) {
 	}
 }
 
-func TestTursoUpsert(t *testing.T) {
+func TestSQLiteUpsert(t *testing.T) {
 	db := openSpike(t)
 	mustExec(t, db, spikeSchema)
 
@@ -123,7 +116,7 @@ DO UPDATE SET value_float = excluded.value_float`
 
 // _store_aggregates groups by label and sums durations; get_scene_tag_totals
 // filters with HAVING.
-func TestTursoGroupByHaving(t *testing.T) {
+func TestSQLiteGroupByHaving(t *testing.T) {
 	db := openSpike(t)
 	mustExec(t, db, spikeSchema)
 
@@ -174,7 +167,7 @@ ORDER BY total DESC`, runA, runB)
 
 // get_latest_scene_run orders by completed_at DESC NULLS LAST. NULLS LAST is not
 // portable, so the port uses (x IS NULL) - prove it sorts as intended.
-func TestTursoNullsLastEmulation(t *testing.T) {
+func TestSQLiteNullsLastEmulation(t *testing.T) {
 	db := openSpike(t)
 	mustExec(t, db, spikeSchema)
 
@@ -203,9 +196,9 @@ func TestTursoNullsLastEmulation(t *testing.T) {
 }
 
 // The interactions pre-dedup query does `WHERE client_event_id IN (batch)`.
-// SQLite's default variable limit is 999; Turso's is undocumented, so the port
-// chunks at 500. Verify 600 works (so 500 is comfortably safe).
-func TestTursoLargeInClause(t *testing.T) {
+// The implementation chunks at 500 to stay below SQLite builds with the
+// historical 999-variable limit. Verify 600 still works across chunks.
+func TestSQLiteLargeInClause(t *testing.T) {
 	db := openSpike(t)
 	mustExec(t, db, spikeSchema)
 
@@ -232,7 +225,7 @@ func TestTursoLargeInClause(t *testing.T) {
 }
 
 // JSON columns are plain TEXT marshalled in Go - no json_*() SQL functions.
-func TestTursoJSONTextRoundTrip(t *testing.T) {
+func TestSQLiteJSONTextRoundTrip(t *testing.T) {
 	db := openSpike(t)
 	mustExec(t, db, spikeSchema)
 
@@ -268,7 +261,7 @@ func TestTursoJSONTextRoundTrip(t *testing.T) {
 
 // The ingest path writes a whole batch in one transaction and must roll back
 // cleanly on error (the port deliberately avoids SAVEPOINTs).
-func TestTursoTransactionRollback(t *testing.T) {
+func TestSQLiteTransactionRollback(t *testing.T) {
 	db := openSpike(t)
 	mustExec(t, db, spikeSchema)
 
@@ -293,7 +286,7 @@ func TestTursoTransactionRollback(t *testing.T) {
 }
 
 // Batched insert inside one transaction is the ingest hot path.
-func TestTursoBatchInsert(t *testing.T) {
+func TestSQLiteBatchInsert(t *testing.T) {
 	db := openSpike(t)
 	mustExec(t, db, spikeSchema)
 	runID := insertSpikeRun(t, db, "native", 1)
@@ -329,9 +322,8 @@ func TestTursoBatchInsert(t *testing.T) {
 	}
 }
 
-// The plan declares FKs for documentation but performs cascades explicitly in
-// Go. This records which behaviour the engine actually gives us.
-func TestTursoForeignKeyCascadeBehaviour(t *testing.T) {
+// Foreign-key enforcement is a connection-level invariant in databaseDSN.
+func TestSQLiteForeignKeyCascade(t *testing.T) {
 	db := openSpike(t)
 	mustExec(t, db, spikeSchema)
 
@@ -347,9 +339,8 @@ func TestTursoForeignKeyCascadeBehaviour(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM ai_result_aggregates`).Scan(&n); err != nil {
 		t.Fatalf("count: %v", err)
 	}
-	t.Logf("orphaned child rows after parent delete: %d (0 = cascade enforced, 1 = not enforced)", n)
 	if n != 0 {
-		t.Log("FK cascade is NOT enforced by default - explicit cascading deletes in Go are required, as planned")
+		t.Errorf("parent deletion left %d orphaned child rows", n)
 	}
 }
 

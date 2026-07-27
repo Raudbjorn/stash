@@ -50,6 +50,12 @@ func newTestTrainer(t *testing.T) (*Trainer, *markerFinder, *store.DB) {
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
+	if _, err := db.SQL().ExecContext(context.Background(), `
+		INSERT INTO ai_model_runs
+			(id, service, entity_type, entity_id, started_at, completed_at)
+		VALUES (1, 'test', 'scene', 1, 1, 1)`); err != nil {
+		t.Fatalf("seed model run: %v", err)
+	}
 
 	markers := &markerFinder{byScene: map[int][]*models.SceneMarker{}}
 	tags := &tagFinder{byID: map[int]string{1: "Blowjob", 2: "Kissing"}}

@@ -14,9 +14,8 @@
 --   * Float      -> REAL, String/Text/JSON -> TEXT, Boolean -> INTEGER.
 --   * task_history.{submitted,started,finished}_at stay REAL epoch SECONDS,
 --     because the TypeScript frontend reads them as numbers.
---   * Foreign keys are declared for documentation, but cascading deletes are
---     performed explicitly in Go: Phase 0 verified this engine does not enforce
---     ON DELETE CASCADE (an orphaned child survived its parent's deletion).
+--   * Foreign-key enforcement is enabled on every production connection. The Go
+--     deletion paths also remove children explicitly as defense in depth.
 
 -- ---------------------------------------------------------------- plugins ---
 

@@ -893,9 +893,8 @@ func (db *DB) PurgeSceneCategories(ctx context.Context, service string, sceneID 
 
 // DeleteRun removes a run and everything it produced.
 //
-// The child rows are deleted explicitly rather than relying on ON DELETE
-// CASCADE: the foreign keys are declared for documentation, but this engine
-// does not enforce them (verified in the Phase 0 spike).
+// Child rows are deleted explicitly as defense in depth and to keep this
+// operation correct if a caller supplies a connection without foreign keys.
 func (db *DB) DeleteRun(ctx context.Context, runID int64) error {
 	return db.InTx(ctx, func(tx *sql.Tx) error {
 		for _, table := range []string{

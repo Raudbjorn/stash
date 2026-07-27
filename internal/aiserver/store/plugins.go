@@ -276,8 +276,8 @@ func (db *DB) DeletePluginSource(ctx context.Context, name string) error {
 		return err
 	}
 
-	// Children go explicitly: the declared cascade is documentation, and this
-	// engine was measured not to enforce it.
+	// Delete children explicitly as defense in depth; the production DSN also
+	// enables the declared ON DELETE CASCADE constraints.
 	return db.InTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx,
 			`DELETE FROM plugin_catalog WHERE source_id = ?`, src.ID); err != nil {

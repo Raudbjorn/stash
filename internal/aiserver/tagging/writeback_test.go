@@ -121,6 +121,14 @@ func newTestWriter(t *testing.T) (*Writer, *fakeMarkerRepo, *fakeTagRepo, *store
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
+	for _, id := range []int{1, 2} {
+		if _, err := db.SQL().ExecContext(context.Background(), `
+			INSERT INTO ai_model_runs
+				(id, service, entity_type, entity_id, started_at, completed_at)
+			VALUES (?, 'test', 'scene', 42, 1, 1)`, id); err != nil {
+			t.Fatalf("seed model run %d: %v", id, err)
+		}
+	}
 
 	markers := &fakeMarkerRepo{destroyMissing: map[int]bool{}}
 	tags := &fakeTagRepo{byName: map[string]int{}, aliases: map[string]int{}}

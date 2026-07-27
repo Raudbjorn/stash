@@ -2,9 +2,8 @@
 // SQLite database, so AI schema churn can never block or corrupt Stash's
 // migration chain.
 //
-// Everything here is written against database/sql only. The driver is a
-// deliberate seam: Turso is pre-1.0, and swapping to mattn/go-sqlite3 must stay
-// a one-line change in Open.
+// The server deliberately reuses Stash's mature sqlite3 driver rather than
+// introducing a second SQLite implementation into the process.
 package store
 
 import (
@@ -12,22 +11,24 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 
-	_ "turso.tech/database/tursogo"
+	_ "github.com/mattn/go-sqlite3"
 )
 
-// driverName is the seam. Phase 0 measured this engine at roughly 6.5k
-// inserts/sec versus 114k for mattn/go-sqlite3; that is comfortable for the
-// ingest batches this server handles, but if it ever stops being so, changing
-// this constant and the DSN in Open is the whole migration.
-const driverName = "turso"
+const driverName = "sqlite3"
 
 // DB is a handle to the AI database.
 type DB struct {
 	sql  *sql.DB
 	path string
+}
+
+func databaseDSN(path string) string {
+	dsn := (&url.URL{Scheme: "file", Path: path}).String()
+	return dsn + "?_journal_mode=WAL&_synchronous=NORMAL&_busy_timeout=5000&_foreign_keys=on&_txlock=immediate"
 }
 
 // Open opens (creating if necessary) the AI database at path and brings its
@@ -40,17 +41,16 @@ func Open(ctx context.Context, path string) (*DB, error) {
 		return nil, fmt.Errorf("create database directory: %w", err)
 	}
 
-	conn, err := sql.Open(driverName, path)
+	conn, err := sql.Open(driverName, databaseDSN(path))
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
 
-	// Single connection. The engine is single-writer and pre-1.0; correctness
-	// beats read parallelism until the ingest path has been load-tested. The
-	// ingest handler writes a whole batch per request, so it is serialised here
-	// anyway.
-	conn.SetMaxOpenConns(1)
-	conn.SetMaxIdleConns(1)
+	// WAL permits readers while the single SQLite writer is active. A bounded
+	// pool prevents long plugin queries from monopolising health checks and
+	// scheduler reads; SQLite itself serialises writes.
+	conn.SetMaxOpenConns(4)
+	conn.SetMaxIdleConns(4)
 
 	if err := conn.PingContext(ctx); err != nil {
 		conn.Close()
@@ -89,10 +89,9 @@ func (db *DB) Ping(ctx context.Context) error {
 
 // InTx runs fn inside a transaction, rolling back on error or panic.
 //
-// Note there are deliberately no nested transactions or savepoints anywhere in
-// this package: the engine reports SQLITE_BUSY for SAVEPOINT while a write is in
-// flight, so the ingest path validates rows before opening its transaction
-// rather than wrapping each row in one.
+// Note there are deliberately no nested transactions or savepoints in this
+// package. Ingest validates rows before opening its transaction, avoiding
+// per-row transaction overhead and partial batches.
 func (db *DB) InTx(ctx context.Context, fn func(*sql.Tx) error) (err error) {
 	tx, err := db.sql.BeginTx(ctx, nil)
 	if err != nil {
