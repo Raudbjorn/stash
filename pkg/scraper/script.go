@@ -259,6 +259,10 @@ type scriptScraper struct {
 }
 
 func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, inString string, out interface{}) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	var cmd *exec.Cmd
 	if python.IsPythonCommand(command[0]) {
 		pythonPath := s.globalConfig.GetPythonPath()
@@ -285,14 +289,6 @@ func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, 
 		return err
 	}
 
-	go func() {
-		defer stdin.Close()
-
-		if n, err := io.WriteString(stdin, inString); err != nil {
-			logger.Warnf("failure to write full input to script (wrote %v bytes out of %v): %v", n, len(inString), err)
-		}
-	}()
-
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		logger.Error("Scraper stderr not available: " + err.Error())
@@ -304,9 +300,20 @@ func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, 
 	}
 
 	if err = cmd.Start(); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		logger.Error("Error running scraper script: " + err.Error())
-		return errors.New("error running scraper script")
+		return fmt.Errorf("error running scraper script: %w", err)
 	}
+
+	go func() {
+		defer stdin.Close()
+
+		if n, err := io.WriteString(stdin, inString); err != nil && ctx.Err() == nil {
+			logger.Warnf("failure to write full input to script (wrote %v bytes out of %v): %v", n, len(inString), err)
+		}
+	}()
 
 	go handleScraperStderr(s.definition.Name, stderr)
 
@@ -329,6 +336,10 @@ func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, 
 		lenientErr := json.NewDecoder(strings.NewReader(s)).Decode(out)
 		if lenientErr != nil {
 			// The error is genuine, so return it
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				_ = cmd.Wait()
+				return ctxErr
+			}
 			logger.Errorf("could not unmarshal json from script output: %v", lenientErr)
 			return fmt.Errorf("could not unmarshal json from script output: %w", lenientErr)
 		}
@@ -341,6 +352,9 @@ func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, 
 	logger.Debugf("Scraper script finished")
 
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		return fmt.Errorf("%w: %v", ErrScraperScript, err)
 	}
 

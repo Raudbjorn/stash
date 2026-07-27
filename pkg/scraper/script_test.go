@@ -1,12 +1,23 @@
 package scraper
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
 	"github.com/stashapp/stash/pkg/models"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestRunScraperScriptReturnsCanceledContextBeforeStarting(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	s := &scriptScraper{}
+	err := s.runScraperScript(ctx, []string{"/command/that/does/not/exist"}, "{}", nil)
+
+	assert.ErrorIs(t, err, context.Canceled)
+}
 
 func Test_imageInputFromImage_worksWithMultipleFiles(t *testing.T) {
 
