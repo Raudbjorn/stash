@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/remeh/sizedwaitgroup"
+	"github.com/stashapp/stash/internal/aiserver"
 	"github.com/stashapp/stash/internal/dlna"
 	"github.com/stashapp/stash/internal/log"
 	"github.com/stashapp/stash/internal/manager/config"
@@ -86,6 +87,8 @@ type Manager struct {
 	ImageService   ImageService
 	GalleryService GalleryService
 	GroupService   GroupService
+
+	AIServer *aiserver.Server
 
 	scanSubs *subscriptionManager
 }
@@ -434,8 +437,26 @@ func (s *Manager) Shutdown() {
 		s.StreamManager = nil
 	}
 
+	// Before closing the database: the AI subsystem holds read transactions
+	// against Stash's repository while ingesting.
+	if s.AIServer != nil {
+		s.AIServer.Shutdown()
+	}
+
 	err := s.Database.Close()
 	if err != nil {
 		logger.Errorf("Error closing database: %s", err)
+	}
+}
+
+// RefreshAIServer restarts the AI subsystem after a configuration change, so
+// that toggling ai_enabled or repointing ai_database_path takes effect without
+// restarting Stash.
+func (s *Manager) RefreshAIServer(ctx context.Context) {
+	if s.AIServer == nil {
+		return
+	}
+	if err := s.AIServer.Refresh(ctx); err != nil {
+		logger.Errorf("Error refreshing AI server: %v", err)
 	}
 }

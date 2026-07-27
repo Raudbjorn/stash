@@ -213,6 +213,10 @@ func Initialize() (*Server, error) {
 	gqlHandler := visitedPluginHandler(dataloaders.Middleware(http.HandlerFunc(gqlHandlerFunc)))
 	pluginCache.RegisterGQLHandler(gqlHandler)
 
+	// The AI server's plugin bridge serves plugin GraphQL requests through the
+	// same handler, so no API key ever reaches the Python host process.
+	manager.GetInstance().AIServer.SetGraphQLHandler(gqlHandler)
+
 	r.HandleFunc(gqlEndpoint, gqlHandlerFunc)
 	r.HandleFunc(playgroundEndpoint, func(w http.ResponseWriter, r *http.Request) {
 		setPageSecurityHeaders(w, r, pluginCache.ListPlugins())
@@ -231,6 +235,7 @@ func Initialize() (*Server, error) {
 	r.Mount("/downloads", server.getDownloadsRoutes())
 	r.Mount("/plugin", server.getPluginRoutes())
 	r.Mount("/tts", server.getTTSRoutes())
+	r.Mount("/api/v1", server.getAIRoutes())
 
 	if cfg.GetMetricsEnabled() {
 		// Auth-gated (inherits authenticateHandler); opt-in via metrics_enabled.
@@ -506,6 +511,13 @@ func (s *Server) getPluginRoutes() chi.Router {
 	return pluginRoutes{
 		pluginCache: s.manager.PluginCache,
 	}.Routes()
+}
+
+// getAIRoutes returns the AI server's /api/v1 router. It is mounted
+// unconditionally: when the AI subsystem is disabled every route answers 503,
+// so the enable check lives in one place rather than at the mount point.
+func (s *Server) getAIRoutes() chi.Router {
+	return manager.GetInstance().AIServer.Routes()
 }
 
 func (s *Server) getTTSRoutes() chi.Router {

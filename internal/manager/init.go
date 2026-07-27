@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/remeh/sizedwaitgroup"
+	"github.com/stashapp/stash/internal/aiserver"
 	"github.com/stashapp/stash/internal/desktop"
 	"github.com/stashapp/stash/internal/dlna"
 	"github.com/stashapp/stash/internal/log"
@@ -82,6 +83,10 @@ func Initialize(cfg *config.Config, l *log.Logger) (*Manager, error) {
 	dlnaRepository := dlna.NewRepository(repo)
 	dlnaService := dlna.NewService(dlnaRepository, cfg, sceneServer, repo.Scene, cfg.GetMinimumPlayPercent())
 
+	// Constructed here but not started: it opens its database in postInit,
+	// once the config path is known valid and Stash's own database is up.
+	aiServer := aiserver.New(aiserver.Deps{Repo: repo, Config: cfg})
+
 	mgr := &Manager{
 		Config: cfg,
 		Logger: l,
@@ -107,6 +112,8 @@ func Initialize(cfg *config.Config, l *log.Logger) (*Manager, error) {
 		ImageService:   imageService,
 		GalleryService: galleryService,
 		GroupService:   groupService,
+
+		AIServer: aiServer,
 
 		scanSubs: &subscriptionManager{},
 	}
@@ -250,6 +257,12 @@ func (s *Manager) postInit(ctx context.Context) error {
 
 	s.StartScanScheduler()
 	s.RefreshFileWatcher()
+	// Started last, after the database is open. A failure here is logged and
+	// deliberately not returned: the AI feature is opt-in and must never stop
+	// Stash from booting.
+	if err := s.AIServer.Start(ctx); err != nil {
+		logger.Errorf("AI server failed to start (Stash will continue without it): %v", err)
+	}
 
 	return nil
 }
