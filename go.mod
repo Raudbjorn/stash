@@ -22,6 +22,7 @@ require (
 	github.com/go-chi/cors v1.2.1
 	github.com/go-chi/httplog v0.3.1
 	github.com/go-toast/toast v0.0.0-20190211030409-01e6764cf0a4
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/golang-migrate/migrate/v4 v4.16.2
 	github.com/google/uuid v1.6.0
@@ -40,7 +41,7 @@ require (
 	github.com/knadh/koanf/providers/posflag v1.0.1
 	github.com/knadh/koanf/v2 v2.2.1
 	github.com/lucasb-eyer/go-colorful v1.2.0
-	github.com/mattn/go-sqlite3 v1.14.22
+	github.com/mattn/go-sqlite3 v1.14.42
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/natefinch/pie v0.0.0-20170715172608-9a0d72014007
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
@@ -60,7 +61,7 @@ require (
 	github.com/vektah/gqlparser/v2 v2.5.27
 	github.com/vektra/mockery/v2 v2.10.0
 	github.com/xWTF/chardet v0.0.0-20230208095535-c780f2ac244e
-	github.com/yalue/onnxruntime_go v1.19.0
+	github.com/yalue/onnxruntime_go v1.31.0
 	github.com/zencoder/go-dash/v3 v3.0.2
 	golang.org/x/crypto v0.54.0
 	golang.org/x/image v0.41.0

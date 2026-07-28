@@ -1,0 +1,49 @@
+# AI Overhaul - Stash UI plugin manifest.
+#
+# This is the in-process version of the manifest shipped with the standalone
+# Python server. Three blocks are deliberately gone:
+#
+#   csp:   the backend was a separate origin (localhost:4153), so the browser
+#          needed connect-src/script-src exceptions to reach it. Served from
+#          Stash itself, everything is same-origin and no exception applies.
+#
+#   exec:  plugin_setup.py existed only to push Stash's URL, API key and
+#          database path into the external server. In-process there is nothing
+#          to tell it - the repository IS the database.
+#
+#   tasks: the one task invoked that setup script.
+#
+# The settings below stay. backend_base_url is retained but should be left
+# EMPTY: BackendBase.ts already normalises a base equal to location.origin down
+# to "", so an empty value makes every call same-origin. It remains only as an
+# escape hatch for pointing a browser at a different Stash instance.
+name: AIOverhaul
+description: AI Overhaul for Stash, served in-process by Stash itself.
+version: 0.9.3
+url: https://discourse.stashapp.cc/t/aioverhaul/4847
+ui:
+  javascript:
+    - VersionInfo.js
+    - BackendBase.js
+    - BackendHealth.js
+    - PageContext.js
+    - RecommendationUtils.js
+    - AIButton.js
+    - TaskDashboard.js
+    - PluginSettings.js # must register before the integration below
+    - RecommendedScenes.js
+    - SimilarScenes.js
+    - SimilarTabIntegration.js
+    - InteractionTracker.js
+    - AIButtonIntegration.js # last, after the components it patches in
+  css:
+    - css/AIOverhaul.css
+    - css/recommendedscenes.css
+    - css/SimilarScenes.css
+settings:
+  backend_base_url:
+    displayName: Backend Base URL Override
+    type: STRING
+  capture_events:
+    displayName: Capture Interaction Events
+    type: BOOLEAN

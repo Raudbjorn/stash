@@ -188,6 +188,65 @@ Task implementations in `internal/manager/task/`:
 - `task_autotag.go` - Automatic tagging
 - `task_identify.go` - Scene identification
 
+### Native AI Server
+
+**Locations**: `internal/aiserver/`, `pkg/aitag/`, `pkg/onnx/`
+
+The optional AI subsystem runs inside the Stash process. It is disabled by
+default and starts only after Stash's primary database is ready. Its failure
+never prevents the main server from booting.
+
+Request flow:
+
+```
+Authenticated /api/v1 request
+    ↓
+AI action registry
+    ↓
+Priority scheduler (deduplication, cancellation, per-service limits)
+    ↓
+Native Go service or supervised Python plugin
+    ↓
+Separate AI SQLite database / Stash repository writeback
+```
+
+- `/api/v1` uses the same authentication boundary as the rest of Stash.
+- `internal/aiserver/store` owns a separate SQLite file so AI schema changes
+  cannot block Stash's primary migration chain. It uses the existing sqlite3
+  driver, WAL, foreign-key enforcement, and a bounded connection pool.
+- `internal/aiserver/task` schedules scan, generate, evaluation, plugin, and
+  tagging work. Task state is available through REST and WebSocket events.
+- `pkg/aitag` contains provider-neutral sampling, clustering, and result types.
+  The native provider loads ONNX models; the VLM provider sends one strict
+  schema-constrained request per sampled frame to `llama-server`.
+- `internal/aiserver/llamahost` supervises `llama-server` over a private Unix
+  socket. Readiness includes both HTTP health and a vision request, and repeated
+  crashes use bounded backoff.
+- `internal/aiserver/pyhost` supervises the optional Python plugin host. Stash
+  and the host communicate over peer-to-peer D-Bus on a private socket,
+  authenticate with a per-process capability token, and negotiate a protocol
+  version before any plugin method is accepted.
+
+AI plugins use two explicit external contracts:
+
+1. `plugins_index.json` has schema version 1. A `files` manifest fixes the
+   complete file set and must provide a SHA-256 digest for every file. Entries
+   without a file manifest use the legacy GitHub enumeration path and are
+   reported as unverified. Paths are relative and may not escape the plugin
+   directory.
+2. Plugin SQL is parameterised, single-statement SQL over plugin-owned tables.
+   Plugin identifiers contain lowercase letters, digits, and underscores.
+   New tables use `p_<plugin>__<table>`; the doubled separator prevents prefix
+   collisions between names such as `foo` and `foo_bar`. Server tables and
+   cross-plugin tables are rejected before execution.
+
+Models, ONNX Runtime, and `llama-server` do not ship in the binary. Downloads
+are explicit opt-in, HTTPS-only, checksum-pinned, size-bounded, staged before
+installation, and revalidated from their installed integrity manifest.
+Shutdown reverses startup: registrations are withdrawn, scheduler work is
+cancelled and drained, tagging and llama resources close, then the Python host
+and AI database stop.
+
 ## Frontend Architecture
 
 ### React/TypeScript Structure
