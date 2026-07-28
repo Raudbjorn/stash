@@ -258,6 +258,8 @@ type Query {
 
   # System status
   systemStatus: SystemStatus!
+  "Returns local scene-metadata entity model installation and runtime status."
+  sceneMetadataEntityModelStatus: SceneMetadataEntityModelStatus!
 
   # Job status
   jobQueue: [Job!]
@@ -530,6 +532,10 @@ type Mutation {
   metadataDetectSceneCuts(input: DetectSceneCutsInput!): ID!
   "Analyze scene titles/filenames (and available EXIF/container metadata) to detect performers and scene date. Returns the job ID"
   metadataAnalyzeScenes(input: AnalyzeSceneMetadataInput!): ID!
+  "Download, checksum, validate, and activate the pinned local scene-metadata entity model. Returns the job ID."
+  sceneMetadataEntityModelInstall: ID!
+  "Reload the local scene-metadata entity model after runtime or cache changes."
+  sceneMetadataEntityModelReload: Boolean!
   "Clean metadata. Returns the job ID"
   metadataClean(input: CleanMetadataInput!): ID!
   "Clean generated files. Returns the job ID"

@@ -282,14 +282,19 @@ func (f ImageFile) Clone() (ret File) {
 // VideoFile is an extension of BaseFile to represent video files.
 type VideoFile struct {
 	*BaseFile
-	Format     string  `json:"format"`
-	Width      int     `json:"width"`
-	Height     int     `json:"height"`
-	Duration   float64 `json:"duration"`
-	VideoCodec string  `json:"video_codec"`
-	AudioCodec string  `json:"audio_codec"`
-	FrameRate  float64 `json:"frame_rate"`
-	BitRate    int64   `json:"bitrate"`
+	Format         string            `json:"format"`
+	Width          int               `json:"width"`
+	Height         int               `json:"height"`
+	Duration       float64           `json:"duration"`
+	VideoCodec     string            `json:"video_codec"`
+	AudioCodec     string            `json:"audio_codec"`
+	FrameRate      float64           `json:"frame_rate"`
+	BitRate        int64             `json:"bitrate"`
+	Title          string            `json:"title"`
+	Comment        string            `json:"comment"`
+	Encoder        string            `json:"encoder"`
+	Tags           map[string]string `json:"tags"`
+	MetadataProbed bool              `json:"metadata_probed"`
 
 	Interactive      bool `json:"interactive"`
 	InteractiveSpeed *int `json:"interactive_speed"`
@@ -315,6 +320,12 @@ func (f VideoFile) GetFormat() string {
 func (f VideoFile) Clone() (ret File) {
 	clone := f
 	clone.BaseFile = f.BaseFile.Clone().(*BaseFile)
+	if f.Tags != nil {
+		clone.Tags = make(map[string]string, len(f.Tags))
+		for key, value := range f.Tags {
+			clone.Tags[key] = value
+		}
+	}
 	ret = &clone
 	return
 }

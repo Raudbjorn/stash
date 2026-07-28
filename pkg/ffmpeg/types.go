@@ -1,37 +1,90 @@
 package ffmpeg
 
 import (
-	"github.com/stashapp/stash/pkg/models/json"
+	stdjson "encoding/json"
+	"strings"
+	"unicode/utf8"
+
+	modeljson "github.com/stashapp/stash/pkg/models/json"
 )
 
 // FFProbeJSON is the JSON output of ffprobe.
 type FFProbeJSON struct {
 	Format struct {
-		BitRate        string `json:"bit_rate"`
-		Duration       string `json:"duration"`
-		Filename       string `json:"filename"`
-		FormatLongName string `json:"format_long_name"`
-		FormatName     string `json:"format_name"`
-		NbPrograms     int    `json:"nb_programs"`
-		NbStreams      int    `json:"nb_streams"`
-		ProbeScore     int    `json:"probe_score"`
-		Size           string `json:"size"`
-		StartTime      string `json:"start_time"`
-		Tags           struct {
-			CompatibleBrands string        `json:"compatible_brands"`
-			CreationTime     json.JSONTime `json:"creation_time"`
-			Encoder          string        `json:"encoder"`
-			MajorBrand       string        `json:"major_brand"`
-			MinorVersion     string        `json:"minor_version"`
-			Title            string        `json:"title"`
-			Comment          string        `json:"comment"`
-		} `json:"tags"`
+		BitRate        string      `json:"bit_rate"`
+		Duration       string      `json:"duration"`
+		Filename       string      `json:"filename"`
+		FormatLongName string      `json:"format_long_name"`
+		FormatName     string      `json:"format_name"`
+		NbPrograms     int         `json:"nb_programs"`
+		NbStreams      int         `json:"nb_streams"`
+		ProbeScore     int         `json:"probe_score"`
+		Size           string      `json:"size"`
+		StartTime      string      `json:"start_time"`
+		Tags           FFProbeTags `json:"tags"`
 	} `json:"format"`
 	Streams []FFProbeStream `json:"streams"`
 	Error   struct {
 		Code   int    `json:"code"`
 		String string `json:"string"`
 	} `json:"error"`
+}
+
+const (
+	maxProbeTagKeyLength   = 128
+	maxProbeTagValueLength = 4096
+)
+
+var allowedProbeTags = map[string]struct{}{
+	"title": {}, "comment": {}, "description": {}, "date": {}, "creation_time": {},
+	"com.apple.quicktime.creationdate": {}, "encoder": {},
+}
+
+type FFProbeTags struct {
+	CreationTime modeljson.JSONTime
+	Title        string
+	Comment      string
+	Encoder      string
+	Allowed      map[string]string
+}
+
+func (t *FFProbeTags) UnmarshalJSON(data []byte) error {
+	var raw map[string]stdjson.RawMessage
+	if err := stdjson.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	t.Allowed = make(map[string]string, len(raw))
+	for originalKey, encoded := range raw {
+		key := strings.ToLower(strings.TrimSpace(originalKey))
+		if len(key) == 0 || len(key) > maxProbeTagKeyLength {
+			continue
+		}
+		if _, ok := allowedProbeTags[key]; !ok {
+			continue
+		}
+		var value string
+		if err := stdjson.Unmarshal(encoded, &value); err != nil {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if value == "" || len(value) > maxProbeTagValueLength || !utf8.ValidString(value) {
+			continue
+		}
+		t.Allowed[key] = value
+		switch key {
+		case "title":
+			t.Title = value
+		case "comment":
+			t.Comment = value
+		case "encoder":
+			t.Encoder = value
+		case "creation_time":
+			if err := stdjson.Unmarshal(encoded, &t.CreationTime); err != nil {
+				t.CreationTime = modeljson.JSONTime{}
+			}
+		}
+	}
+	return nil
 }
 
 // FFProbeStream is a JSON representation of an ffmpeg stream.
@@ -81,10 +134,10 @@ type FFProbeStream struct {
 	StartPts          int64  `json:"start_pts"`
 	StartTime         string `json:"start_time"`
 	Tags              struct {
-		CreationTime json.JSONTime `json:"creation_time"`
-		HandlerName  string        `json:"handler_name"`
-		Language     string        `json:"language"`
-		Rotate       string        `json:"rotate"`
+		CreationTime modeljson.JSONTime `json:"creation_time"`
+		HandlerName  string             `json:"handler_name"`
+		Language     string             `json:"language"`
+		Rotate       string             `json:"rotate"`
 	} `json:"tags"`
 	TimeBase      string `json:"time_base"`
 	Width         int    `json:"width,omitempty"`

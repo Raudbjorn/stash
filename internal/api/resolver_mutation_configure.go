@@ -212,6 +212,7 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 		c.SetString(config.Metadata, *input.MetadataPath)
 	}
 
+	refreshSceneMetadataEntityExtractor := false
 	refreshStreamManager := false
 	existingCachePath := c.GetCachePath()
 	if input.CachePath != nil && existingCachePath != *input.CachePath {
@@ -221,6 +222,7 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 
 		c.SetString(config.Cache, *input.CachePath)
 		refreshStreamManager = true
+		refreshSceneMetadataEntityExtractor = true
 	}
 
 	refreshBlobStorage := false
@@ -433,11 +435,10 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 		r.setConfigString(config.PythonPath, input.PythonPath)
 	}
 
-	refreshNamePlausibilityScorer := false
 	existingOnnxRuntimeLibPath := c.GetOnnxRuntimeLibPath()
 	if input.OnnxRuntimeLibPath != nil && *input.OnnxRuntimeLibPath != existingOnnxRuntimeLibPath {
 		r.setConfigString(config.OnnxRuntimeLibPath, input.OnnxRuntimeLibPath)
-		refreshNamePlausibilityScorer = true
+		refreshSceneMetadataEntityExtractor = true
 	}
 
 	if input.TranscodeInputArgs != nil {
@@ -497,8 +498,8 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 	if refreshPluginSource {
 		manager.GetInstance().RefreshPluginSourceManager()
 	}
-	if refreshNamePlausibilityScorer {
-		manager.GetInstance().RefreshNamePlausibilityScorer()
+	if refreshSceneMetadataEntityExtractor {
+		manager.GetInstance().RefreshSceneMetadataEntityExtractor()
 	}
 
 	return makeConfigGeneralResult(), nil

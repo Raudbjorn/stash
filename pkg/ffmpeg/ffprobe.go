@@ -2,6 +2,7 @@ package ffmpeg
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -93,6 +94,8 @@ type VideoFile struct {
 	Title     string
 	Comment   string
 	Container string
+	Encoder   string
+	Tags      map[string]string
 	// FileDuration is the declared (meta-data) duration of the *file*.
 	// In most cases (sprites, previews, etc.) we actually care about the duration of the video stream specifically,
 	// because those two can differ slightly (e.g. audio stream longer than the video stream, making the whole file
@@ -214,6 +217,11 @@ func NewFFProbe(path string) *FFProbe {
 
 // NewVideoFile runs ffprobe on the given path and returns a VideoFile.
 func (f *FFProbe) NewVideoFile(videoPath string) (*VideoFile, error) {
+	return f.NewVideoFileContext(context.Background(), videoPath)
+}
+
+// NewVideoFileContext is the cancellable variant used by bounded analysis.
+func (f *FFProbe) NewVideoFileContext(ctx context.Context, videoPath string) (*VideoFile, error) {
 	args := []string{
 		"-v",
 		"quiet",
@@ -222,26 +230,20 @@ func (f *FFProbe) NewVideoFile(videoPath string) (*VideoFile, error) {
 		"-show_streams",
 		"-show_error",
 	}
-
-	// show_entries stream_side_data=rotation requires 5.x or later ffprobe
 	if f.version.major >= 5 {
 		args = append(args, "-show_entries", "stream_side_data=rotation")
 	}
-
 	args = append(args, videoPath)
 
-	cmd := stashExec.Command(f.path, args...)
+	cmd := stashExec.CommandContext(ctx, f.path, args...)
 	out, err := cmd.Output()
-
 	if err != nil {
 		return nil, fmt.Errorf("FFProbe encountered an error with <%s>.\nError JSON:\n%s\nError: %s", videoPath, string(out), err.Error())
 	}
-
 	probeJSON := &FFProbeJSON{}
 	if err := json.Unmarshal(out, probeJSON); err != nil {
 		return nil, fmt.Errorf("error unmarshalling video data for <%s>: %s", videoPath, err.Error())
 	}
-
 	return parse(videoPath, probeJSON)
 }
 
@@ -280,6 +282,8 @@ func parse(filePath string, probeJSON *FFProbeJSON) (*VideoFile, error) {
 	result.Title = probeJSON.Format.Tags.Title
 
 	result.Comment = probeJSON.Format.Tags.Comment
+	result.Encoder = probeJSON.Format.Tags.Encoder
+	result.Tags = probeJSON.Format.Tags.Allowed
 	result.Bitrate, _ = strconv.ParseInt(probeJSON.Format.BitRate, 10, 64)
 
 	result.Container = probeJSON.Format.FormatName

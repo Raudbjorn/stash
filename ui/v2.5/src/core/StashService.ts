@@ -2986,6 +2986,21 @@ export const mutateMetadataAnalyzeScenes = (
     mutation: GQL.MetadataAnalyzeScenesDocument,
     variables: { input },
   });
+export const useSceneMetadataEntityModelStatus = () =>
+  GQL.useSceneMetadataEntityModelStatusQuery({
+    fetchPolicy: "no-cache",
+    pollInterval: 5000,
+  });
+
+export const mutateSceneMetadataEntityModelInstall = () =>
+  client.mutate<GQL.SceneMetadataEntityModelInstallMutation>({
+    mutation: GQL.SceneMetadataEntityModelInstallDocument,
+  });
+
+export const mutateSceneMetadataEntityModelReload = () =>
+  client.mutate<GQL.SceneMetadataEntityModelReloadMutation>({
+    mutation: GQL.SceneMetadataEntityModelReloadDocument,
+  });
 
 export const mutateMetadataGenerate = (input: GQL.GenerateMetadataInput) =>
   client.mutate<GQL.MetadataGenerateMutation>({

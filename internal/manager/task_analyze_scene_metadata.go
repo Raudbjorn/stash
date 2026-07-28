@@ -3,13 +3,13 @@ package manager
 import (
 	"context"
 	"fmt"
+	"github.com/stashapp/stash/pkg/ffmpeg"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/stashapp/stash/pkg/job"
 	"github.com/stashapp/stash/pkg/logger"
-	"github.com/stashapp/stash/pkg/match"
 	"github.com/stashapp/stash/pkg/models"
 	"github.com/stashapp/stash/pkg/scene/metadata"
 	"github.com/stashapp/stash/pkg/scraper"
@@ -30,6 +30,9 @@ type AnalyzeSceneMetadataInput struct {
 	SceneIDs []string `json:"sceneIDs"`
 	// DryRun computes and logs proposed changes without writing anything.
 	DryRun bool `json:"dryRun"`
+	// PerformerVerifierScraperIDs limits new-performer name verification to
+	// the configured scrapers. Omitted or empty disables network verification.
+	PerformerVerifierScraperIDs []string `json:"performerVerifierScraperIDs"`
 	// PerformerConfidenceThreshold is the minimum plausibility score for a
 	// newly-discovered (not-yet-in-library) performer name to be looked up
 	// via scrapers and, if confirmed, created. Defaults to 0.6.
@@ -44,12 +47,16 @@ type AnalyzeSceneMetadataInput struct {
 	// UseDetails additionally analyzes the scene's details/description text.
 	// Off by default since it's often noisy marketing copy.
 	UseDetails bool `json:"useDetails"`
+	// OverwriteExistingTitle allows replacing a user-authored scene title.
+	// Without it, only empty or filename-derived default titles are changed.
+	OverwriteExistingTitle bool `json:"overwriteExistingTitle"`
 }
 
 func (s *Manager) AnalyzeSceneMetadata(ctx context.Context, input AnalyzeSceneMetadataInput) int {
 	j := &analyzeSceneMetadataJob{
 		repository: s.Repository,
 		input:      input,
+		ffprobe:    s.FFProbe,
 	}
 
 	return s.JobManager.Add(ctx, "Analyzing scene metadata...", j)
@@ -61,9 +68,14 @@ type performerScraperCache interface {
 }
 
 type analyzeSceneMetadataJob struct {
-	repository   models.Repository
-	input        AnalyzeSceneMetadataInput
-	scraperCache performerScraperCache
+	repository                models.Repository
+	input                     AnalyzeSceneMetadataInput
+	scraperCache              performerScraperCache
+	ffprobe                   *ffmpeg.FFProbe
+	performerRecords          []metadata.NamedAliases
+	studioRecords             []metadata.NamedAliases
+	groupRecords              []metadata.NamedAliases
+	performerVerifierScrapers []*scraper.Scraper
 }
 
 func (j *analyzeSceneMetadataJob) Execute(ctx context.Context, progress *job.Progress) error {
@@ -71,6 +83,7 @@ func (j *analyzeSceneMetadataJob) Execute(ctx context.Context, progress *job.Pro
 	if j.scraperCache == nil {
 		j.scraperCache = instance.ScraperCache
 	}
+	j.resolvePerformerVerifierScrapers()
 
 	sceneIDs, err := stringslice.StringSliceToIntSlice(j.input.SceneIDs)
 	if err != nil {
@@ -91,6 +104,12 @@ func (j *analyzeSceneMetadataJob) Execute(ctx context.Context, progress *job.Pro
 			return nil
 		}
 		return fmt.Errorf("finding scenes: %w", err)
+	}
+	if err := j.loadLibraryRecords(ctx); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return fmt.Errorf("loading metadata entity indexes: %w", err)
 	}
 
 	progress.SetTotal(len(scenes))
@@ -116,12 +135,109 @@ func (j *analyzeSceneMetadataJob) Execute(ctx context.Context, progress *job.Pro
 
 	return nil
 }
+func (j *analyzeSceneMetadataJob) loadLibraryRecords(ctx context.Context) error {
+	return j.repository.WithReadTxn(ctx, func(ctx context.Context) error {
+		performers, err := j.repository.Performer.All(ctx)
+		if err != nil {
+			return err
+		}
+		j.performerRecords = make([]metadata.NamedAliases, 0, len(performers))
+		for _, performer := range performers {
+			if err := performer.LoadAliases(ctx, j.repository.Performer); err != nil {
+				return err
+			}
+			j.performerRecords = append(j.performerRecords, metadata.NamedAliases{
+				ID: performer.ID, Name: performer.Name, Aliases: performer.Aliases.List(),
+			})
+		}
+
+		studios, err := j.repository.Studio.All(ctx)
+		if err != nil {
+			return err
+		}
+		j.studioRecords = make([]metadata.NamedAliases, 0, len(studios))
+		for _, studio := range studios {
+			if err := studio.LoadAliases(ctx, j.repository.Studio); err != nil {
+				return err
+			}
+			j.studioRecords = append(j.studioRecords, metadata.NamedAliases{
+				ID: studio.ID, Name: studio.Name, Aliases: studio.Aliases.List(),
+			})
+		}
+
+		groups, err := j.repository.Group.All(ctx)
+		if err != nil {
+			return err
+		}
+		j.groupRecords = make([]metadata.NamedAliases, 0, len(groups))
+		for _, group := range groups {
+			if err := group.LoadAliases(ctx, j.repository.Group); err != nil {
+				return err
+			}
+			j.groupRecords = append(j.groupRecords, metadata.NamedAliases{
+				ID: group.ID, Name: group.Name, Aliases: group.Aliases.List(),
+			})
+		}
+		return nil
+	})
+}
+
+func (j *analyzeSceneMetadataJob) resolvePerformerVerifierScrapers() {
+	j.performerVerifierScrapers = nil
+	if j.scraperCache == nil {
+		return
+	}
+
+	available := j.scraperCache.ListScrapers([]scraper.ScrapeContentType{scraper.ScrapeContentTypePerformer})
+	byID := make(map[string]*scraper.Scraper, len(available))
+	for _, s := range available {
+		if s != nil {
+			byID[s.ID] = s
+		}
+	}
+
+	seen := make(map[string]struct{}, len(j.input.PerformerVerifierScraperIDs))
+	for _, id := range j.input.PerformerVerifierScraperIDs {
+		if _, duplicate := seen[id]; duplicate {
+			continue
+		}
+		seen[id] = struct{}{}
+
+		s, found := byID[id]
+		if !found {
+			logger.Warnf("[scene metadata] performer verifier scraper %q is unavailable; skipping", id)
+			continue
+		}
+		if !supportsPerformerNameScrape(s) {
+			logger.Warnf("[scene metadata] performer verifier scraper %q does not support name searches; skipping", id)
+			continue
+		}
+
+		j.performerVerifierScrapers = append(j.performerVerifierScrapers, s)
+	}
+}
+
+func supportsPerformerNameScrape(s *scraper.Scraper) bool {
+	if s == nil || s.Performer == nil {
+		return false
+	}
+	for _, scrapeType := range s.Performer.SupportedScrapes {
+		if scrapeType == scraper.ScrapeTypeName {
+			return true
+		}
+	}
+	return false
+}
 
 func (j *analyzeSceneMetadataJob) performerConfidenceThreshold() float64 {
 	if j.input.PerformerConfidenceThreshold != nil {
 		return *j.input.PerformerConfidenceThreshold
 	}
 	return defaultPerformerConfidenceThreshold
+}
+
+func (j *analyzeSceneMetadataJob) performerLookupThreshold() float64 {
+	return max(minCandidatePlausibility, j.performerConfidenceThreshold())
 }
 
 func (j *analyzeSceneMetadataJob) dateConfidenceThreshold() float64 {
@@ -133,109 +249,200 @@ func (j *analyzeSceneMetadataJob) dateConfidenceThreshold() float64 {
 
 func (j *analyzeSceneMetadataJob) processScene(ctx context.Context, sc *models.Scene) error {
 	r := j.repository
-
-	var studio *models.Studio
-	var existingPerformerIDs []int
-	var filePath string
-	var fileModTime time.Time
-	var videoCreationTime time.Time
-
+	var (
+		existingPerformerIDs []int
+		existingGroups       []models.GroupsScenes
+		primary              *models.VideoFile
+	)
 	if err := r.WithReadTxn(ctx, func(ctx context.Context) error {
 		if err := sc.LoadPerformerIDs(ctx, r.Scene); err != nil {
 			return err
 		}
-		existingPerformerIDs = sc.PerformerIDs.List()
-
+		existingPerformerIDs = append([]int(nil), sc.PerformerIDs.List()...)
+		if err := sc.LoadGroups(ctx, r.Scene); err != nil {
+			return err
+		}
+		existingGroups = append([]models.GroupsScenes(nil), sc.Groups.List()...)
 		if err := sc.LoadFiles(ctx, r.Scene); err != nil {
 			return err
 		}
-		if vf := sc.Files.Primary(); vf != nil {
-			filePath = vf.Path
-			fileModTime = vf.ModTime
-			videoCreationTime = vf.CreationTime
-		}
-
-		if sc.StudioID != nil {
-			var err error
-			studio, err = r.Studio.Find(ctx, *sc.StudioID)
-			if err != nil {
-				return err
-			}
-			if studio != nil {
-				if err := studio.LoadAliases(ctx, r.Studio); err != nil {
-					return err
-				}
-			}
-		}
-
+		primary = sc.Files.Primary()
 		return nil
 	}); err != nil {
 		return fmt.Errorf("loading scene: %w", err)
 	}
 
-	textSources := j.textSources(sc, filePath)
-	if len(textSources) == 0 {
+	fileDirty := false
+	if primary != nil && !primary.MetadataProbed && j.ffprobe != nil {
+		if probed, err := j.ffprobe.NewVideoFileContext(ctx, primary.Path); err == nil {
+			primary.Title = probed.Title
+			primary.Comment = probed.Comment
+			primary.Encoder = probed.Encoder
+			primary.Tags = probed.Tags
+			if !probed.CreationTime.IsZero() {
+				primary.CreationTime = probed.CreationTime
+			}
+			primary.MetadataProbed = true
+			fileDirty = true
+		} else if ctx.Err() != nil {
+			return ctx.Err()
+		} else {
+			logger.Debugf("[scene metadata] scene %d: container metadata unavailable", sc.ID)
+		}
+	}
+
+	var nfo *metadata.NFOData
+	if primary != nil {
+		if parsed, err := metadata.ReadAdjacentNFO(primary.Path); err == nil {
+			nfo = parsed
+		} else {
+			logger.Debugf("[scene metadata] scene %d: adjacent NFO unavailable", sc.ID)
+		}
+	}
+
+	filenameStem := ""
+	container := metadata.ContainerMetadata{}
+	sanityBound := time.Now()
+	var dateSignals []metadata.DateSignal
+	if primary != nil {
+		filenameStem = strings.TrimSuffix(filepath.Base(primary.Path), filepath.Ext(primary.Path))
+		container = metadata.ContainerMetadata{
+			Title: primary.Title, Comment: primary.Comment, Encoder: primary.Encoder, Tags: primary.Tags,
+		}
+		if !primary.ModTime.IsZero() {
+			sanityBound = primary.ModTime
+		}
+		if !primary.CreationTime.IsZero() {
+			dateSignals = append(dateSignals, metadata.DateSignal{
+				Date: primary.CreationTime, Priority: metadata.DatePriorityVideoCreation, Source: "video creation time",
+			})
+		}
+	}
+	sources := metadata.CollectSources(metadata.SourceInputs{
+		FilenameStem: filenameStem, SceneTitle: sc.Title, Details: sc.Details,
+		UseDetails: j.input.UseDetails, NFO: nfo, Container: container,
+	})
+	if len(sources) == 0 {
 		return nil
 	}
 
-	studioNames := studioExcludeNames(studio)
-
-	matchedIDs, newCandidates, err := j.identifyPerformers(ctx, textSources, existingPerformerIDs, studioNames)
+	var exactSpans []metadata.Span
+	for _, source := range sources {
+		exactSpans = append(exactSpans, metadata.FindExactNamedSpans(source, j.performerRecords, metadata.EntityLabelPerformer)...)
+		exactSpans = append(exactSpans, metadata.FindExactNamedSpans(source, j.studioRecords, metadata.EntityLabelStudio)...)
+		exactSpans = append(exactSpans, metadata.FindExactNamedSpans(source, j.groupRecords, metadata.EntityLabelMovie)...)
+	}
+	analysis, err := (metadata.Analyzer{}).Analyze(ctx, metadata.Inputs{
+		Sources: sources, EntityExtractor: getSceneMetadataEntityExtractor(),
+		AdditionalSpans: exactSpans, DateSignals: dateSignals, SanityBound: sanityBound,
+	})
 	if err != nil {
-		return fmt.Errorf("identifying performers: %w", err)
+		return fmt.Errorf("analyzing typed metadata: %w", err)
 	}
 
+	var newCandidates []string
+	for _, candidate := range analysis.PerformerCandidates {
+		if candidate.ExistingEntityID == nil && candidate.Confidence >= j.performerLookupThreshold() {
+			newCandidates = append(newCandidates, candidate.Value)
+		}
+	}
 	var createdIDs []int
-	if len(newCandidates) > 0 {
+	if !j.input.DryRun && len(newCandidates) > 0 {
 		createdIDs, err = j.verifyAndCreatePerformers(ctx, newCandidates)
 		if err != nil {
 			return fmt.Errorf("verifying new performer candidates: %w", err)
 		}
 	}
 
-	resolvedDate := j.resolveSceneDate(sc, textSources, videoCreationTime, fileModTime)
-
 	partial := models.NewScenePartial()
-	dirty := false
-
-	newPerformerIDs := mergeIDs(existingPerformerIDs, matchedIDs, createdIDs)
+	sceneDirty := false
+	newPerformerIDs := mergeIDs(existingPerformerIDs, analysis.MatchedPerformerIDs, createdIDs)
 	if len(newPerformerIDs) != len(existingPerformerIDs) {
-		partial.PerformerIDs = &models.UpdateIDs{
-			IDs:  newPerformerIDs,
-			Mode: models.RelationshipUpdateModeSet,
-		}
-		dirty = true
+		partial.PerformerIDs = &models.UpdateIDs{IDs: newPerformerIDs, Mode: models.RelationshipUpdateModeSet}
+		sceneDirty = true
 	}
-
-	if resolvedDate != nil {
+	if sc.StudioID == nil && analysis.StudioID != nil {
+		partial.StudioID = models.NewOptionalInt(*analysis.StudioID)
+		sceneDirty = true
+	}
+	if resolvedDate := analysis.Date; resolvedDate != nil {
 		threshold := j.dateConfidenceThreshold()
+		sameExistingDate := sc.Date != nil && sc.Date.Time.Format("2006-01-02") == resolvedDate.Date.Format("2006-01-02")
 		switch {
 		case sc.Date == nil && resolvedDate.Confidence >= threshold:
 			partial.Date = models.NewOptionalDate(models.Date{Time: resolvedDate.Date})
-			dirty = true
-			logger.Infof("[scene metadata] scene %d: setting date %s (confidence %.2f, source %s)", sc.ID, resolvedDate.Date.Format("2006-01-02"), resolvedDate.Confidence, resolvedDate.Source)
-		case sc.Date != nil && j.input.OverwriteExistingDate && !resolvedDate.Contested && resolvedDate.Confidence >= dateOverwriteMinConfidence:
+			sceneDirty = true
+		case sc.Date != nil && !sameExistingDate && j.input.OverwriteExistingDate && !resolvedDate.Contested && resolvedDate.Confidence >= dateOverwriteMinConfidence:
 			partial.Date = models.NewOptionalDate(models.Date{Time: resolvedDate.Date})
-			dirty = true
-			logger.Infof("[scene metadata] scene %d: overwriting date with %s (confidence %.2f, source %s)", sc.ID, resolvedDate.Date.Format("2006-01-02"), resolvedDate.Confidence, resolvedDate.Source)
-		default:
-			logger.Debugf("[scene metadata] scene %d: date %s not applied (confidence %.2f, contested %v, existing date present %v)", sc.ID, resolvedDate.Date.Format("2006-01-02"), resolvedDate.Confidence, resolvedDate.Contested, sc.Date != nil)
+			sceneDirty = true
+		}
+	}
+	if analysis.Title != nil && !strings.EqualFold(strings.TrimSpace(sc.Title), strings.TrimSpace(analysis.Title.Value)) &&
+		(j.input.OverwriteExistingTitle || isDefaultSceneTitle(sc.Title, primary)) {
+		partial.Title = models.NewOptionalString(analysis.Title.Value)
+		sceneDirty = true
+	}
+	if analysis.Group != nil && analysis.Group.ExistingID != nil && analysis.Group.SceneIndex != nil {
+		groupID, sceneIndex := *analysis.Group.ExistingID, *analysis.Group.SceneIndex
+		updated := append([]models.GroupsScenes(nil), existingGroups...)
+		found, changed := false, false
+		for index := range updated {
+			if updated[index].GroupID != groupID {
+				continue
+			}
+			found = true
+			if updated[index].SceneIndex == nil || *updated[index].SceneIndex != sceneIndex {
+				value := sceneIndex
+				updated[index].SceneIndex = &value
+				changed = true
+			}
+		}
+		if !found {
+			value := sceneIndex
+			updated = append(updated, models.GroupsScenes{GroupID: groupID, SceneIndex: &value})
+			changed = true
+		}
+		if changed {
+			partial.GroupIDs = &models.UpdateGroupIDs{Groups: updated, Mode: models.RelationshipUpdateModeSet}
+			sceneDirty = true
 		}
 	}
 
-	if !dirty {
+	logger.Infof(
+		"[scene metadata] scene %d: %d unique performer candidates, %d exact matches, model available %v",
+		sc.ID, analysis.UniquePotentialPerformers, len(analysis.MatchedPerformerIDs), analysis.Diagnostics.ModelAvailable,
+	)
+	if !sceneDirty && !fileDirty {
 		return nil
 	}
-
 	if j.input.DryRun {
 		logger.Infof("[scene metadata] dry run: would update scene %d", sc.ID)
 		return nil
 	}
-
 	return r.WithTxn(ctx, func(ctx context.Context) error {
-		_, err := r.Scene.UpdatePartial(ctx, sc.ID, partial)
-		return err
+		if fileDirty {
+			if err := r.File.Update(ctx, primary); err != nil {
+				return err
+			}
+		}
+		if sceneDirty {
+			_, err := r.Scene.UpdatePartial(ctx, sc.ID, partial)
+			return err
+		}
+		return nil
 	})
+}
+
+func isDefaultSceneTitle(title string, primary *models.VideoFile) bool {
+	if strings.TrimSpace(title) == "" {
+		return true
+	}
+	if primary == nil {
+		return false
+	}
+	base := filepath.Base(primary.Path)
+	stem := strings.TrimSuffix(base, filepath.Ext(base))
+	return strings.EqualFold(strings.TrimSpace(title), base) || strings.EqualFold(strings.TrimSpace(title), stem)
 }
 
 // dateOverwriteMinConfidence is the minimum confidence required to
@@ -244,128 +451,11 @@ func (j *analyzeSceneMetadataJob) processScene(ctx context.Context, sc *models.S
 // this without being corroborated by anything else.
 const dateOverwriteMinConfidence = 0.85
 
-type sceneTextSource struct {
-	text   string
-	source string
-}
-
-func (j *analyzeSceneMetadataJob) textSources(sc *models.Scene, filePath string) []sceneTextSource {
-	var ret []sceneTextSource
-
-	filename := ""
-	if filePath != "" {
-		filename = strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
-	}
-
-	if sc.Title != "" && !strings.EqualFold(sc.Title, filename) {
-		ret = append(ret, sceneTextSource{text: sc.Title, source: "title"})
-	}
-	if filename != "" {
-		ret = append(ret, sceneTextSource{text: filename, source: "filename"})
-	}
-	if j.input.UseDetails && sc.Details != "" {
-		ret = append(ret, sceneTextSource{text: sc.Details, source: "details"})
-	}
-
-	return ret
-}
-
-func studioExcludeNames(studio *models.Studio) map[string]struct{} {
-	ret := map[string]struct{}{}
-	if studio == nil {
-		return ret
-	}
-
-	ret[strings.ToLower(studio.Name)] = struct{}{}
-	for _, alias := range studio.Aliases.List() {
-		ret[strings.ToLower(alias)] = struct{}{}
-	}
-
-	return ret
-}
-
-// identifyPerformers matches known performers against the scene's text
-// sources (reusing pkg/match's existing path-matching machinery - it works
-// on any string, not just filesystem paths) and separately extracts
-// candidate names for performers not yet in the library. Returns matched
-// performer IDs not already on the scene, and surviving new-name
-// candidates (deduplicated, plausibility-filtered).
-func (j *analyzeSceneMetadataJob) identifyPerformers(ctx context.Context, sources []sceneTextSource, existingIDs []int, studioNames map[string]struct{}) (matchedIDs []int, newCandidates []string, err error) {
-	r := j.repository
-
-	existing := map[int]struct{}{}
-	for _, id := range existingIDs {
-		existing[id] = struct{}{}
-	}
-
-	matchedSet := map[int]struct{}{}
-	candidateSet := map[string]struct{}{}
-
-	if err := r.WithReadTxn(ctx, func(ctx context.Context) error {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		for _, src := range sources {
-			performers, err := match.PathToPerformers(ctx, src.text, r.Performer, nil, false)
-			if err != nil {
-				return err
-			}
-
-			for _, p := range performers {
-				if _, ok := existing[p.ID]; ok {
-					continue
-				}
-				matchedSet[p.ID] = struct{}{}
-			}
-		}
-
-		return nil
-	}); err != nil {
-		return nil, nil, err
-	}
-
-	for _, src := range sources {
-		if err := ctx.Err(); err != nil {
-			return nil, nil, err
-		}
-		candidates := metadata.ExtractNameCandidates(src.text, func(c string) bool {
-			_, excluded := studioNames[c]
-			return excluded
-		})
-
-		for _, c := range candidates {
-			if err := ctx.Err(); err != nil {
-				return nil, nil, err
-			}
-			key := strings.ToLower(c)
-			if _, ok := candidateSet[key]; ok {
-				continue
-			}
-			if getNamePlausibilityScorer().Score(c) < minCandidatePlausibility {
-				continue
-			}
-			candidateSet[key] = struct{}{}
-			newCandidates = append(newCandidates, c)
-		}
-	}
-
-	for id := range matchedSet {
-		matchedIDs = append(matchedIDs, id)
-	}
-
-	return matchedIDs, newCandidates, nil
-}
-
 // verifyAndCreatePerformers looks up each candidate via configured
 // performer scrapers; a candidate is only created as a new Performer if a
 // scraper confirms a performer by that exact (case-insensitive) name.
 func (j *analyzeSceneMetadataJob) verifyAndCreatePerformers(ctx context.Context, candidates []string) ([]int, error) {
-	if j.scraperCache == nil {
-		return nil, nil
-	}
-
-	scrapers := j.scraperCache.ListScrapers([]scraper.ScrapeContentType{scraper.ScrapeContentTypePerformer})
-	if len(scrapers) == 0 {
+	if j.scraperCache == nil || len(j.performerVerifierScrapers) == 0 {
 		return nil, nil
 	}
 
@@ -382,7 +472,7 @@ func (j *analyzeSceneMetadataJob) verifyAndCreatePerformers(ctx context.Context,
 			continue
 		}
 
-		verified, err := j.scrapeVerifyPerformer(ctx, scrapers, candidate)
+		verified, err := j.scrapeVerifyPerformer(ctx, candidate)
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -411,8 +501,8 @@ func (j *analyzeSceneMetadataJob) verifyAndCreatePerformers(ctx context.Context,
 	return createdIDs, nil
 }
 
-func (j *analyzeSceneMetadataJob) scrapeVerifyPerformer(ctx context.Context, scrapers []*scraper.Scraper, candidate string) (string, error) {
-	for _, s := range scrapers {
+func (j *analyzeSceneMetadataJob) scrapeVerifyPerformer(ctx context.Context, candidate string) (string, error) {
+	for _, s := range j.performerVerifierScrapers {
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
@@ -459,33 +549,6 @@ func (j *analyzeSceneMetadataJob) createPerformer(ctx context.Context, name stri
 	logger.Infof("[scene metadata] created new performer %q (id %d)", name, newPerformer.ID)
 
 	return newPerformer.ID, nil
-}
-
-func (j *analyzeSceneMetadataJob) resolveSceneDate(sc *models.Scene, sources []sceneTextSource, videoCreationTime, fileModTime time.Time) *metadata.ResolvedDate {
-	var signals []metadata.DateSignal
-
-	if !videoCreationTime.IsZero() {
-		signals = append(signals, metadata.DateSignal{
-			Date:     videoCreationTime,
-			Priority: metadata.DatePriorityVideoCreation,
-			Source:   "video_creation_time",
-		})
-	}
-
-	for _, src := range sources {
-		signals = append(signals, metadata.ExtractDateSignals(src.text, src.source)...)
-	}
-
-	if len(signals) == 0 {
-		return nil
-	}
-
-	sanityBound := fileModTime
-	if sanityBound.IsZero() {
-		sanityBound = time.Now()
-	}
-
-	return metadata.ResolveDate(signals, sanityBound)
 }
 
 func mergeIDs(existing, matched, created []int) []int {
