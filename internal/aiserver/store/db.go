@@ -20,9 +20,17 @@ import (
 
 const driverName = "sqlite3"
 
+type sqlRunner interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
 // DB is a handle to the AI database.
 type DB struct {
-	sql  *sql.DB
+	sql  sqlRunner
+	conn *sql.DB
+	tx   *sql.Tx
 	path string
 }
 
@@ -57,7 +65,7 @@ func Open(ctx context.Context, path string) (*DB, error) {
 		return nil, fmt.Errorf("ping %s: %w", path, err)
 	}
 
-	db := &DB{sql: conn, path: path}
+	db := &DB{sql: conn, conn: conn, path: path}
 	if err := db.migrate(ctx); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("migrate %s: %w", path, err)
@@ -66,25 +74,31 @@ func Open(ctx context.Context, path string) (*DB, error) {
 }
 
 // SQL exposes the underlying handle for the sibling packages that build queries.
-func (db *DB) SQL() *sql.DB { return db.sql }
+func (db *DB) SQL() *sql.DB { return db.conn }
 
 // Path is the on-disk location, for diagnostics and the health endpoint.
 func (db *DB) Path() string { return db.path }
 
 // Close releases the connection.
 func (db *DB) Close() error {
-	if db == nil || db.sql == nil {
+	if db == nil || db.conn == nil || db.tx != nil {
 		return nil
 	}
-	return db.sql.Close()
+	return db.conn.Close()
 }
 
 // Ping reports whether the database is reachable.
 func (db *DB) Ping(ctx context.Context) error {
-	if db == nil || db.sql == nil {
+	if db == nil || db.conn == nil {
 		return errors.New("aiserver/store: database not open")
 	}
-	return db.sql.PingContext(ctx)
+	return db.conn.PingContext(ctx)
+}
+
+// WithTx returns a lightweight view whose reads and writes use tx. Calling
+// InTx on the view reuses that transaction rather than opening a savepoint.
+func (db *DB) WithTx(tx *sql.Tx) *DB {
+	return &DB{sql: tx, conn: db.conn, tx: tx, path: db.path}
 }
 
 // InTx runs fn inside a transaction, rolling back on error or panic.
@@ -93,7 +107,10 @@ func (db *DB) Ping(ctx context.Context) error {
 // package. Ingest validates rows before opening its transaction, avoiding
 // per-row transaction overhead and partial batches.
 func (db *DB) InTx(ctx context.Context, fn func(*sql.Tx) error) (err error) {
-	tx, err := db.sql.BeginTx(ctx, nil)
+	if db.tx != nil {
+		return fn(db.tx)
+	}
+	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
 	}

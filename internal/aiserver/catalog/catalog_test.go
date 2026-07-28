@@ -226,6 +226,67 @@ func TestInstallWritesAndRecordsThePlugin(t *testing.T) {
 	}
 }
 
+func TestFailedReplacementRestoresPreviousPlugin(t *testing.T) {
+	source := demoSource()
+	server := source.start(t)
+	manager, db, pluginDir := newManager(t, server.URL)
+	ctx := context.Background()
+
+	if _, err := manager.Refresh(ctx, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Install(ctx, "demo", "test", false, false); err != nil {
+		t.Fatal(err)
+	}
+
+	newManifest := []byte("name: demo\nversion: 2.0.0\nrequired_backend: \">=0.9.0\"\nfiles:\n  - plugin\n")
+	newCode := []byte("VALUE = 2\n")
+	source.files["demo/plugin.yml"] = newManifest
+	source.files["demo/plugin.py"] = newCode
+	source.index.Plugins[0].Version = "2.0.0"
+	source.index.Plugins[0].Files[0].SHA256 = digest(newManifest)
+	source.index.Plugins[0].Files[1].SHA256 = digest(newCode)
+	if _, err := manager.Refresh(ctx, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.SQL().ExecContext(ctx, `
+		CREATE TRIGGER fail_plugin_replacement
+		BEFORE INSERT ON plugin_meta
+		BEGIN
+			SELECT RAISE(FAIL, 'simulated metadata failure');
+		END`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Install(ctx, "demo", "test", true, false); err == nil {
+		t.Fatal("replacement succeeded despite metadata failure")
+	}
+
+	code, err := os.ReadFile(filepath.Join(pluginDir, "demo", "plugin.py"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(code) != "VALUE = 1\n" {
+		t.Fatalf("replacement failure left plugin code %q, want previous version", code)
+	}
+	meta, err := db.GetPluginMeta(ctx, "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.Version != "1.2.0" {
+		t.Fatalf("replacement failure left metadata version %q, want 1.2.0", meta.Version)
+	}
+	entries, err := os.ReadDir(pluginDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".backup-") || strings.HasPrefix(entry.Name(), ".install-") {
+			t.Errorf("failed replacement left staging path %q", entry.Name())
+		}
+	}
+}
+
 // The checksum is the whole point of the verified path: a file that does not
 // match must never reach the plugin directory.
 func TestInstallRejectsATamperedFile(t *testing.T) {

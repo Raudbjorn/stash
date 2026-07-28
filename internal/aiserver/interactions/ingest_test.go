@@ -245,6 +245,59 @@ func TestReingestIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestRetryReappliesDerivationAfterTransientFailure(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	if _, err := h.db.SQL().ExecContext(ctx, `
+		CREATE TRIGGER fail_scene_derived
+		BEFORE INSERT ON scene_derived
+		BEGIN
+			SELECT RAISE(FAIL, 'transient derived failure');
+		END`); err != nil {
+		t.Fatal(err)
+	}
+
+	event := evIn("retry-session", EventSceneView, "scene", 42, h.at(0), nil)
+	first, err := h.Ingest(ctx, []EventIn{event}, "test-client")
+	if err != nil {
+		t.Fatalf("first ingest: %v", err)
+	}
+	if first.Accepted != 0 || len(first.Errors) == 0 {
+		t.Fatalf("failed derivation result = %+v, want no committed events and an error", first)
+	}
+	var raw, watches int
+	if err := h.db.SQL().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM interaction_events WHERE client_event_id = ?`, event.ID).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.db.SQL().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM scene_watch WHERE session_id = ? AND scene_id = ?`,
+		"retry-session", 42).Scan(&watches); err != nil {
+		t.Fatal(err)
+	}
+	if raw != 0 || watches != 0 {
+		t.Fatalf("failed transaction left raw=%d watches=%d", raw, watches)
+	}
+
+	if _, err := h.db.SQL().ExecContext(ctx, `DROP TRIGGER fail_scene_derived`); err != nil {
+		t.Fatal(err)
+	}
+	second, err := h.Ingest(ctx, []EventIn{event}, "test-client")
+	if err != nil {
+		t.Fatalf("retry ingest: %v", err)
+	}
+	if second.Accepted != 1 || second.Duplicates != 0 || len(second.Errors) != 0 {
+		t.Fatalf("retry = %+v, want one newly accepted event", second)
+	}
+	derived, err := h.db.GetSceneDerived(ctx, 42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if derived.ViewCount != 1 {
+		t.Fatalf("retry view count = %d, want 1", derived.ViewCount)
+	}
+}
+
 // Two runs separated by a real gap must stay separate.
 func TestDisjointRunsStaySeparate(t *testing.T) {
 	h := newHarness(t)

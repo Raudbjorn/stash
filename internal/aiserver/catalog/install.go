@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -393,24 +394,9 @@ func (m *Manager) installOne(ctx context.Context, name string, preferredSource i
 		return "", false, fmt.Errorf("catalog calls this plugin %q but its manifest says %q", name, manifest.Name)
 	}
 
-	if err := os.RemoveAll(target); err != nil {
-		return "", false, err
-	}
-	if err := os.Rename(staging, target); err != nil {
-		return "", false, err
-	}
-
-	head := ""
-	migrations, err := store.LoadPluginMigrations(filepath.Join(target, "migrations"))
+	migrations, err := store.LoadPluginMigrations(filepath.Join(staging, "migrations"))
 	if err != nil {
 		return "", false, fmt.Errorf("read migrations for %s: %w", name, err)
-	}
-	if len(migrations) > 0 {
-		version, err := db.ApplyPluginMigrations(ctx, name, migrations)
-		if err != nil {
-			return "", false, err
-		}
-		head = fmt.Sprintf("%04d", version)
 	}
 
 	meta := store.PluginMeta{
@@ -418,9 +404,6 @@ func (m *Manager) installOne(ctx context.Context, name string, preferredSource i
 		Version:         firstNonEmpty(manifest.Version, entry.Version, "0.0.0"),
 		Status:          store.PluginStatusActive,
 		RequiredBackend: manifest.RequiredBackend,
-	}
-	if head != "" {
-		meta.MigrationHead = &head
 	}
 	if manifest.HumanName != "" {
 		meta.HumanName = &manifest.HumanName
@@ -433,8 +416,57 @@ func (m *Manager) installOne(ctx context.Context, name string, preferredSource i
 		meta.ServerLink = entry.ServerLink
 	}
 
-	if err := db.UpsertPluginMeta(ctx, meta); err != nil {
+	// Keep the previous tree until the replacement's database migration and
+	// metadata transaction commits. Filesystem and SQLite cannot share a
+	// transaction, so a private sibling backup is the rollback boundary.
+	backup, err := os.MkdirTemp(m.PluginDir, ".backup-"+name+"-*")
+	if err != nil {
 		return "", false, err
+	}
+	if err := os.Remove(backup); err != nil {
+		return "", false, err
+	}
+	hadPrevious := false
+	if _, err := os.Lstat(target); err == nil {
+		if err := os.Rename(target, backup); err != nil {
+			return "", false, fmt.Errorf("preserve existing %s: %w", name, err)
+		}
+		hadPrevious = true
+	} else if !os.IsNotExist(err) {
+		return "", false, err
+	}
+
+	restore := func(cause error) error {
+		removeErr := os.RemoveAll(target)
+		var restoreErr error
+		if hadPrevious {
+			restoreErr = os.Rename(backup, target)
+		}
+		return errors.Join(cause, removeErr, restoreErr)
+	}
+	if err := os.Rename(staging, target); err != nil {
+		return "", false, restore(err)
+	}
+
+	err = db.InTx(ctx, func(tx *sql.Tx) error {
+		transactional := db.WithTx(tx)
+		if len(migrations) > 0 {
+			version, err := transactional.ApplyPluginMigrations(ctx, name, migrations)
+			if err != nil {
+				return err
+			}
+			head := fmt.Sprintf("%04d", version)
+			meta.MigrationHead = &head
+		}
+		return transactional.UpsertPluginMeta(ctx, meta)
+	})
+	if err != nil {
+		return "", false, restore(err)
+	}
+	if hadPrevious {
+		if err := os.RemoveAll(backup); err != nil {
+			logger.Warnf("could not remove backup for installed plugin %s: %v", name, err)
+		}
 	}
 
 	unverified := false

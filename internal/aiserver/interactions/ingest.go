@@ -109,8 +109,14 @@ func (s *Service) Ingest(ctx context.Context, events []EventIn, fallbackFingerpr
 		return result, nil
 	}
 
-	// One transaction for the whole batch.
+	// Raw event IDs and every derived write commit together. If derivation
+	// fails, the IDs roll back too, so the client's exact retry can repair the
+	// state instead of being discarded as a duplicate.
+	var derivationErr error
 	if err := s.db.InTx(ctx, func(tx *sql.Tx) error {
+		transactional := *s
+		transactional.db = s.db.WithTx(tx)
+
 		for _, ev := range normalized {
 			if !ev.store {
 				continue
@@ -132,26 +138,32 @@ func (s *Service) Ingest(ctx context.Context, events []EventIn, fallbackFingerpr
 				return err
 			}
 		}
+
+		if err := transactional.applySessionState(ctx, normalized); err != nil {
+			derivationErr = fmt.Errorf("session state: %w", err)
+			return derivationErr
+		}
+		if err := transactional.processSceneSummaries(ctx, normalized, settings); err != nil {
+			derivationErr = fmt.Errorf("scene summaries: %w", err)
+			return derivationErr
+		}
+		if err := transactional.processImageDerived(ctx, normalized); err != nil {
+			derivationErr = fmt.Errorf("image derived: %w", err)
+			return derivationErr
+		}
+		if err := transactional.persistLibrarySearches(ctx, normalized); err != nil {
+			derivationErr = fmt.Errorf("library search: %w", err)
+			return derivationErr
+		}
 		return nil
 	}); err != nil {
+		if derivationErr != nil {
+			result.Errors = append(result.Errors, derivationErr.Error())
+			return result, nil
+		}
 		return result, err
 	}
 	result.Accepted = len(normalized)
-
-	if err := s.applySessionState(ctx, normalized); err != nil {
-		result.Errors = append(result.Errors, fmt.Sprintf("session state: %v", err))
-	}
-
-	if err := s.processSceneSummaries(ctx, normalized, settings, &result); err != nil {
-		result.Errors = append(result.Errors, fmt.Sprintf("scene summaries: %v", err))
-	}
-	if err := s.processImageDerived(ctx, normalized); err != nil {
-		result.Errors = append(result.Errors, fmt.Sprintf("image derived: %v", err))
-	}
-	if err := s.persistLibrarySearches(ctx, normalized); err != nil {
-		result.Errors = append(result.Errors, fmt.Sprintf("library search: %v", err))
-	}
-
 	return result, nil
 }
 

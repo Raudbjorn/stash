@@ -3,6 +3,7 @@ package interactions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"time"
 
@@ -32,7 +33,7 @@ type pairKey struct {
 // extended to cover when the page was open, and - if the batch touched playback
 // at all - the watched segments are recomputed and reconciled against what is
 // already stored.
-func (s *Service) processSceneSummaries(ctx context.Context, events []normalizedEvent, settings Settings, result *IngestResult) error {
+func (s *Service) processSceneSummaries(ctx context.Context, events []normalizedEvent, settings Settings) error {
 	byPair := map[pairKey][]normalizedEvent{}
 	var order []pairKey
 
@@ -77,17 +78,14 @@ func (s *Service) processSceneSummaries(ctx context.Context, events []normalized
 
 		watch, err := s.upsertSceneWatch(ctx, key, pairEvents)
 		if err != nil {
-			result.Errors = append(result.Errors,
-				"scene_watch "+key.sessionID+": "+err.Error())
-			continue
+			return fmt.Errorf("scene_watch %s: %w", key.sessionID, err)
 		}
 
 		if !touchesPlayback(pairEvents) {
 			continue
 		}
 		if err := s.recomputeSegments(ctx, key, pairEvents, watch, settings); err != nil {
-			result.Errors = append(result.Errors,
-				"summary "+key.sessionID+": "+err.Error())
+			return fmt.Errorf("summary %s: %w", key.sessionID, err)
 		}
 	}
 
