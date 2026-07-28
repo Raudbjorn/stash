@@ -1,0 +1,136 @@
+{
+  "model_id": "onnx-community/gliner_small-v2.1",
+  "revision": "8142fb00740ccea973e64b1272949ff48653df5e",
+  "model_sha256": "c76c90920547fd937aaf505e7f2de5ec73168bf1c25abbb55a298104cb061400",
+  "gliner_version": "0.2.9",
+  "transformers_version": "4.38.2",
+  "onnxruntime_version": "1.28.0",
+  "labels": [
+    "adult performer name",
+    "production studio",
+    "production date",
+    "movie title",
+    "video encoding group"
+  ],
+  "cases": [
+    {
+      "name": "all_primary_labels",
+      "text": "Jane Doe at Example Studio on 2024-05-17 in City Nights released by GROUP",
+      "threshold": 0.15,
+      "entities": [
+        {
+          "start": 0,
+          "end": 8,
+          "text": "Jane Doe",
+          "label": "adult performer name",
+          "score": 0.7401186227798462
+        },
+        {
+          "start": 12,
+          "end": 26,
+          "text": "Example Studio",
+          "label": "production studio",
+          "score": 0.8853440284729004
+        },
+        {
+          "start": 30,
+          "end": 40,
+          "text": "2024-05-17",
+          "label": "production date",
+          "score": 0.6049814224243164
+        },
+        {
+          "start": 44,
+          "end": 55,
+          "text": "City Nights",
+          "label": "movie title",
+          "score": 0.2259569615125656
+        },
+        {
+          "start": 68,
+          "end": 73,
+          "text": "GROUP",
+          "label": "production studio",
+          "score": 0.5816851854324341
+        }
+      ]
+    },
+    {
+      "name": "dotted_underscored_filename",
+      "text": "Example_Studio.2024.05.17.Jane_Doe.City-Nights.WEB-DL-GROUP.mkv",
+      "threshold": 0.15,
+      "entities": [
+        {
+          "start": 0,
+          "end": 14,
+          "text": "Example_Studio",
+          "label": "production studio",
+          "score": 0.6141345500946045
+        },
+        {
+          "start": 15,
+          "end": 25,
+          "text": "2024.05.17",
+          "label": "production date",
+          "score": 0.16340868175029755
+        },
+        {
+          "start": 26,
+          "end": 34,
+          "text": "Jane_Doe",
+          "label": "adult performer name",
+          "score": 0.36182570457458496
+        },
+        {
+          "start": 60,
+          "end": 63,
+          "text": "mkv",
+          "label": "movie title",
+          "score": 0.1583911031484604
+        }
+      ]
+    },
+    {
+      "name": "unicode_names",
+      "text": "María O’Neil — Élodie D’Ambrosio 佐藤",
+      "threshold": 0.15,
+      "entities": [
+        {
+          "start": 0,
+          "end": 12,
+          "text": "María O’Neil",
+          "label": "adult performer name",
+          "score": 0.5337603092193604
+        },
+        {
+          "start": 15,
+          "end": 32,
+          "text": "Élodie D’Ambrosio",
+          "label": "adult performer name",
+          "score": 0.42725446820259094
+        }
+      ]
+    },
+    {
+      "name": "encoding_group_label_probe",
+      "text": "Video encoding group: FraMeSToR",
+      "threshold": 0.05,
+      "entities": [
+        {
+          "start": 0,
+          "end": 20,
+          "text": "Video encoding group",
+          "label": "video encoding group",
+          "score": 0.06538411229848862
+        },
+        {
+          "start": 22,
+          "end": 31,
+          "text": "FraMeSToR",
+          "label": "production studio",
+          "score": 0.6909351348876953
+        }
+      ]
+    }
+  ]
+}

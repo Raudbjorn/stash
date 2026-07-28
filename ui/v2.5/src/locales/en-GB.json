@@ -544,7 +544,31 @@
     "tasks": {
       "added_job_to_queue": "Added {operation_name} to job queue",
       "analyze_scene_metadata": {
-        "description": "Analyzes scene titles/filenames (and available container/EXIF metadata) to detect performers and scene date. Attaches matched performers and fills in a blank date; existing dates are never overwritten unless explicitly enabled."
+        "date_confidence": {
+          "label": "Date confidence threshold"
+        },
+        "description": "Analyzes filename, title, adjacent NFO, and container metadata to link performers, studios, dates, and explicit movie scenes, then proposes a clean title. Existing metadata is preserved unless its overwrite control is enabled.",
+        "model": {
+          "checking": "Checking local entity model…",
+          "install": "Install local entity model",
+          "label": "Local entity extraction",
+          "reload": "Reload model",
+          "reloaded": "Local entity model reloaded",
+          "runtime_available": "ONNX Runtime available",
+          "runtime_missing": "ONNX Runtime missing",
+          "status": "{state} · {version} · {runtime}"
+        },
+        "overwrite_date": "Overwrite an existing date only with high-confidence, uncontested evidence",
+        "overwrite_title": "Overwrite a user-authored title",
+        "performer_confidence": {
+          "label": "New performer confidence threshold"
+        },
+        "performer_verifier_scrapers": {
+          "help": "Only selected scrapers verify newly discovered performer names. An empty selection disables network verification and creation of newly discovered performers.",
+          "label": "Performer verification scrapers",
+          "placeholder": "Select performer scrapers…"
+        },
+        "use_details": "Also analyze scene details"
       },
       "anonymise_and_download": "Makes an anonymised copy of the database and downloads the resulting file.",
       "anonymise_database": "Makes a copy of the database to the backups directory, anonymising all sensitive data. This can then be provided to others for troubleshooting and debugging purposes. The original database is not modified. Anonymised database uses the filename format {filename_format}.",

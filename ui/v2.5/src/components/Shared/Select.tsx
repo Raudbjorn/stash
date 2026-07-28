@@ -157,7 +157,7 @@ const LimitedSelectMenu = <T extends boolean>(
   );
 };
 
-const SelectComponent = <T extends boolean>({
+export const SelectComponent = <T extends boolean>({
   type,
   initialIds,
   onChange,

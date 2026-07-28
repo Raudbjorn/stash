@@ -10,16 +10,13 @@ import (
 // contiguous runs of letters (in any script) as tokens.
 var wordSplitRE = regexp.MustCompile(`[^\p{L}]+`)
 
-// stopWords are common non-name tokens that should never be treated as
+// nonNameTokens are common non-name tokens that should never be treated as
 // part of a candidate performer name, even when title-cased. Adult-content
-// titles routinely sentence-case a marketing phrase or a genre/descriptor
-// tag alongside the actual performer name (e.g. "You Make Skinny Kenzie
-// Reeves Cum"), so this list covers both common English function words and
-// the recurring descriptor/genre vocabulary seen in real titles - not just
-// generic stopwords - since either can otherwise misalign the non-overlapping
-// pairing in ExtractNameCandidates away from the real name.
-var stopWords = map[string]struct{}{
-	// generic
+// titles routinely sentence-case a marketing phrase or descriptor alongside
+// the actual performer name, so this includes both common English words and
+// recurring descriptor vocabulary. Extraction and plausibility scoring share
+// this set so lexical boundaries and low-score guards cannot disagree.
+var nonNameTokens = map[string]struct{}{
 	"the": {}, "and": {}, "with": {}, "featuring": {}, "feat": {},
 	"scene": {}, "part": {}, "vol": {}, "volume": {}, "full": {}, "video": {},
 	"official": {}, "site": {}, "rip": {}, "web": {}, "hd": {}, "sd": {},
@@ -44,6 +41,9 @@ var stopWords = map[string]struct{}{
 	"cant": {}, "just": {}, "so": {}, "too": {}, "very": {}, "not": {},
 	"now": {}, "then": {}, "than": {}, "more": {}, "most": {}, "some": {},
 	"any": {}, "all": {}, "again": {}, "still": {}, "back": {}, "only": {},
+	"where": {}, "which": {}, "while": {}, "after": {}, "before": {},
+	"about": {}, "against": {}, "between": {}, "into": {}, "through": {},
+	"during": {}, "without": {}, "under": {}, "over": {},
 	"eyes": {}, "friends": {}, "secret": {},
 
 	// recurring adult-content descriptor/genre vocabulary that is not a name
@@ -52,10 +52,16 @@ var stopWords = map[string]struct{}{
 	"sexy": {}, "cute": {}, "wild": {}, "naughty": {}, "innocent": {},
 	"young": {}, "old": {}, "mature": {}, "big": {}, "small": {}, "huge": {},
 	"tight": {}, "wet": {}, "hard": {}, "rough": {}, "gentle": {}, "sweet": {},
-	"bad": {}, "good": {}, "real": {}, "first": {}, "step": {}, "mom": {},
-	"dad": {}, "sister": {}, "stepmom": {}, "stepsister": {}, "stepdad": {},
-	"teacher": {}, "boss": {}, "neighbor": {}, "teen": {}, "milf": {},
-	"goth": {}, "punk": {}, "nerdy": {}, "girls": {}, "boys": {}, "guys": {},
+	"bad": {}, "good": {}, "real": {}, "first": {}, "second": {}, "third": {},
+	"last": {}, "next": {}, "step": {}, "mom": {}, "dad": {}, "sister": {},
+	"stepmom": {}, "stepsister": {}, "stepdad": {}, "teacher": {}, "boss": {},
+	"neighbor": {}, "teen": {}, "milf": {}, "goth": {}, "punk": {}, "nerdy": {},
+	"girls": {}, "boys": {}, "guys": {},
+
+	// marketing superlatives and temporal title fragments
+	"amazing": {}, "beautiful": {}, "gorgeous": {}, "incredible": {},
+	"exclusive": {}, "extreme": {}, "ultimate": {}, "perfect": {},
+	"morning": {}, "night": {}, "day": {}, "week": {}, "year": {},
 }
 
 // isNameLikeWord returns true if w looks like a capitalized proper-noun
@@ -76,8 +82,8 @@ func isNameLikeWord(w string) bool {
 	return true
 }
 
-func isStopWord(w string) bool {
-	_, ok := stopWords[strings.ToLower(w)]
+func isNonNameToken(w string) bool {
+	_, ok := nonNameTokens[strings.ToLower(w)]
 	return ok
 }
 
@@ -126,7 +132,7 @@ func ExtractNameCandidates(text string, exclude func(candidate string) bool) []s
 	}
 
 	for i, w := range words {
-		if isNameLikeWord(w) && !isStopWord(w) {
+		if isNameLikeWord(w) && !isNonNameToken(w) {
 			if runStart == -1 {
 				runStart = i
 			}

@@ -205,6 +205,8 @@ input AnalyzeSceneMetadataInput {
   sceneIDs: [ID!]
   "Compute and log proposed changes without writing anything."
   dryRun: Boolean
+  "Performer scraper IDs allowed to verify newly-discovered names. Empty disables network verification and creation of new performers."
+  performerVerifierScraperIDs: [ID!]
   "Minimum plausibility score (0-1) for a newly-discovered performer name to be looked up and, if confirmed, created. Defaults to 0.6."
   performerConfidenceThreshold: Float
   "Minimum confidence (0-1) for a resolved date to be written to a scene that doesn't already have one. Defaults to 0.6."
@@ -213,7 +215,19 @@ input AnalyzeSceneMetadataInput {
   overwriteExistingDate: Boolean
   "Also analyze the scene's details/description text (off by default; often noisy marketing copy)."
   useDetails: Boolean
+  "Allow replacing a user-authored title. By default only empty or filename-derived titles are changed."
+  overwriteExistingTitle: Boolean
 }
+type SceneMetadataEntityModelStatus {
+  modelID: String!
+  version: String!
+  state: String!
+  cachePath: String!
+  lastError: String!
+  runtimeAvailable: Boolean!
+  active: Boolean!
+}
+
 
 type AutoTagMetadataOptions {
   """

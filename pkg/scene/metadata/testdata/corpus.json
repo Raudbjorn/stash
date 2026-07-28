@@ -1,0 +1,54 @@
+[
+  {
+    "name": "multiple performers and technical suffix",
+    "filename": "ExampleStudio.2024.05.17.Jane.Doe.María.O’Neil.City.Nights.2160p.WEB-DL.DDP5.1.HEVC-GROUP.mkv",
+    "nfo": "<movie><title>City Nights</title><actor><name>Jane Doe</name></actor><actor><name>María O’Neil</name></actor><studio>ExampleStudio</studio><premiered>2024-05-17</premiered></movie>",
+    "container_title": "City Nights",
+    "performers": ["Jane Doe", "María O’Neil"],
+    "title": "City Nights",
+    "studio": "ExampleStudio",
+    "date": "2024-05-17",
+    "encoding_group": "GROUP"
+  },
+  {
+    "name": "one word stage name from explicit NFO",
+    "filename": "ExampleStudio.2023.Cher.Spotlight.1080p.x264.mkv",
+    "nfo": "<movie><title>Spotlight</title><performer>Cher</performer><year>2023</year></movie>",
+    "performers": ["Cher"],
+    "title": "Spotlight"
+  },
+  {
+    "name": "unicode and mixed scripts",
+    "filename": "Miyuki_佐藤_Élodie_D’Ambrosio_Rendez-vous_720p.mp4",
+    "performers": ["Miyuki 佐藤", "Élodie D’Ambrosio"],
+    "title": "Rendez-vous"
+  },
+  {
+    "name": "explicit movie scene marker",
+    "filename": "Example Movie - Scene 5 - Jane Doe - 1080p WEBRip.mkv",
+    "group": "Example Movie",
+    "scene_index": 5,
+    "performers": ["Jane Doe"]
+  },
+  {
+    "name": "short explicit movie scene marker",
+    "filename": "Example Movie.Sc 05.Jane Doe.BluRay.x265.mkv",
+    "group": "Example Movie",
+    "scene_index": 5
+  },
+  {
+    "name": "tv marker and bare number are not scenes",
+    "filename": "A-Normal-Hyphenated-Title.S01E01.2024.1080p.7.mkv",
+    "title": "A-Normal-Hyphenated-Title S01E01 2024 7"
+  },
+  {
+    "name": "ambiguous studio remains unresolved",
+    "filename": "Shared Alias - Jane Doe - Quiet Morning - 1080p.mp4",
+    "studio": ""
+  },
+  {
+    "name": "mixed technical bracket preserves unknown words",
+    "filename": "Jane Doe - Ordinary Title [1080p x264 DirectorsCut].mkv",
+    "title": "Ordinary Title [1080p x264 DirectorsCut]"
+  }
+]

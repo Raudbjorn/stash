@@ -12,3 +12,14 @@ query SystemStatus {
     ffprobePath
   }
 }
+query SceneMetadataEntityModelStatus {
+  sceneMetadataEntityModelStatus {
+    modelID
+    version
+    state
+    cachePath
+    lastError
+    runtimeAvailable
+    active
+  }
+}

@@ -38,58 +38,31 @@ func TestFindOnnxRuntimeLibrary(t *testing.T) {
 	})
 }
 
-// resetNamePlausibilityScorerState resets the package-level singleton state
-// to its zero-value defaults (unloaded, heuristic scorer, no model). It's
-// called both before and after TestReloadNamePlausibilityScorer so the test
-// is self-contained regardless of what ran before it in the same process,
-// and doesn't leave state behind for whatever runs after it.
-func resetNamePlausibilityScorerState(t *testing.T) {
+func resetSceneMetadataEntityState(t *testing.T) {
 	t.Helper()
-
-	namePlausibilityReloadMu.Lock()
-	namePlausibilityLoaded = false
-	namePlausibilityReloadMu.Unlock()
-
-	namePlausibilityScorerMu.Lock()
-	namePlausibilityScorer = metadata.HeuristicNamePlausibilityScorer{}
-	namePlausibilityModel = nil
-	namePlausibilityScorerMu.Unlock()
+	closeSceneMetadataEntityExtractor()
 }
 
-// TestReloadNamePlausibilityScorer exercises the reload path with no
-// onnxruntime library available, which is the only path that runs
-// unconditionally in CI. It guards against the two failure modes a reload
-// mechanism can introduce: panicking when there's no previous model to
-// close, and panicking or deadlocking when reloaded repeatedly (simulating
-// repeated Settings saves).
-func TestReloadNamePlausibilityScorer(t *testing.T) {
+func TestReloadSceneMetadataEntityExtractorWithoutRuntime(t *testing.T) {
 	originalPaths := onnxRuntimeLibraryPaths
 	onnxRuntimeLibraryPaths = []string{"/does/not/exist"}
 	t.Setenv("STASH_ONNXRUNTIME_LIB_PATH", "")
 
-	resetNamePlausibilityScorerState(t)
+	resetSceneMetadataEntityState(t)
 	t.Cleanup(func() {
 		onnxRuntimeLibraryPaths = originalPaths
-		resetNamePlausibilityScorerState(t)
+		resetSceneMetadataEntityState(t)
 	})
 
-	assertHeuristic := func(t *testing.T) {
-		t.Helper()
-		scorer := getNamePlausibilityScorer()
-		if _, ok := scorer.(metadata.HeuristicNamePlausibilityScorer); !ok {
-			t.Fatalf("scorer = %T, want metadata.HeuristicNamePlausibilityScorer", scorer)
-		}
+	if extractor := getSceneMetadataEntityExtractor(); extractor != nil {
+		t.Fatalf("extractor = %T, want nil deterministic fallback", extractor)
 	}
-
-	// First call lazily loads with no library available - should fall back.
-	assertHeuristic(t)
-
-	// A forced reload with still nothing available - no previous embedding
-	// model to close, must not panic.
-	reloadNamePlausibilityScorer()
-	assertHeuristic(t)
-
-	// A second forced reload, simulating a second Settings save in a row.
-	reloadNamePlausibilityScorer()
-	assertHeuristic(t)
+	reloadSceneMetadataEntityExtractor()
+	reloadSceneMetadataEntityExtractor()
+	if extractor := getSceneMetadataEntityExtractor(); extractor != nil {
+		t.Fatalf("extractor = %T, want nil deterministic fallback", extractor)
+	}
+	if _, ok := getNamePlausibilityScorer().(metadata.HeuristicNamePlausibilityScorer); !ok {
+		t.Fatal("heuristic plausibility guard was not retained")
+	}
 }

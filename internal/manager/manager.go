@@ -165,12 +165,10 @@ func (s *Manager) RefreshStreamManager() {
 	s.StreamManager = ffmpeg.NewStreamManager(cacheDir, s.FFMpeg, s.FFProbe, cfg, s.ReadLockManager)
 }
 
-// RefreshNamePlausibilityScorer reloads the scene metadata analyzer's
-// name-plausibility scorer. Call this when the configured ONNX Runtime
-// library path changes, so the Settings value takes effect without a
-// restart.
-func (s *Manager) RefreshNamePlausibilityScorer() {
-	reloadNamePlausibilityScorer()
+// RefreshSceneMetadataEntityExtractor reloads the local GLiNER session after
+// the runtime library, cache path, or installed bundle changes.
+func (s *Manager) RefreshSceneMetadataEntityExtractor() {
+	reloadSceneMetadataEntityExtractor()
 }
 
 // RefreshDLNA starts/stops the DLNA service as needed.
@@ -428,6 +426,7 @@ func (s *Manager) Shutdown() {
 
 	s.StopScanScheduler()
 	s.StopFileWatcher()
+	closeSceneMetadataEntityExtractor()
 
 	if s.StreamManager != nil {
 		s.StreamManager.Shutdown()
