@@ -310,6 +310,101 @@ func TestAnalyzeSceneMetadataExecuteStopsAfterCancellation(t *testing.T) {
 	}
 }
 
+func TestCreatePerformerCreatesNewPerformer(t *testing.T) {
+	r := newTestRepository(t)
+	j := &analyzeSceneMetadataJob{repository: r}
+
+	id, err := j.createPerformer(context.Background(), "Jane Doe")
+	if err != nil {
+		t.Fatalf("createPerformer() error = %v", err)
+	}
+	if id == 0 {
+		t.Fatalf("createPerformer() id = %d, want nonzero", id)
+	}
+
+	var found []*models.Performer
+	if err := r.WithTxn(context.Background(), func(ctx context.Context) error {
+		var err error
+		found, err = r.Performer.FindByNames(ctx, []string{"Jane Doe"}, false)
+		return err
+	}); err != nil {
+		t.Fatalf("FindByNames() error = %v", err)
+	}
+	if len(found) != 1 || found[0].ID != id {
+		t.Fatalf("FindByNames() = %#v, want single performer with id %d", found, id)
+	}
+}
+
+func TestCreatePerformerResolvesExistingPerformerByExactName(t *testing.T) {
+	r := newTestRepository(t)
+	ctx := context.Background()
+
+	existing := models.NewPerformer()
+	existing.Name = "Catalina Cruz"
+	if err := r.WithTxn(ctx, func(ctx context.Context) error {
+		return r.Performer.Create(ctx, &models.CreatePerformerInput{Performer: &existing})
+	}); err != nil {
+		t.Fatalf("seeding existing performer: %v", err)
+	}
+
+	j := &analyzeSceneMetadataJob{repository: r}
+
+	id, err := j.createPerformer(ctx, "Catalina Cruz")
+	if err != nil {
+		t.Fatalf("createPerformer() error = %v", err)
+	}
+	if id != existing.ID {
+		t.Fatalf("createPerformer() id = %d, want existing id %d", id, existing.ID)
+	}
+
+	var count int
+	if err := r.WithTxn(ctx, func(ctx context.Context) error {
+		var err error
+		count, err = r.Performer.Count(ctx)
+		return err
+	}); err != nil {
+		t.Fatalf("Count() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("Performer.Count() = %d, want 1 (no duplicate created)", count)
+	}
+}
+
+func TestCreatePerformerIsCaseSensitive(t *testing.T) {
+	r := newTestRepository(t)
+	ctx := context.Background()
+
+	existing := models.NewPerformer()
+	existing.Name = "catalina cruz"
+	if err := r.WithTxn(ctx, func(ctx context.Context) error {
+		return r.Performer.Create(ctx, &models.CreatePerformerInput{Performer: &existing})
+	}); err != nil {
+		t.Fatalf("seeding existing performer: %v", err)
+	}
+
+	j := &analyzeSceneMetadataJob{repository: r}
+
+	id, err := j.createPerformer(ctx, "Catalina Cruz")
+	if err != nil {
+		t.Fatalf("createPerformer() error = %v", err)
+	}
+	if id == existing.ID {
+		t.Fatalf("createPerformer() id = %d, want a new performer distinct from differently-cased existing id %d", id, existing.ID)
+	}
+
+	var count int
+	if err := r.WithTxn(ctx, func(ctx context.Context) error {
+		var err error
+		count, err = r.Performer.Count(ctx)
+		return err
+	}); err != nil {
+		t.Fatalf("Count() error = %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("Performer.Count() = %d, want 2 (case-sensitive match must not merge)", count)
+	}
+}
+
 func TestPerformerLookupThreshold(t *testing.T) {
 	explicit := 0.8
 	belowFloor := 0.1
