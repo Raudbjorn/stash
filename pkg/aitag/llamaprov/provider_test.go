@@ -221,6 +221,166 @@ func TestClassifyFrameSurfacesServerEnvelopeAndCancellation(t *testing.T) {
 	})
 }
 
+func TestCompleteJSONStrictTextRequestAndDecoding(t *testing.T) {
+	schema := json.RawMessage(`{"type":"object","properties":{"name":{"type":"string"}},"required":["name"],"additionalProperties":false}`)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request completionRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		if request.Temperature != 0 || request.Stream || !request.CachePrompt || request.MaxTokens != 128 {
+			t.Errorf("sampling contract = %+v", request)
+		}
+		if len(request.Messages) != 2 || request.Messages[0].Role != "system" || request.Messages[1].Role != "user" {
+			t.Fatalf("messages = %+v", request.Messages)
+		}
+		if len(request.Messages[0].Content) != 1 || request.Messages[0].Content[0].Text != "system instruction" ||
+			len(request.Messages[1].Content) != 1 || request.Messages[1].Content[0].Text != "user data" {
+			t.Errorf("message content = %+v", request.Messages)
+		}
+		for _, message := range request.Messages {
+			for _, part := range message.Content {
+				if part.Type != "text" || part.ImageURL != nil {
+					t.Errorf("text completion included a non-text part: %+v", part)
+				}
+			}
+		}
+		if request.ResponseFormat.Type != "json_schema" || request.ResponseFormat.JSONSchema.Name != "identity" ||
+			!request.ResponseFormat.JSONSchema.Strict || string(request.ResponseFormat.JSONSchema.Schema) != string(schema) {
+			t.Errorf("response format = %+v", request.ResponseFormat)
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"name\":\"Alice Example\"}"}}]}`))
+	}))
+	defer server.Close()
+	provider := newTestProvider(t, server, "unused")
+	var target struct {
+		Name string `json:"name"`
+	}
+	if err := provider.CompleteJSON(context.Background(), "system instruction", "user data", "identity", schema, 128, &target); err != nil {
+		t.Fatal(err)
+	}
+	if target.Name != "Alice Example" {
+		t.Fatalf("decoded name = %q", target.Name)
+	}
+}
+
+func TestCompleteJSONRejectsInvalidArguments(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("invalid arguments must not issue a request")
+	}))
+	defer server.Close()
+	provider := newTestProvider(t, server, "unused")
+	validSchema := json.RawMessage(`{"type":"object"}`)
+	var target map[string]any
+	for name, call := range map[string]func() error{
+		"zero tokens": func() error {
+			return provider.CompleteJSON(context.Background(), "", "", "schema", validSchema, 0, &target)
+		},
+		"excess tokens": func() error {
+			return provider.CompleteJSON(context.Background(), "", "", "schema", validSchema, 1025, &target)
+		},
+		"missing name": func() error { return provider.CompleteJSON(context.Background(), "", "", "", validSchema, 1, &target) },
+		"invalid schema": func() error {
+			return provider.CompleteJSON(context.Background(), "", "", "schema", json.RawMessage(`{`), 1, &target)
+		},
+		"non-object schema": func() error {
+			return provider.CompleteJSON(context.Background(), "", "", "schema", json.RawMessage(`null`), 1, &target)
+		},
+		"nil target": func() error {
+			return provider.CompleteJSON(context.Background(), "", "", "schema", validSchema, 1, nil)
+		},
+		"non-pointer target": func() error {
+			return provider.CompleteJSON(context.Background(), "", "", "schema", validSchema, 1, target)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := call(); err == nil {
+				t.Fatal("invalid CompleteJSON arguments were accepted")
+			}
+		})
+	}
+}
+
+func TestCompleteJSONResponseBoundsCancellationAndMalformedChoices(t *testing.T) {
+	schema := json.RawMessage(`{"type":"object"}`)
+	t.Run("response size cap", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(strings.Repeat("x", maxResponseBytes+1)))
+		}))
+		defer server.Close()
+		provider := newTestProvider(t, server, "unused")
+		var target map[string]any
+		err := provider.CompleteJSON(context.Background(), "", "", "schema", schema, 1, &target)
+		if err == nil || !strings.Contains(err.Error(), "exceeds") {
+			t.Fatalf("error = %v, want response cap error", err)
+		}
+	})
+	t.Run("cancellation", func(t *testing.T) {
+		started := make(chan struct{})
+		release := make(chan struct{})
+		server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			close(started)
+			<-release
+		}))
+		defer server.Close()
+		provider := newTestProvider(t, server, "unused")
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() { <-started; cancel() }()
+		var target map[string]any
+		err := provider.CompleteJSON(ctx, "", "", "schema", schema, 1, &target)
+		close(release)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("error = %v, want context cancellation", err)
+		}
+	})
+	for name, response := range map[string]string{
+		"zero choices":     `{"choices":[]}`,
+		"multiple choices": `{"choices":[{"message":{"content":"{}"}},{"message":{"content":"{}"}}]}`,
+		"non-text choice":  `{"choices":[{"message":{"content":{}}}]}`,
+		"invalid JSON":     `{"choices":[{"message":{"content":"{"}}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(response))
+			}))
+			defer server.Close()
+			provider := newTestProvider(t, server, "unused")
+			var target map[string]any
+			if err := provider.CompleteJSON(context.Background(), "", "", "schema", schema, 1, &target); err == nil {
+				t.Fatal("malformed completion was accepted")
+			}
+		})
+	}
+}
+
+func TestCompleteJSONLiveLlama(t *testing.T) {
+	baseURL := os.Getenv("STASH_TEST_LLAMA_URL")
+	if baseURL == "" {
+		t.Skip("STASH_TEST_LLAMA_URL is not set")
+	}
+	provider, err := New(Config{
+		Client: &http.Client{Timeout: 30 * time.Second}, BaseURL: baseURL,
+		Pair: assets.Pair{Name: "internvl3-2b"}, Labels: []string{"unused"}, FFmpegPath: "ffmpeg",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer provider.Close()
+	schema := json.RawMessage(`{"type":"object","properties":{"name":{"type":"string"},"birthdate":{"type":"string"}},"required":["name","birthdate"],"additionalProperties":false}`)
+	var target struct {
+		Name      string `json:"name"`
+		Birthdate string `json:"birthdate"`
+	}
+	if err := provider.CompleteJSON(context.Background(),
+		"Extract only the explicitly stated name and birthdate.",
+		"Alice Example (born 1990-01-02)", "live_identity", schema, 64, &target); err != nil {
+		t.Fatal(err)
+	}
+	if target.Name != "Alice Example" || target.Birthdate != "1990-01-02" {
+		t.Fatalf("live completion = %+v", target)
+	}
+}
+
 type closeTrackingTransport struct{ closes atomic.Int32 }
 
 func (*closeTrackingTransport) RoundTrip(*http.Request) (*http.Response, error) {

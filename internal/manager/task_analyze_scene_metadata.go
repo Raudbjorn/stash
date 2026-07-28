@@ -30,9 +30,11 @@ type AnalyzeSceneMetadataInput struct {
 	SceneIDs []string `json:"sceneIDs"`
 	// DryRun computes and logs proposed changes without writing anything.
 	DryRun bool `json:"dryRun"`
-	// PerformerVerifierScraperIDs limits new-performer name verification to
-	// the configured scrapers. Omitted or empty disables network verification.
-	PerformerVerifierScraperIDs []string `json:"performerVerifierScraperIDs"`
+	// PerformerVerifierScraperIDs selects configured performer name scrapers.
+	// PerformerVerifierStashBoxEndpoints selects configured Stash-box APIs.
+	// When both are empty, network verification is disabled.
+	PerformerVerifierScraperIDs        []string `json:"performerVerifierScraperIDs"`
+	PerformerVerifierStashBoxEndpoints []string `json:"performerVerifierStashBoxEndpoints"`
 	// PerformerConfidenceThreshold is the minimum plausibility score for a
 	// newly-discovered (not-yet-in-library) performer name to be looked up
 	// via scrapers and, if confirmed, created. Defaults to 0.6.
@@ -46,7 +48,10 @@ type AnalyzeSceneMetadataInput struct {
 	OverwriteExistingDate bool `json:"overwriteExistingDate"`
 	// UseDetails additionally analyzes the scene's details/description text.
 	// Off by default since it's often noisy marketing copy.
-	UseDetails bool `json:"useDetails"`
+	// UseLocalAIContext optionally uses the active local llama.cpp provider to
+	// narrow ambiguous exact-name identities. It is off by default.
+	UseLocalAIContext bool `json:"useLocalAIContext"`
+	UseDetails        bool `json:"useDetails"`
 	// OverwriteExistingTitle allows replacing a user-authored scene title.
 	// Without it, only empty or filename-derived default titles are changed.
 	OverwriteExistingTitle bool `json:"overwriteExistingTitle"`
@@ -54,9 +59,11 @@ type AnalyzeSceneMetadataInput struct {
 
 func (s *Manager) AnalyzeSceneMetadata(ctx context.Context, input AnalyzeSceneMetadataInput) int {
 	j := &analyzeSceneMetadataJob{
-		repository: s.Repository,
-		input:      input,
-		ffprobe:    s.FFProbe,
+		repository:           s.Repository,
+		input:                input,
+		ffprobe:              s.FFProbe,
+		completer:            sceneMetadataCompleter(s.AIServer),
+		configuredStashBoxes: s.Config.GetStashBoxes(),
 	}
 
 	return s.JobManager.Add(ctx, "Analyzing scene metadata...", j)
@@ -68,14 +75,18 @@ type performerScraperCache interface {
 }
 
 type analyzeSceneMetadataJob struct {
-	repository                models.Repository
-	input                     AnalyzeSceneMetadataInput
-	scraperCache              performerScraperCache
-	ffprobe                   *ffmpeg.FFProbe
-	performerRecords          []metadata.NamedAliases
-	studioRecords             []metadata.NamedAliases
-	groupRecords              []metadata.NamedAliases
-	performerVerifierScrapers []*scraper.Scraper
+	repository                  models.Repository
+	input                       AnalyzeSceneMetadataInput
+	scraperCache                performerScraperCache
+	ffprobe                     *ffmpeg.FFProbe
+	performerRecords            []metadata.NamedAliases
+	studioRecords               []metadata.NamedAliases
+	groupRecords                []metadata.NamedAliases
+	performerVerifierScrapers   []*scraper.Scraper
+	configuredStashBoxes        []*models.StashBox
+	performerVerifierStashBoxes []performerStashBoxVerifier
+	completer                   structuredTextCompleter
+	lastVerifierScraperIDs      []string
 }
 
 func (j *analyzeSceneMetadataJob) Execute(ctx context.Context, progress *job.Progress) error {
@@ -84,6 +95,7 @@ func (j *analyzeSceneMetadataJob) Execute(ctx context.Context, progress *job.Pro
 		j.scraperCache = instance.ScraperCache
 	}
 	j.resolvePerformerVerifierScrapers()
+	j.resolvePerformerVerifierStashBoxes()
 
 	sceneIDs, err := stringslice.StringSliceToIntSlice(j.input.SceneIDs)
 	if err != nil {
@@ -217,6 +229,31 @@ func (j *analyzeSceneMetadataJob) resolvePerformerVerifierScrapers() {
 	}
 }
 
+func (j *analyzeSceneMetadataJob) resolvePerformerVerifierStashBoxes() {
+	j.performerVerifierStashBoxes = nil
+	byEndpoint := make(map[string]*models.StashBox, len(j.configuredStashBoxes))
+	for _, box := range j.configuredStashBoxes {
+		if box != nil && strings.TrimSpace(box.Endpoint) != "" {
+			byEndpoint[box.Endpoint] = box
+		}
+	}
+
+	seen := make(map[string]struct{}, len(j.input.PerformerVerifierStashBoxEndpoints))
+	for _, endpoint := range j.input.PerformerVerifierStashBoxEndpoints {
+		endpoint = strings.TrimSpace(endpoint)
+		if _, duplicate := seen[endpoint]; duplicate {
+			continue
+		}
+		seen[endpoint] = struct{}{}
+		box, found := byEndpoint[endpoint]
+		if !found {
+			logger.Warnf("[scene metadata] performer verifier Stash-box endpoint %q is unavailable; skipping", endpoint)
+			continue
+		}
+		j.performerVerifierStashBoxes = append(j.performerVerifierStashBoxes, newPerformerStashBoxVerifier(*box))
+	}
+}
+
 func supportsPerformerNameScrape(s *scraper.Scraper) bool {
 	if s == nil || s.Performer == nil {
 		return false
@@ -340,23 +377,26 @@ func (j *analyzeSceneMetadataJob) processScene(ctx context.Context, sc *models.S
 		return fmt.Errorf("analyzing typed metadata: %w", err)
 	}
 
-	var newCandidates []string
+	var performerCandidates []string
 	for _, candidate := range analysis.PerformerCandidates {
-		if candidate.ExistingEntityID == nil && candidate.Confidence >= j.performerLookupThreshold() {
-			newCandidates = append(newCandidates, candidate.Value)
+		if candidate.ExistingEntityID != nil || candidate.Confidence >= j.performerLookupThreshold() {
+			performerCandidates = append(performerCandidates, candidate.Value)
 		}
 	}
-	var createdIDs []int
-	if !j.input.DryRun && len(newCandidates) > 0 {
-		createdIDs, err = j.verifyAndCreatePerformers(ctx, newCandidates)
-		if err != nil {
-			return fmt.Errorf("verifying new performer candidates: %w", err)
+	resolutions, err := j.resolvePerformerCandidates(ctx, sc.ID, performerCandidates, sources)
+	if err != nil {
+		return fmt.Errorf("resolving performer candidates: %w", err)
+	}
+	resolvedPerformerIDs := make([]int, 0, len(resolutions))
+	for _, resolution := range resolutions {
+		if resolution.Status == performerResolutionExisting || resolution.Status == performerResolutionCreated {
+			resolvedPerformerIDs = append(resolvedPerformerIDs, resolution.PerformerID)
 		}
 	}
 
 	partial := models.NewScenePartial()
 	sceneDirty := false
-	newPerformerIDs := mergeIDs(existingPerformerIDs, analysis.MatchedPerformerIDs, createdIDs)
+	newPerformerIDs := mergeIDs(existingPerformerIDs, resolvedPerformerIDs)
 	if len(newPerformerIDs) != len(existingPerformerIDs) {
 		partial.PerformerIDs = &models.UpdateIDs{IDs: newPerformerIDs, Mode: models.RelationshipUpdateModeSet}
 		sceneDirty = true
@@ -408,10 +448,19 @@ func (j *analyzeSceneMetadataJob) processScene(ctx context.Context, sc *models.S
 		}
 	}
 
-	logger.Infof(
-		"[scene metadata] scene %d: %d unique performer candidates, %d exact matches, model available %v",
-		sc.ID, analysis.UniquePotentialPerformers, len(analysis.MatchedPerformerIDs), analysis.Diagnostics.ModelAvailable,
-	)
+	if analysis.Diagnostics.ModelAvailable {
+		logger.Infof(
+			"[scene metadata] scene %d: %d unique performer candidates, %d exact matches, entity_model=available",
+			sc.ID, analysis.UniquePotentialPerformers, len(analysis.MatchedPerformerIDs),
+		)
+	} else {
+		logger.Infof(
+			"[scene metadata] scene %d: %d unique performer candidates, %d exact matches, entity_model=unavailable fallback=deterministic reason=%q action=%q",
+			sc.ID, analysis.UniquePotentialPerformers, len(analysis.MatchedPerformerIDs),
+			analysis.Diagnostics.ModelFallbackReason,
+			"Settings > Tasks > Analyze scene metadata > Download and install entity model",
+		)
+	}
 	if !sceneDirty && !fileDirty {
 		return nil
 	}
@@ -451,152 +500,7 @@ func isDefaultSceneTitle(title string, primary *models.VideoFile) bool {
 // this without being corroborated by anything else.
 const dateOverwriteMinConfidence = 0.85
 
-// verifyAndCreatePerformers looks up each candidate via configured
-// performer scrapers; a candidate is only created as a new Performer if a
-// scraper confirms a performer by that exact (case-insensitive) name.
-func (j *analyzeSceneMetadataJob) verifyAndCreatePerformers(ctx context.Context, candidates []string) ([]int, error) {
-	if j.scraperCache == nil || len(j.performerVerifierScrapers) == 0 {
-		return nil, nil
-	}
-
-	var createdIDs []int
-
-	for _, candidate := range candidates {
-		if err := ctx.Err(); err != nil {
-			// Creations commit individually; a later run matches and links any
-			// performers left unlinked by cancellation.
-			return nil, err
-		}
-		if j.input.DryRun {
-			logger.Infof("[scene metadata] dry run: would look up new performer candidate %q", candidate)
-			continue
-		}
-
-		verified, err := j.scrapeVerifyPerformer(ctx, candidate)
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		if err != nil {
-			logger.Warnf("[scene metadata] error verifying performer candidate %q: %v", candidate, err)
-			continue
-		}
-		if verified == "" {
-			continue
-		}
-
-		id, err := j.createPerformer(ctx, verified)
-		if ctx.Err() != nil {
-			// createPerformer may have committed just before cancellation. A
-			// later run will match and link that performer to the scene.
-			return nil, ctx.Err()
-		}
-		if err != nil {
-			logger.Warnf("[scene metadata] error creating performer %q: %v", verified, err)
-			continue
-		}
-
-		createdIDs = append(createdIDs, id)
-	}
-
-	return createdIDs, nil
-}
-
-func (j *analyzeSceneMetadataJob) scrapeVerifyPerformer(ctx context.Context, candidate string) (string, error) {
-	for _, s := range j.performerVerifierScrapers {
-		if err := ctx.Err(); err != nil {
-			return "", err
-		}
-		content, err := j.scraperCache.ScrapeName(ctx, s.ID, candidate, scraper.ScrapeContentTypePerformer)
-		if err != nil {
-			logger.Debugf("[scene metadata] scraper %s lookup for %q failed: %v", s.ID, candidate, err)
-			continue
-		}
-
-		for _, c := range content {
-			var name string
-			switch p := c.(type) {
-			case *models.ScrapedPerformer:
-				if p != nil && p.Name != nil {
-					name = *p.Name
-				}
-			case models.ScrapedPerformer:
-				if p.Name != nil {
-					name = *p.Name
-				}
-			}
-
-			if name != "" && strings.EqualFold(name, candidate) {
-				return name, nil
-			}
-		}
-	}
-
-	return "", nil
-}
-
-// createPerformer creates a new performer with the given (scraper-verified,
-// exact) name.
-//
-// j.performerRecords - and the newCandidates list derived from it - is a
-// snapshot taken once at job start (see loadLibraryRecords) and is never
-// refreshed mid-run. A name that was genuinely new when that snapshot was
-// taken, and again when the scraper verified it, may since have been
-// created by an earlier scene processed in this same job run (or, in
-// principle, by any other writer in this process). Re-checking the live
-// database immediately before writing, inside the same write transaction
-// as the Create, closes that window: this app's sqlite write pool has
-// exactly one connection (pkg/sqlite maxWriteConnections), so every
-// writable transaction in this process is fully serialized and nothing can
-// create a same-named performer between our check and our write.
-//
-// The name match is intentionally exact and case-sensitive (nocase=false):
-// the performers_name_unique index this collides with has no COLLATE
-// NOCASE, so it's case-sensitive too. Matching case-insensitively here
-// would risk silently merging two legitimately distinct, differently-cased
-// performer records - a behavior change well beyond fixing this race.
-func (j *analyzeSceneMetadataJob) createPerformer(ctx context.Context, name string) (int, error) {
-	r := j.repository
-
-	var id int
-	if err := r.WithTxn(ctx, func(ctx context.Context) error {
-		existing, err := r.Performer.FindByNames(ctx, []string{name}, false)
-		if err != nil {
-			return fmt.Errorf("checking for existing performer %q: %w", name, err)
-		}
-		if len(existing) > 0 {
-			id = existing[0].ID
-			logger.Infof("[scene metadata] performer %q already exists (id %d); skipping creation", name, id)
-			return nil
-		}
-
-		newPerformer := models.NewPerformer()
-		newPerformer.Name = name
-
-		createErr := r.Performer.Create(ctx, &models.CreatePerformerInput{Performer: &newPerformer})
-		if createErr == nil {
-			id = newPerformer.ID
-			logger.Infof("[scene metadata] created new performer %q (id %d)", name, id)
-			return nil
-		}
-
-		// The check above should make this unreachable in normal operation,
-		// but recover gracefully rather than dropping the performer.
-		existing, findErr := r.Performer.FindByNames(ctx, []string{name}, false)
-		if findErr != nil || len(existing) == 0 {
-			return fmt.Errorf("creating performer %q: %w", name, createErr)
-		}
-
-		id = existing[0].ID
-		logger.Infof("[scene metadata] performer %q was created concurrently (id %d); using existing record", name, id)
-		return nil
-	}); err != nil {
-		return 0, err
-	}
-
-	return id, nil
-}
-
-func mergeIDs(existing, matched, created []int) []int {
+func mergeIDs(existing, resolved []int) []int {
 	seen := map[int]struct{}{}
 	var ret []int
 
@@ -607,14 +511,7 @@ func mergeIDs(existing, matched, created []int) []int {
 		seen[id] = struct{}{}
 		ret = append(ret, id)
 	}
-	for _, id := range matched {
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		ret = append(ret, id)
-	}
-	for _, id := range created {
+	for _, id := range resolved {
 		if _, ok := seen[id]; ok {
 			continue
 		}
