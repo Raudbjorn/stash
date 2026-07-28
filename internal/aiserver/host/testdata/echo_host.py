@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """A minimal stand-in for the plugin host, used to exercise supervision.
 
-It performs the real startup contract - read the token from the passed file
-descriptor, bind nothing, print the AIHOST-READY line - and then behaves however
+It performs the real startup contract - read the token from the inherited pipe,
+bind nothing, print the AIHOST-READY line - and then behaves however
 the test asks, so crash handling, backoff and restart caps can be tested without
 the D-Bus transport or any plugin code.
 
@@ -28,8 +28,12 @@ READY_PREFIX = "AIHOST-READY "
 TOKEN_FD = 3
 
 
-def read_token(fd: int) -> str | None:
+def read_token(fd: int | None, use_stdin: bool) -> str | None:
     try:
+        if use_stdin:
+            return sys.stdin.readline().strip()
+        if fd is None:
+            return None
         with os.fdopen(fd, "r") as handle:
             return handle.readline().strip()
     except Exception:
@@ -55,7 +59,9 @@ def report_ready(address: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--address", required=True)
-    parser.add_argument("--token-fd", type=int, default=TOKEN_FD)
+    token_args = parser.add_mutually_exclusive_group(required=True)
+    token_args.add_argument("--token-fd", type=int)
+    token_args.add_argument("--token-stdin", action="store_true")
     parser.add_argument("--plugins-dir", default="")
     parser.add_argument("--log-level", default="info")
     parser.add_argument("--behave", default=os.environ.get("ECHO_BEHAVE", "serve"))
@@ -67,7 +73,7 @@ def main() -> int:
         print("exiting before reporting ready", file=sys.stderr, flush=True)
         return 17
 
-    token = read_token(args.token_fd)
+    token = read_token(args.token_fd, args.token_stdin)
 
     if behave == "no-token":
         if not token:

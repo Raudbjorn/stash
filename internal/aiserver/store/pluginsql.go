@@ -87,10 +87,6 @@ var forbiddenVerbs = map[string]bool{
 var tableRefPattern = regexp.MustCompile(
 	`(?i)\b(?:from|join|into|update|table)\s+([a-zA-Z_][a-zA-Z0-9_]*|"[^"]+"|` + "`[^`]+`" + `|\[[^\]]+\])`)
 
-// commentPattern strips SQL comments before inspection, so a table reference
-// cannot be hidden behind one.
-var commentPattern = regexp.MustCompile(`(?s)--[^\n]*|/\*.*?\*/`)
-
 // fromClausePattern isolates table-source lists. Comma joins need an explicit
 // check because tableRefPattern only sees identifiers introduced by keywords.
 // The filter is intentionally conservative: a complex FROM expression with a
@@ -113,17 +109,19 @@ func ValidatePluginSQL(plugin, query string, params int, readOnly bool) error {
 		return fmt.Errorf("%w: %d, limit is %d", ErrPluginSQLTooManyArgs, params, MaxPluginParams)
 	}
 
-	stripped := commentPattern.ReplaceAllString(query, " ")
-	trimmed := strings.TrimSpace(stripped)
-	trimmed = strings.TrimSuffix(trimmed, ";")
+	inspected, err := inspectPluginSQL(query)
+	if err != nil {
+		return err
+	}
+	trimmed := strings.TrimSpace(inspected)
+	trimmed = strings.TrimSpace(strings.TrimSuffix(trimmed, ";"))
 	if trimmed == "" {
 		return ErrPluginSQLEmpty
 	}
 
-	// One statement per call. A semicolon inside a string literal is legal, so
-	// literals are blanked before looking - otherwise `WHERE name = 'a;b'`
-	// would be refused for no reason.
-	if strings.Contains(blankStringLiterals(trimmed), ";") {
+	// One statement per call. The lexical pass has already blanked literals
+	// and comments, so only a real statement separator remains visible.
+	if strings.Contains(trimmed, ";") {
 		return ErrPluginSQLMultiple
 	}
 
@@ -140,7 +138,7 @@ func ValidatePluginSQL(plugin, query string, params int, readOnly bool) error {
 		return ErrPluginSQLReadOnly
 	}
 
-	inspected := blankStringLiterals(trimmed)
+	inspected = trimmed
 	for _, clause := range fromClausePattern.FindAllStringSubmatch(inspected, -1) {
 		if strings.Contains(clause[1], ",") {
 			return fmt.Errorf("%w: comma-separated FROM sources require explicit JOIN", ErrPluginSQLForbidden)
@@ -315,22 +313,98 @@ func unquoteIdentifier(s string) string {
 	return s
 }
 
-// blankStringLiterals replaces the contents of single-quoted literals with
-// spaces, preserving offsets, so keyword and semicolon scanning cannot be
-// misled by data.
-func blankStringLiterals(s string) string {
+// inspectPluginSQL blanks string literals and comments in one lexical pass.
+// Quoted identifiers remain visible to namespace checks. Crucially, comment
+// markers inside literals and identifiers never change scanner state.
+func inspectPluginSQL(s string) (string, error) {
+	const (
+		sqlNormal = iota
+		sqlString
+		sqlDoubleQuote
+		sqlBacktick
+		sqlBracket
+		sqlLineComment
+		sqlBlockComment
+	)
+
 	out := []byte(s)
-	inString := false
+	state := sqlNormal
 	for i := 0; i < len(out); i++ {
-		if out[i] == '\'' {
-			// '' inside a string is an escaped quote, which this handles
-			// naturally by toggling twice.
-			inString = !inString
-			continue
-		}
-		if inString {
-			out[i] = ' '
+		switch state {
+		case sqlNormal:
+			switch {
+			case out[i] == '\'':
+				out[i] = ' '
+				state = sqlString
+			case out[i] == '"':
+				state = sqlDoubleQuote
+			case out[i] == '`':
+				state = sqlBacktick
+			case out[i] == '[':
+				state = sqlBracket
+			case out[i] == '-' && i+1 < len(out) && out[i+1] == '-':
+				out[i], out[i+1] = ' ', ' '
+				i++
+				state = sqlLineComment
+			case out[i] == '/' && i+1 < len(out) && out[i+1] == '*':
+				out[i], out[i+1] = ' ', ' '
+				i++
+				state = sqlBlockComment
+			}
+		case sqlString:
+			if out[i] == '\'' {
+				out[i] = ' '
+				if i+1 < len(out) && out[i+1] == '\'' {
+					out[i+1] = ' '
+					i++
+				} else {
+					state = sqlNormal
+				}
+			} else {
+				out[i] = ' '
+			}
+		case sqlDoubleQuote:
+			if out[i] == '"' {
+				if i+1 < len(out) && out[i+1] == '"' {
+					i++
+				} else {
+					state = sqlNormal
+				}
+			}
+		case sqlBacktick:
+			if out[i] == '`' {
+				if i+1 < len(out) && out[i+1] == '`' {
+					i++
+				} else {
+					state = sqlNormal
+				}
+			}
+		case sqlBracket:
+			if out[i] == ']' {
+				if i+1 < len(out) && out[i+1] == ']' {
+					i++
+				} else {
+					state = sqlNormal
+				}
+			}
+		case sqlLineComment:
+			if out[i] == '\n' {
+				state = sqlNormal
+			} else {
+				out[i] = ' '
+			}
+		case sqlBlockComment:
+			if out[i] == '*' && i+1 < len(out) && out[i+1] == '/' {
+				out[i], out[i+1] = ' ', ' '
+				i++
+				state = sqlNormal
+			} else {
+				out[i] = ' '
+			}
 		}
 	}
-	return string(out)
+	if state != sqlNormal && state != sqlLineComment {
+		return "", fmt.Errorf("%w: unterminated quoted value, identifier, or comment", ErrPluginSQLForbidden)
+	}
+	return string(out), nil
 }

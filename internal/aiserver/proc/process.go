@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -37,10 +36,11 @@ type ReadyConfig struct {
 
 // Process is one started and eventually reaped child.
 type Process struct {
-	cmd     *exec.Cmd
-	exited  chan struct{}
-	waitErr error
-	stopMu  sync.Mutex
+	cmd        *exec.Cmd
+	exited     chan struct{}
+	waitErr    error
+	stopMu     sync.Mutex
+	tokenInput io.Closer
 }
 
 // GenerateToken returns a fresh 32-byte secret encoded as hexadecimal.
@@ -64,14 +64,9 @@ func Start(ctx context.Context, cfg StartConfig) (*Process, error) {
 	cmd := exec.CommandContext(context.WithoutCancel(ctx), cfg.Executable, cfg.Args...)
 	cmd.Env = cfg.Env
 
-	var tokenRead, tokenWrite *os.File
-	if cfg.Token != "" {
-		var err error
-		tokenRead, tokenWrite, err = os.Pipe()
-		if err != nil {
-			return nil, fmt.Errorf("create token pipe: %w", err)
-		}
-		cmd.ExtraFiles = []*os.File{tokenRead}
+	tokenRead, tokenWrite, closeAfterWrite, err := configureTokenPipe(cmd, cfg.Token)
+	if err != nil {
+		return nil, err
 	}
 	closeTokenPipes := func() {
 		if tokenRead != nil {
@@ -83,7 +78,6 @@ func Start(ctx context.Context, cfg StartConfig) (*Process, error) {
 	}
 
 	var stdout io.ReadCloser
-	var err error
 	if cfg.Ready != nil {
 		stdout, err = cmd.StdoutPipe()
 		if err != nil {
@@ -110,8 +104,12 @@ func Start(ctx context.Context, cfg StartConfig) (*Process, error) {
 	if tokenRead != nil {
 		_ = tokenRead.Close()
 		tokenRead = nil
+	}
+	if tokenWrite != nil {
 		go func() {
-			defer tokenWrite.Close()
+			if closeAfterWrite {
+				defer tokenWrite.Close()
+			}
 			_, _ = io.WriteString(tokenWrite, cfg.Token+"\n")
 		}()
 	}
@@ -122,8 +120,14 @@ func Start(ctx context.Context, cfg StartConfig) (*Process, error) {
 	}
 
 	process := &Process{cmd: cmd, exited: make(chan struct{})}
+	if tokenWrite != nil && !closeAfterWrite {
+		process.tokenInput = tokenWrite
+	}
 	go func() {
 		process.waitErr = cmd.Wait()
+		if process.tokenInput != nil {
+			_ = process.tokenInput.Close()
+		}
 		close(process.exited)
 	}()
 

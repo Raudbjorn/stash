@@ -98,6 +98,28 @@ func TestValidatePluginSQLIgnoresStringLiterals(t *testing.T) {
 	if err := ValidatePluginSQL("demo", "SELECT 1 FROM p_demo_x /* ; */ ", 0, true); err != nil {
 		t.Errorf("a comment containing a semicolon was miscounted: %v", err)
 	}
+
+	for _, query := range []string{
+		"SELECT '--'; DROP TABLE task_history;",
+		"SELECT '/*'; DROP TABLE task_history;",
+		`SELECT "--" FROM p_demo_items; DROP TABLE task_history;`,
+	} {
+		if err := ValidatePluginSQL("demo", query, 0, false); !errors.Is(err, ErrPluginSQLMultiple) {
+			t.Errorf("comment marker bypass %q = %v, want ErrPluginSQLMultiple", query, err)
+		}
+	}
+}
+
+func TestPluginExecuteRejectsCommentMarkerStatementBypass(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	_, err := db.PluginExecute(ctx, "demo", "SELECT '--'; DROP TABLE task_history;", nil)
+	if !errors.Is(err, ErrPluginSQLMultiple) {
+		t.Fatalf("PluginExecute = %v, want ErrPluginSQLMultiple", err)
+	}
+	if _, err := db.SQL().ExecContext(ctx, "SELECT COUNT(*) FROM task_history"); err != nil {
+		t.Fatalf("protected table was dropped: %v", err)
+	}
 }
 
 func TestValidatePluginSQLCapsParameters(t *testing.T) {

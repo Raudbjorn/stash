@@ -36,7 +36,10 @@ type spawnConfig struct {
 // socketAddress adds the D-Bus transport decoration to a private socket path.
 func socketAddress(runDir string) (string, string, error) {
 	if runtime.GOOS == "windows" {
-		return "", "", fmt.Errorf("windows host transport is not implemented yet")
+		// GLib's nonce-tcp transport binds loopback and authenticates clients
+		// with a generated nonce file, providing the Windows equivalent of the
+		// private Unix socket.
+		return "nonce-tcp:host=127.0.0.1,port=0", "", nil
 	}
 	socket, err := proc.PrivateUnixSocket(runDir, "host.sock")
 	if err != nil {
@@ -53,10 +56,12 @@ func spawn(ctx context.Context, cfg spawnConfig, stderr *proc.RingBuffer) (*proc
 	} else {
 		args = append(args, cfg.Script)
 	}
-	args = append(args,
-		"--address", cfg.Address,
-		"--token-fd", fmt.Sprint(tokenFD),
-	)
+	args = append(args, "--address", cfg.Address)
+	if runtime.GOOS == "windows" {
+		args = append(args, "--token-stdin")
+	} else {
+		args = append(args, "--token-fd", fmt.Sprint(tokenFD))
+	}
 	if cfg.LogLevel != "" {
 		args = append(args, "--log-level", cfg.LogLevel)
 	}
@@ -94,4 +99,3 @@ func spawn(ctx context.Context, cfg spawnConfig, stderr *proc.RingBuffer) (*proc
 	}
 	return process, info, nil
 }
-

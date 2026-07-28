@@ -240,7 +240,11 @@ func validatePluginMigration(plugin string, migration PluginMigration) error {
 			return fmt.Errorf("%s is not permitted in a plugin migration", strings.ToUpper(fields[0]))
 		}
 
-		for _, match := range tableRefPattern.FindAllStringSubmatch(blankStringLiterals(trimmed), -1) {
+		inspected, err := inspectPluginSQL(trimmed)
+		if err != nil {
+			return fmt.Errorf("migration %s: %w", migration.Name, err)
+		}
+		for _, match := range tableRefPattern.FindAllStringSubmatch(inspected, -1) {
 			table := unquoteIdentifier(match[1])
 			if strings.EqualFold(table, "if") || strings.EqualFold(table, "exists") {
 				continue
