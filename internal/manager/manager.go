@@ -27,6 +27,7 @@ import (
 	"github.com/stashapp/stash/pkg/models/paths"
 	"github.com/stashapp/stash/pkg/pkg"
 	"github.com/stashapp/stash/pkg/plugin"
+	"github.com/stashapp/stash/pkg/python"
 	"github.com/stashapp/stash/pkg/scheduler"
 	"github.com/stashapp/stash/pkg/scraper"
 	"github.com/stashapp/stash/pkg/session"
@@ -62,6 +63,7 @@ type Manager struct {
 
 	PluginPackageManager  *pkg.Manager
 	ScraperPackageManager *pkg.Manager
+	PythonManager         *python.Manager
 
 	DLNAService *dlna.Service
 
@@ -434,6 +436,12 @@ func (s *Manager) Shutdown() {
 	if s.StreamManager != nil {
 		s.StreamManager.Shutdown()
 		s.StreamManager = nil
+	}
+	if s.PythonManager != nil {
+		if err := s.PythonManager.Close(); err != nil {
+			logger.Errorf("Error closing Python manager: %s", err)
+		}
+		s.PythonManager = nil
 	}
 
 	// Before closing the database: the AI subsystem holds read transactions

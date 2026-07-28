@@ -157,6 +157,26 @@ models:
     model: github.com/stashapp/stash/pkg/scraper.Source
   SavedFindFilterType:
     model: github.com/stashapp/stash/pkg/models.FindFilterType
+  PythonManagerSource:
+    model: github.com/stashapp/stash/pkg/python.EngineSource
+  PythonRuntimeSource:
+    model: github.com/stashapp/stash/pkg/python.RuntimeSource
+  PythonManagerStatus:
+    model: github.com/stashapp/stash/pkg/python.ManagerStatus
+  PythonRuntime:
+    model: github.com/stashapp/stash/pkg/python.Runtime
+  PythonPackage:
+    model: github.com/stashapp/stash/pkg/python.Package
+  PythonIndex:
+    model: github.com/stashapp/stash/pkg/python.Index
+  PythonIndexInput:
+    model: github.com/stashapp/stash/pkg/python.Index
+  PythonCatalogStatus:
+    model: github.com/stashapp/stash/pkg/python.CatalogStatus
+  PythonPackageSearchResult:
+    model: github.com/stashapp/stash/pkg/python.PackageSearchResult
+  PythonStatus:
+    model: github.com/stashapp/stash/pkg/python.Status
   # force resolvers
   ConfigResult:
     fields:

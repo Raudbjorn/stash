@@ -295,6 +295,17 @@ type Query {
   ollamaModels: [String!]!
   "Check if Ollama service is available"
   ollamaAvailable: Boolean!
+  # Python environment management
+  pythonStatus: PythonStatus!
+  pythonRuntimes(allVersions: Boolean = false): [PythonRuntime!]!
+  pythonPackages(outdated: Boolean = false): [PythonPackage!]!
+  pythonIndexes: [PythonIndex!]!
+  pythonCatalogs: [PythonCatalogStatus!]!
+  searchPythonPackages(
+    query: String!
+    index: String
+    limit: Int = 50
+  ): [PythonPackageSearchResult!]!
 
   # Scheduled scans
   "Returns all configured scan schedules"
@@ -675,6 +686,15 @@ type Mutation {
   ollamaGenerate(input: OllamaGenerateInput!): OllamaGenerateResult!
   "Explain a word in context using Ollama"
   ollamaExplainWord(input: OllamaExplainWordInput!): OllamaDictionaryEntry!
+  # Python environment management
+  installPythonManager: ID!
+  installPythonRuntime(id: ID!): ID!
+  selectPythonRuntime(id: ID!): ID!
+  installPythonPackages(names: [String!]!): ID!
+  updatePythonPackages(names: [String!]): ID!
+  uninstallPythonPackages(names: [String!]!): ID!
+  configurePythonIndexes(indexes: [PythonIndexInput!]!): [PythonIndex!]!
+  refreshPythonPackageCatalog(index: String): ID!
 }
 
 type Subscription {

@@ -432,7 +432,7 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 	}
 
 	if input.PythonPath != nil {
-		r.setConfigString(config.PythonPath, input.PythonPath)
+		c.SetPythonExternalPath(*input.PythonPath)
 	}
 
 	existingOnnxRuntimeLibPath := c.GetOnnxRuntimeLibPath()

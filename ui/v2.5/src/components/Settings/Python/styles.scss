@@ -1,0 +1,215 @@
+#python-settings {
+  .python-runtime-chain {
+    align-items: center;
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(7, auto);
+    justify-content: center;
+    padding: 1.25rem 1rem;
+
+    span {
+      background: $secondary;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 1rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.35rem 0.7rem;
+      white-space: nowrap;
+
+      &.ready {
+        border-color: $success;
+        box-shadow: inset 0 -2px 0 $success;
+      }
+
+      &.missing {
+        border-color: $warning;
+        box-shadow: inset 0 -2px 0 $warning;
+      }
+    }
+
+    i {
+      color: $text-muted;
+      font-style: normal;
+    }
+  }
+
+  .python-mono {
+    font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
+      monospace;
+    font-size: 0.75rem;
+    overflow-wrap: anywhere;
+  }
+
+  .python-toolbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    padding: 0.75rem;
+
+    .clearable-input-group {
+      flex: 1 1 15rem;
+    }
+
+    select {
+      flex: 0 1 12rem;
+    }
+  }
+
+  .python-table-wrap {
+    overflow-x: auto;
+    width: 100%;
+  }
+
+  table {
+    margin-bottom: 0;
+
+    th,
+    td {
+      vertical-align: middle;
+    }
+
+    .badge + .badge {
+      margin-left: 0.35rem;
+    }
+
+    td:last-child .btn {
+      margin: 0.15rem;
+    }
+  }
+
+  .python-update-version {
+    color: $success;
+    margin-left: 0.5rem;
+  }
+
+  .python-add-packages {
+    border-top: 1px solid rgba(0, 0, 0, 0.4);
+    padding: 0.75rem;
+  }
+
+  .python-add-body {
+    padding-top: 0.5rem;
+  }
+
+  .python-search-results {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+
+    li {
+      align-items: center;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      justify-content: space-between;
+      padding: 0.55rem 0;
+
+      small {
+        color: $text-muted;
+        display: block;
+      }
+    }
+  }
+
+  .python-external-editor {
+    display: flex;
+    gap: 0.5rem;
+
+    input {
+      min-width: 12rem;
+    }
+  }
+
+  .python-job {
+    border-top: 1px solid rgba(0, 0, 0, 0.4);
+    padding: 1rem;
+  }
+
+  .python-job-heading {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+  }
+
+  .python-job-detail {
+    color: $text-muted;
+    font-size: 0.85rem;
+    margin-top: 0.35rem;
+  }
+
+  .python-progress-indeterminate {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 0.25rem;
+    height: 1rem;
+    overflow: hidden;
+    position: relative;
+
+    span {
+      animation: python-progress-slide 1.2s ease-in-out infinite;
+      background: $primary;
+      height: 100%;
+      left: -35%;
+      position: absolute;
+      width: 35%;
+    }
+  }
+
+  .python-index-actions {
+    white-space: nowrap;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    outline: 2px solid $primary;
+    outline-offset: 2px;
+  }
+
+  @include media-breakpoint-down(sm) {
+    .python-runtime-chain {
+      grid-template-columns: 1fr;
+      justify-items: stretch;
+      text-align: center;
+
+      i {
+        transform: rotate(90deg);
+      }
+    }
+
+    .python-toolbar,
+    .python-external-editor {
+      align-items: stretch;
+      flex-direction: column;
+
+      select,
+      .btn {
+        flex-basis: auto;
+        width: 100%;
+      }
+    }
+
+    table {
+      min-width: 42rem;
+    }
+  }
+}
+
+@keyframes python-progress-slide {
+  0% {
+    left: -35%;
+  }
+
+  100% {
+    left: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #python-settings .python-progress-indeterminate span {
+    animation: none;
+    left: 0;
+    width: 100%;
+  }
+}

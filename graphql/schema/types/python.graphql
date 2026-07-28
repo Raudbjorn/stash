@@ -1,0 +1,73 @@
+enum PythonManagerSource {
+  MANAGED
+  SYSTEM
+}
+
+enum PythonRuntimeSource {
+  MANAGED
+  SYSTEM
+  EXTERNAL
+}
+
+type PythonManagerStatus {
+  installed: Boolean!
+  version: String
+  path: String
+  source: PythonManagerSource
+  error: String
+}
+
+type PythonRuntime {
+  id: ID!
+  key: String!
+  version: String!
+  implementation: String!
+  architecture: String!
+  libc: String
+  variant: String!
+  source: PythonRuntimeSource!
+  installed: Boolean!
+  selected: Boolean!
+  path: String
+  environmentPath: String
+  downloadURL: String
+}
+
+type PythonPackage {
+  name: String!
+  version: String!
+  latestVersion: String
+  latestFiletype: String
+}
+
+type PythonIndex {
+  name: String!
+  url: String!
+  default: Boolean!
+}
+
+input PythonIndexInput {
+  name: String!
+  url: String!
+  default: Boolean!
+}
+
+type PythonCatalogStatus {
+  index: String!
+  refreshedAt: Time
+  projectCount: Int!
+  stale: Boolean!
+  error: String
+}
+
+type PythonPackageSearchResult {
+  name: String!
+  indexes: [String!]!
+}
+
+type PythonStatus {
+  manager: PythonManagerStatus!
+  selectedRuntime: PythonRuntime
+  configuredPythonPath: String!
+  managedEnvironment: Boolean!
+}

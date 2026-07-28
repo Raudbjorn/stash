@@ -282,13 +282,30 @@ func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, 
 	// kill the process. This records whether cancellation actually caused the
 	// command to terminate, so a later ctx.Err() cannot mask a completed failure.
 	detachedCtx := context.WithoutCancel(ctx)
+	if len(command) == 0 {
+		return errors.New("empty scraper command")
+	}
+
+	var releasePython func()
+	if python.IsPythonCommand(command[0]) {
+		var err error
+		releasePython, err = python.AcquireExecution(ctx)
+		if err != nil {
+			return fmt.Errorf("acquire Python execution lease: %w", err)
+		}
+		defer releasePython()
+	}
 
 	var cmd *exec.Cmd
 	if python.IsPythonCommand(command[0]) {
+		runtimeID := s.globalConfig.GetPythonRuntimeID()
 		pythonPath := s.globalConfig.GetPythonPath()
-		p, err := python.Resolve(pythonPath)
+		p, err := python.ResolveSelection(runtimeID, pythonPath)
 
 		if err != nil {
+			if runtimeID != "" {
+				return err
+			}
 			logger.Warnf("%s", err)
 		} else {
 			cmd = p.Command(detachedCtx, command[1:])

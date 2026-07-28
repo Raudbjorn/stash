@@ -96,6 +96,7 @@ type ServerConfig interface {
 	GetPluginsPath() string
 	GetDisabledPlugins() []string
 	GetPythonPath() string
+	GetPythonRuntimeID() string
 }
 
 // Cache stores plugin details.

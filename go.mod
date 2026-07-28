@@ -44,6 +44,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.42
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/natefinch/pie v0.0.0-20170715172608-9a0d72014007
+	github.com/pelletier/go-toml/v2 v2.1.0
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
 	github.com/prometheus/client_golang v1.24.1
 	github.com/remeh/sizedwaitgroup v1.0.0
