@@ -59,6 +59,33 @@ func TestExtractNameCandidates(t *testing.T) {
 			text: "Jane Doe and Jane Doe again",
 			want: []string{"Jane Doe"},
 		},
+		{
+			// #reported: sentence-cased marketing lead-in and a descriptor
+			// word must not misalign the pairing away from the real name.
+			name: "sentence-cased lead-in and descriptor word excluded",
+			text: "You Make Skinny Kenzie Reeves Cum",
+			want: []string{"Kenzie Reeves"},
+		},
+		{
+			name: "relationship/genre descriptor pair produces no candidate",
+			text: "Step Mom Comes Every Time",
+			want: nil,
+		},
+		{
+			name: "genre tag pair produces no candidate",
+			text: "Goth Girls Secret Teen",
+			want: nil,
+		},
+		{
+			name: "filler-word pair produces no candidate",
+			text: "Dont Leave My Eyes Only",
+			want: nil,
+		},
+		{
+			name: "real name survives amid descriptor noise",
+			text: "Are Friends With Cory Chase",
+			want: []string{"Cory Chase"},
+		},
 	}
 
 	for _, tt := range tests {

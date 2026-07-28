@@ -10,25 +10,58 @@ import (
 // contiguous runs of letters (in any script) as tokens.
 var wordSplitRE = regexp.MustCompile(`[^\p{L}]+`)
 
-// nonNameTokens are common title and English words that should never be
-// treated as part of a candidate performer name, even when title-cased.
-// Both extraction and plausibility scoring use this set so lexical
-// boundaries and low-score guards cannot disagree.
+// nonNameTokens are common non-name tokens that should never be treated as
+// part of a candidate performer name, even when title-cased. Adult-content
+// titles routinely sentence-case a marketing phrase or descriptor alongside
+// the actual performer name, so this includes both common English words and
+// recurring descriptor vocabulary. Extraction and plausibility scoring share
+// this set so lexical boundaries and low-score guards cannot disagree.
 var nonNameTokens = map[string]struct{}{
 	"the": {}, "and": {}, "with": {}, "featuring": {}, "feat": {},
 	"scene": {}, "part": {}, "vol": {}, "volume": {}, "full": {}, "video": {},
 	"official": {}, "site": {}, "rip": {}, "web": {}, "hd": {}, "sd": {},
 	"new": {}, "best": {}, "top": {}, "of": {}, "for": {}, "in": {}, "on": {},
 	"her": {}, "his": {}, "she": {}, "him": {}, "com": {}, "net": {},
-	"this": {}, "that": {}, "these": {}, "those": {}, "what": {}, "when": {},
+
+	// common function/filler words that frequently appear title-cased at the
+	// start of a sentence-cased marketing phrase
+	"you": {}, "your": {}, "yours": {}, "my": {}, "mine": {}, "our": {}, "ours": {},
+	"their": {}, "theirs": {}, "its": {}, "who": {}, "whom": {}, "whose": {},
+	"make": {}, "makes": {}, "making": {}, "made": {},
+	"get": {}, "gets": {}, "getting": {}, "got": {},
+	"want": {}, "wants": {}, "wanting": {},
+	"love": {}, "loves": {}, "loving": {},
+	"come": {}, "comes": {}, "coming": {},
+	"leave": {}, "leaves": {}, "leaving": {},
+	"work": {}, "works": {}, "working": {},
+	"every": {}, "each": {}, "time": {}, "times": {},
+	"when": {}, "why": {}, "how": {}, "what": {}, "that": {}, "this": {},
+	"these": {}, "those": {}, "are": {}, "is": {}, "was": {}, "were": {},
+	"will": {}, "would": {}, "can": {}, "could": {}, "dont": {}, "wont": {},
+	"cant": {}, "just": {}, "so": {}, "too": {}, "very": {}, "not": {},
+	"now": {}, "then": {}, "than": {}, "more": {}, "most": {}, "some": {},
+	"any": {}, "all": {}, "again": {}, "still": {}, "back": {}, "only": {},
 	"where": {}, "which": {}, "while": {}, "after": {}, "before": {},
-	"about": {}, "again": {}, "against": {}, "between": {}, "into": {},
-	"through": {}, "during": {}, "without": {}, "under": {}, "over": {},
-	"first": {}, "second": {}, "third": {}, "last": {}, "next": {},
+	"about": {}, "against": {}, "between": {}, "into": {}, "through": {},
+	"during": {}, "without": {}, "under": {}, "over": {},
+	"eyes": {}, "friends": {}, "secret": {},
+
+	// recurring adult-content descriptor/genre vocabulary that is not a name
+	"skinny": {}, "busty": {}, "chubby": {}, "curvy": {}, "tiny": {}, "thicc": {},
+	"petite": {}, "blonde": {}, "brunette": {}, "redhead": {}, "hot": {},
+	"sexy": {}, "cute": {}, "wild": {}, "naughty": {}, "innocent": {},
+	"young": {}, "old": {}, "mature": {}, "big": {}, "small": {}, "huge": {},
+	"tight": {}, "wet": {}, "hard": {}, "rough": {}, "gentle": {}, "sweet": {},
+	"bad": {}, "good": {}, "real": {}, "first": {}, "second": {}, "third": {},
+	"last": {}, "next": {}, "step": {}, "mom": {}, "dad": {}, "sister": {},
+	"stepmom": {}, "stepsister": {}, "stepdad": {}, "teacher": {}, "boss": {},
+	"neighbor": {}, "teen": {}, "milf": {}, "goth": {}, "punk": {}, "nerdy": {},
+	"girls": {}, "boys": {}, "guys": {},
+
+	// marketing superlatives and temporal title fragments
 	"amazing": {}, "beautiful": {}, "gorgeous": {}, "incredible": {},
 	"exclusive": {}, "extreme": {}, "ultimate": {}, "perfect": {},
 	"morning": {}, "night": {}, "day": {}, "week": {}, "year": {},
-	"you": {}, "make": {}, "skinny": {},
 }
 
 // isNameLikeWord returns true if w looks like a capitalized proper-noun

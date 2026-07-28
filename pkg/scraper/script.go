@@ -260,7 +260,29 @@ type scriptScraper struct {
 	globalConfig GlobalConfig
 }
 
+func scraperCommandResult(ctx context.Context, waitErr error, canceledCommand bool) error {
+	if canceledCommand {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		return context.Canceled
+	}
+	if waitErr != nil {
+		return fmt.Errorf("%w: %v", ErrScraperScript, waitErr)
+	}
+	return nil
+}
+
 func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, inString string, out interface{}) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	// Supervise cancellation explicitly below instead of letting CommandContext
+	// kill the process. This records whether cancellation actually caused the
+	// command to terminate, so a later ctx.Err() cannot mask a completed failure.
+	detachedCtx := context.WithoutCancel(ctx)
+
 	var cmd *exec.Cmd
 	if python.IsPythonCommand(command[0]) {
 		pythonPath := s.globalConfig.GetPythonPath()
@@ -269,7 +291,7 @@ func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, 
 		if err != nil {
 			logger.Warnf("%s", err)
 		} else {
-			cmd = p.Command(ctx, command[1:])
+			cmd = p.Command(detachedCtx, command[1:])
 			envVariable, _ := filepath.Abs(filepath.Dir(filepath.Dir(s.definition.path)))
 			python.AppendPythonPath(cmd, envVariable)
 		}
@@ -277,7 +299,7 @@ func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, 
 
 	if cmd == nil {
 		// if could not find python, just use the command args as-is
-		cmd = stashExec.CommandContext(ctx, command[0], command[1:]...)
+		cmd = stashExec.CommandContext(detachedCtx, command[0], command[1:]...)
 	}
 
 	cmd.Dir = filepath.Dir(s.definition.path)
@@ -300,11 +322,39 @@ func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, 
 		return fmt.Errorf("starting scraper script: %w", err)
 	}
 
+	processDone := make(chan struct{})
+	cancellationObserved := make(chan struct{})
+	cancellationResult := make(chan bool, 1)
+	go func() {
+		select {
+		case <-ctx.Done():
+			close(cancellationObserved)
+			cancellationResult <- cmd.Process.Kill() == nil
+		case <-processDone:
+			cancellationResult <- false
+		}
+	}()
+
+	type stdinWriteResult struct {
+		n                  int
+		err                error
+		beforeCancellation bool
+	}
+	stdinResult := make(chan stdinWriteResult, 1)
 	go func() {
 		defer stdin.Close()
 
-		if n, err := io.WriteString(stdin, inString); err != nil && ctx.Err() == nil {
-			logger.Warnf("failure to write full input to script (wrote %v bytes out of %v): %v", n, len(inString), err)
+		n, writeErr := io.WriteString(stdin, inString)
+		beforeCancellation := true
+		select {
+		case <-cancellationObserved:
+			beforeCancellation = false
+		default:
+		}
+		stdinResult <- stdinWriteResult{
+			n:                  n,
+			err:                writeErr,
+			beforeCancellation: beforeCancellation,
 		}
 	}()
 
@@ -312,11 +362,18 @@ func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, 
 
 	logger.Debugf("Scraper script <%s> started", strings.Join(cmd.Args, " "))
 
-	err = cmd.Wait()
+	waitErr := cmd.Wait()
+	close(processDone)
+	canceledCommand := <-cancellationResult
+	writeResult := <-stdinResult
 	logger.Debugf("Scraper script finished")
 
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		return ctxErr
+	if writeResult.err != nil && (writeResult.beforeCancellation || !canceledCommand) {
+		logger.Warnf("failure to write full input to script (wrote %v bytes out of %v): %v", writeResult.n, len(inString), writeResult.err)
+	}
+
+	if canceledCommand {
+		return scraperCommandResult(ctx, nil, true)
 	}
 
 	// Decode only after Wait has finished. cmd.Stdout's internal copy
@@ -345,11 +402,8 @@ func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, 
 		// Lenient decode succeeded, print a warning, but use the decode.
 		logger.Warnf("reading script result: %v", strictWarning)
 	}
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrScraperScript, err)
-	}
 
-	return nil
+	return scraperCommandResult(ctx, waitErr, false)
 }
 
 func (s *scriptScraper) scrape(ctx context.Context, command []string, input string, ty ScrapeContentType) (ScrapedContent, error) {
