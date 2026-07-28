@@ -29,6 +29,21 @@ func TestExtractNameCandidates(t *testing.T) {
 			want: nil,
 		},
 		{
+			name: "prose tokens do not form candidate",
+			text: "You Make",
+			want: nil,
+		},
+		{
+			name: "prose prefix leaves only performer name",
+			text: "You Make Skinny Kenzie Reeves",
+			want: []string{"Kenzie Reeves"},
+		},
+		{
+			name: "weak token prefix cannot cross into performer name",
+			text: "Skinny Kenzie Reeves",
+			want: []string{"Kenzie Reeves"},
+		},
+		{
 			name:    "excluded studio name",
 			text:    "Studio Site - Jane Doe",
 			exclude: func(c string) bool { return c == "studio site" },
@@ -51,6 +66,19 @@ func TestExtractNameCandidates(t *testing.T) {
 			got := ExtractNameCandidates(tt.text, tt.exclude)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("ExtractNameCandidates() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHeuristicNamePlausibilityScorerRejectsNonNameTokens(t *testing.T) {
+	const minCandidatePlausibility = 0.3
+
+	for _, candidate := range []string{"You Make", "Skinny Kenzie"} {
+		t.Run(candidate, func(t *testing.T) {
+			score := (HeuristicNamePlausibilityScorer{}).Score(candidate)
+			if score >= minCandidatePlausibility {
+				t.Fatalf("Score(%q) = %v, want below %v", candidate, score, minCandidatePlausibility)
 			}
 		})
 	}

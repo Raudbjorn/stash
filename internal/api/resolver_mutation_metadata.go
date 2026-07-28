@@ -96,6 +96,14 @@ func (r *mutationResolver) MetadataAnalyzeScenes(ctx context.Context, input mana
 	jobID := manager.GetInstance().AnalyzeSceneMetadata(ctx, input)
 	return strconv.Itoa(jobID), nil
 }
+func (r *mutationResolver) SceneMetadataEntityModelInstall(ctx context.Context) (string, error) {
+	jobID := manager.GetInstance().InstallSceneMetadataEntityModel(ctx)
+	return strconv.Itoa(jobID), nil
+}
+
+func (r *mutationResolver) SceneMetadataEntityModelReload(ctx context.Context) (bool, error) {
+	return manager.GetInstance().ReloadSceneMetadataEntityModel(), nil
+}
 
 func (r *mutationResolver) MetadataIdentify(ctx context.Context, input identify.Options) (string, error) {
 	t := manager.CreateIdentifyJob(input)

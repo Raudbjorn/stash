@@ -33,6 +33,14 @@ mutation MetadataDetectSceneCuts($input: DetectSceneCutsInput!) {
 mutation MetadataAnalyzeScenes($input: AnalyzeSceneMetadataInput!) {
   metadataAnalyzeScenes(input: $input)
 }
+mutation SceneMetadataEntityModelInstall {
+  sceneMetadataEntityModelInstall
+}
+
+mutation SceneMetadataEntityModelReload {
+  sceneMetadataEntityModelReload
+}
+
 
 mutation MetadataIdentify($input: IdentifyMetadataInput!) {
   metadataIdentify(input: $input)

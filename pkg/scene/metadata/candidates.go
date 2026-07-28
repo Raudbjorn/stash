@@ -10,14 +10,25 @@ import (
 // contiguous runs of letters (in any script) as tokens.
 var wordSplitRE = regexp.MustCompile(`[^\p{L}]+`)
 
-// stopWords are common non-name tokens that should never be treated as
-// part of a candidate performer name, even when title-cased.
-var stopWords = map[string]struct{}{
+// nonNameTokens are common title and English words that should never be
+// treated as part of a candidate performer name, even when title-cased.
+// Both extraction and plausibility scoring use this set so lexical
+// boundaries and low-score guards cannot disagree.
+var nonNameTokens = map[string]struct{}{
 	"the": {}, "and": {}, "with": {}, "featuring": {}, "feat": {},
 	"scene": {}, "part": {}, "vol": {}, "volume": {}, "full": {}, "video": {},
 	"official": {}, "site": {}, "rip": {}, "web": {}, "hd": {}, "sd": {},
 	"new": {}, "best": {}, "top": {}, "of": {}, "for": {}, "in": {}, "on": {},
 	"her": {}, "his": {}, "she": {}, "him": {}, "com": {}, "net": {},
+	"this": {}, "that": {}, "these": {}, "those": {}, "what": {}, "when": {},
+	"where": {}, "which": {}, "while": {}, "after": {}, "before": {},
+	"about": {}, "again": {}, "against": {}, "between": {}, "into": {},
+	"through": {}, "during": {}, "without": {}, "under": {}, "over": {},
+	"first": {}, "second": {}, "third": {}, "last": {}, "next": {},
+	"amazing": {}, "beautiful": {}, "gorgeous": {}, "incredible": {},
+	"exclusive": {}, "extreme": {}, "ultimate": {}, "perfect": {},
+	"morning": {}, "night": {}, "day": {}, "week": {}, "year": {},
+	"you": {}, "make": {}, "skinny": {},
 }
 
 // isNameLikeWord returns true if w looks like a capitalized proper-noun
@@ -38,8 +49,8 @@ func isNameLikeWord(w string) bool {
 	return true
 }
 
-func isStopWord(w string) bool {
-	_, ok := stopWords[strings.ToLower(w)]
+func isNonNameToken(w string) bool {
+	_, ok := nonNameTokens[strings.ToLower(w)]
 	return ok
 }
 
@@ -88,7 +99,7 @@ func ExtractNameCandidates(text string, exclude func(candidate string) bool) []s
 	}
 
 	for i, w := range words {
-		if isNameLikeWord(w) && !isStopWord(w) {
+		if isNameLikeWord(w) && !isNonNameToken(w) {
 			if runStart == -1 {
 				runStart = i
 			}
