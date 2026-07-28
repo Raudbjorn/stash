@@ -54,6 +54,7 @@ func (s *Subscription) Close() { s.unsub() }
 type eventBus struct {
 	mu          sync.Mutex
 	subscribers map[*Subscription]struct{}
+	closed      bool
 }
 
 func newEventBus() *eventBus {
@@ -68,6 +69,15 @@ func (b *eventBus) subscribe(buffer int) *Subscription {
 
 	ch := make(chan Event, buffer)
 	sub := &Subscription{Events: ch, events: ch}
+
+	b.mu.Lock()
+	if b.closed {
+		sub.closed = true
+		close(ch)
+		sub.unsub = func() {}
+		b.mu.Unlock()
+		return sub
+	}
 	sub.unsub = func() {
 		b.mu.Lock()
 		defer b.mu.Unlock()
@@ -78,11 +88,8 @@ func (b *eventBus) subscribe(buffer int) *Subscription {
 		delete(b.subscribers, sub)
 		close(sub.events)
 	}
-
-	b.mu.Lock()
 	b.subscribers[sub] = struct{}{}
 	b.mu.Unlock()
-
 	return sub
 }
 
@@ -102,6 +109,21 @@ func (b *eventBus) publish(ev Event) {
 		default:
 			// Slow consumer: drop rather than block the scheduler.
 		}
+	}
+}
+
+// close ends every current subscription and rejects future ones.
+func (b *eventBus) close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closed {
+		return
+	}
+	b.closed = true
+	for sub := range b.subscribers {
+		sub.closed = true
+		delete(b.subscribers, sub)
+		close(sub.events)
 	}
 }
 

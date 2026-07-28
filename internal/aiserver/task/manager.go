@@ -132,21 +132,28 @@ func (m *Manager) Start() {
 // running handlers to return.
 func (m *Manager) Shutdown(ctx context.Context) {
 	m.mu.Lock()
-	if !m.started || m.stopping {
+	if m.stopping {
 		m.mu.Unlock()
 		return
 	}
 	m.stopping = true
+	started := m.started
 	ids := make([]string, 0, len(m.tasks))
 	for id := range m.tasks {
 		ids = append(ids, id)
 	}
 	m.mu.Unlock()
 
-	close(m.stop)
+	if started {
+		close(m.stop)
+	}
 
 	for _, id := range ids {
 		m.Cancel(id)
+	}
+	if !started {
+		m.bus.close()
+		return
 	}
 
 	// Wait for the dispatch loop, then for handlers still winding down.
@@ -165,6 +172,7 @@ func (m *Manager) Shutdown(ctx context.Context) {
 	case <-ctx.Done():
 		logger.Warn("AI task manager shut down with handlers still running")
 	}
+	m.bus.close()
 }
 
 // Subscribe returns a stream of task events. Callers must Close it.

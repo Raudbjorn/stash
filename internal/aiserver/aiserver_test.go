@@ -96,6 +96,30 @@ func TestEnabledServerOpensAndMigrates(t *testing.T) {
 	}
 }
 
+func TestShutdownWithdrawsReadinessAndDependencies(t *testing.T) {
+	cfg := newTestConfig(t, true)
+	s := New(Deps{Config: cfg})
+	if err := s.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	oldDB := s.DB()
+
+	s.Shutdown()
+
+	if got := s.State(); got != StateStopped {
+		t.Fatalf("state = %q, want %q", got, StateStopped)
+	}
+	if s.Enabled() {
+		t.Fatal("server remained enabled after shutdown")
+	}
+	if s.DB() != nil || s.Tasks() != nil || s.Interactions() != nil || s.PluginHost() != nil {
+		t.Fatal("shutdown left a public dependency reachable")
+	}
+	if err := oldDB.Ping(context.Background()); err == nil {
+		t.Fatal("withdrawn database remained open")
+	}
+}
+
 func TestStartIsIdempotent(t *testing.T) {
 	cfg := newTestConfig(t, true)
 	s := New(Deps{Config: cfg})

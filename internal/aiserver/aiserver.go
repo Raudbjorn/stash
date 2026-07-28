@@ -486,12 +486,20 @@ func (s *Server) Shutdown() {
 	tasks := s.tasks
 	pluginHost := s.pluginHost
 	plugins := s.plugins
+	tagger := s.tagging
+	db := s.db
+
+	// Publish unready atomically with withdrawing the dependencies. Handlers
+	// that gate on State can no longer enter while shutdown drains resources.
+	if s.state != StateDisabled {
+		s.state = StateStopped
+	}
+	s.db = nil
 	s.tasks = nil
 	s.interactions = nil
 	s.pluginHost = nil
 	s.plugins = nil
 	s.catalog = nil
-	tagger := s.tagging
 	s.tagging = nil
 	s.trainer = nil
 	s.mu.Unlock()
@@ -523,17 +531,10 @@ func (s *Server) Shutdown() {
 		cancel()
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db != nil {
-		if err := s.db.Close(); err != nil {
+	if db != nil {
+		if err := db.Close(); err != nil {
 			logger.Errorf("closing AI database: %v", err)
 		}
-		s.db = nil
-	}
-	if s.state != StateDisabled {
-		s.state = StateStopped
 	}
 }
 

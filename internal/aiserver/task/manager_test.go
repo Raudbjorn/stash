@@ -580,6 +580,35 @@ func TestSlowSubscriberDoesNotBlockScheduler(t *testing.T) {
 	waitStatus(t, m, last, StatusCompleted)
 }
 
+func TestShutdownClosesEverySubscription(t *testing.T) {
+	m := NewManager(Options{Gate: newFakeGate()})
+	m.Start()
+	sub := m.Subscribe(8)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	m.Shutdown(ctx)
+
+	select {
+	case _, ok := <-sub.Events:
+		if ok {
+			t.Fatal("subscription remained open after shutdown")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("subscription did not close after shutdown")
+	}
+	if got := m.SubscriberCount(); got != 0 {
+		t.Fatalf("subscriber count = %d, want 0", got)
+	}
+	sub.Close() // remains idempotent after manager-driven closure
+
+	late := m.Subscribe(1)
+	defer late.Close()
+	if _, ok := <-late.Events; ok {
+		t.Fatal("subscription created after shutdown was open")
+	}
+}
+
 func TestListIsOrderedAndFilterable(t *testing.T) {
 	gate := newFakeGate()
 	gate.setReady("blocked", false)
