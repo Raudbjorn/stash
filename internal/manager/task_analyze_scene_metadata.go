@@ -534,21 +534,66 @@ func (j *analyzeSceneMetadataJob) scrapeVerifyPerformer(ctx context.Context, can
 	return "", nil
 }
 
+// createPerformer creates a new performer with the given (scraper-verified,
+// exact) name.
+//
+// j.performerRecords - and the newCandidates list derived from it - is a
+// snapshot taken once at job start (see loadLibraryRecords) and is never
+// refreshed mid-run. A name that was genuinely new when that snapshot was
+// taken, and again when the scraper verified it, may since have been
+// created by an earlier scene processed in this same job run (or, in
+// principle, by any other writer in this process). Re-checking the live
+// database immediately before writing, inside the same write transaction
+// as the Create, closes that window: this app's sqlite write pool has
+// exactly one connection (pkg/sqlite maxWriteConnections), so every
+// writable transaction in this process is fully serialized and nothing can
+// create a same-named performer between our check and our write.
+//
+// The name match is intentionally exact and case-sensitive (nocase=false):
+// the performers_name_unique index this collides with has no COLLATE
+// NOCASE, so it's case-sensitive too. Matching case-insensitively here
+// would risk silently merging two legitimately distinct, differently-cased
+// performer records - a behavior change well beyond fixing this race.
 func (j *analyzeSceneMetadataJob) createPerformer(ctx context.Context, name string) (int, error) {
 	r := j.repository
 
-	newPerformer := models.NewPerformer()
-	newPerformer.Name = name
-
+	var id int
 	if err := r.WithTxn(ctx, func(ctx context.Context) error {
-		return r.Performer.Create(ctx, &models.CreatePerformerInput{Performer: &newPerformer})
+		existing, err := r.Performer.FindByNames(ctx, []string{name}, false)
+		if err != nil {
+			return fmt.Errorf("checking for existing performer %q: %w", name, err)
+		}
+		if len(existing) > 0 {
+			id = existing[0].ID
+			logger.Infof("[scene metadata] performer %q already exists (id %d); skipping creation", name, id)
+			return nil
+		}
+
+		newPerformer := models.NewPerformer()
+		newPerformer.Name = name
+
+		createErr := r.Performer.Create(ctx, &models.CreatePerformerInput{Performer: &newPerformer})
+		if createErr == nil {
+			id = newPerformer.ID
+			logger.Infof("[scene metadata] created new performer %q (id %d)", name, id)
+			return nil
+		}
+
+		// The check above should make this unreachable in normal operation,
+		// but recover gracefully rather than dropping the performer.
+		existing, findErr := r.Performer.FindByNames(ctx, []string{name}, false)
+		if findErr != nil || len(existing) == 0 {
+			return fmt.Errorf("creating performer %q: %w", name, createErr)
+		}
+
+		id = existing[0].ID
+		logger.Infof("[scene metadata] performer %q was created concurrently (id %d); using existing record", name, id)
+		return nil
 	}); err != nil {
 		return 0, err
 	}
 
-	logger.Infof("[scene metadata] created new performer %q (id %d)", name, newPerformer.ID)
-
-	return newPerformer.ID, nil
+	return id, nil
 }
 
 func mergeIDs(existing, matched, created []int) []int {
