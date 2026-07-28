@@ -11,14 +11,6 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-var entityLabels = []string{
-	EntityLabelPerformer,
-	EntityLabelStudio,
-	EntityLabelDate,
-	EntityLabelMovie,
-	EntityLabelReleaseGroup,
-}
-
 // NormalizeKey returns the shared comparison key used by extraction and
 // linking. It folds case and filename separators without dropping letters,
 // apostrophes, or diacritics.
@@ -283,7 +275,7 @@ func analyze(ctx context.Context, inputs Inputs) (Analysis, error) {
 			continue
 		}
 		modelSeen[source.Normalized] = struct{}{}
-		extracted, err := inputs.EntityExtractor.Extract(ctx, source.RawText, entityLabels)
+		extracted, err := inputs.EntityExtractor.Extract(ctx, source.RawText)
 		if err != nil {
 			result.Diagnostics.ModelAvailable = false
 			result.Diagnostics.ModelFallbackReason = "entity extraction failed"

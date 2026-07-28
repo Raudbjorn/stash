@@ -19,8 +19,9 @@ var (
 )
 
 const (
-	maxModelTokens   = 1024
-	DefaultThreshold = 0.25
+	maxModelTokens        = 1024
+	maxTensorCacheEntries = 8
+	DefaultThreshold      = 0.25
 )
 
 var (
@@ -115,6 +116,10 @@ type tensorSet struct {
 	spanMask      *ort.Tensor[bool]
 	logits        *ort.Tensor[float32]
 }
+type tensorCacheEntry struct {
+	key tensorKey
+	set *tensorSet
+}
 
 func newTensorSet(key tensorKey) (*tensorSet, error) {
 	set := &tensorSet{}
@@ -153,24 +158,31 @@ func newTensorSet(key tensorKey) (*tensorSet, error) {
 func (s *tensorSet) destroy() {
 	if s.inputIDs != nil {
 		s.inputIDs.Destroy()
+		s.inputIDs = nil
 	}
 	if s.attentionMask != nil {
 		s.attentionMask.Destroy()
+		s.attentionMask = nil
 	}
 	if s.wordsMask != nil {
 		s.wordsMask.Destroy()
+		s.wordsMask = nil
 	}
 	if s.textLengths != nil {
 		s.textLengths.Destroy()
+		s.textLengths = nil
 	}
 	if s.spanIdx != nil {
 		s.spanIdx.Destroy()
+		s.spanIdx = nil
 	}
 	if s.spanMask != nil {
 		s.spanMask.Destroy()
+		s.spanMask = nil
 	}
 	if s.logits != nil {
 		s.logits.Destroy()
+		s.logits = nil
 	}
 }
 
@@ -182,7 +194,7 @@ type Extractor struct {
 	threshold float64
 	tokenizer *glinerTokenizer
 	session   *ort.DynamicAdvancedSession
-	tensors   map[tensorKey]*tensorSet
+	tensors   []tensorCacheEntry
 }
 
 func Load(libraryPath, bundlePath string, threshold float64) (_ *Extractor, err error) {
@@ -220,7 +232,12 @@ func Load(libraryPath, bundlePath string, threshold float64) (_ *Extractor, err 
 	if threshold <= 0 || threshold >= 1 {
 		threshold = DefaultThreshold
 	}
-	return &Extractor{threshold: threshold, tokenizer: tokenizer, session: session, tensors: make(map[tensorKey]*tensorSet)}, nil
+	return &Extractor{
+		threshold: threshold,
+		tokenizer: tokenizer,
+		session:   session,
+		tensors:   make([]tensorCacheEntry, 0, maxTensorCacheEntries),
+	}, nil
 }
 
 func ModelPathFromBundle(bundlePath string) string {
@@ -235,8 +252,8 @@ func (e *Extractor) Close() error {
 	}
 	e.closed = true
 	err := e.session.Destroy()
-	for _, tensors := range e.tensors {
-		tensors.destroy()
+	for _, entry := range e.tensors {
+		entry.set.destroy()
 	}
 	e.tensors = nil
 	if environmentErr := releaseEnvironment(); err == nil {
@@ -245,15 +262,34 @@ func (e *Extractor) Close() error {
 	return err
 }
 
+// tensorSet keeps a small LRU of native tensors. Exact input shapes vary
+// across scenes, and ONNX tensor memory is not reclaimed by the Go GC.
+// Evicting before the ninth retained shape bounds the singleton extractor's
+// persistent native tensor memory while preserving reuse for common shapes.
 func (e *Extractor) tensorSet(key tensorKey) (*tensorSet, error) {
-	if tensors := e.tensors[key]; tensors != nil {
-		return tensors, nil
+	for index, entry := range e.tensors {
+		if entry.key != key {
+			continue
+		}
+		copy(e.tensors[index:], e.tensors[index+1:])
+		e.tensors[len(e.tensors)-1] = entry
+		return entry.set, nil
 	}
+
 	tensors, err := newTensorSet(key)
 	if err != nil {
 		return nil, err
 	}
-	e.tensors[key] = tensors
+	entry := tensorCacheEntry{key: key, set: tensors}
+	if len(e.tensors) < maxTensorCacheEntries {
+		e.tensors = append(e.tensors, entry)
+		return tensors, nil
+	}
+
+	evicted := e.tensors[0].set
+	copy(e.tensors, e.tensors[1:])
+	e.tensors[len(e.tensors)-1] = entry
+	evicted.destroy()
 	return tensors, nil
 }
 
@@ -314,22 +350,11 @@ func decode(text string, inputs modelInputs, logits []float32, wordBucket int, t
 	return ret
 }
 
-func (e *Extractor) Extract(ctx context.Context, text string, labels []string) ([]metadata.EntitySpan, error) {
+func (e *Extractor) Extract(ctx context.Context, text string) ([]metadata.EntitySpan, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if len(labels) == 0 {
-		labels = Labels
-	}
-	if len(labels) != len(Labels) {
-		return nil, fmt.Errorf("GLiNER requires the stable %d-label prompt", len(Labels))
-	}
-	for index := range labels {
-		if labels[index] != Labels[index] {
-			return nil, fmt.Errorf("GLiNER label %d is %q, expected %q", index, labels[index], Labels[index])
-		}
-	}
-	inputs, err := e.tokenizer.build(text, labels)
+	inputs, err := e.tokenizer.build(text, Labels)
 	if err != nil {
 		return nil, err
 	}
@@ -375,5 +400,5 @@ func (e *Extractor) Extract(ctx context.Context, text string, labels []string) (
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return decode(text, inputs, tensors.logits.GetData(), key.words, e.threshold, labels), nil
+	return decode(text, inputs, tensors.logits.GetData(), key.words, e.threshold, Labels), nil
 }

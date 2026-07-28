@@ -50,6 +50,7 @@ func TestRuntimeMatchesPinnedPythonInference(t *testing.T) {
 	require.NoError(t, err)
 	var fixture inferenceFixture
 	require.NoError(t, json.Unmarshal(data, &fixture))
+	require.Equal(t, Labels, fixture.Labels)
 
 	extractor, err := Load(runtimeLibrary(t), bundle, DefaultThreshold)
 	require.NoError(t, err)
@@ -58,7 +59,7 @@ func TestRuntimeMatchesPinnedPythonInference(t *testing.T) {
 	for _, testCase := range fixture.Cases {
 		t.Run(testCase.Name, func(t *testing.T) {
 			extractor.threshold = testCase.Threshold
-			got, err := extractor.Extract(context.Background(), testCase.Text, fixture.Labels)
+			got, err := extractor.Extract(context.Background(), testCase.Text)
 			require.NoError(t, err)
 			// INT8 kernels can vary numerically across ONNX Runtime CPU builds.
 			// Pin semantic spans/labels and bound score drift rather than
@@ -83,6 +84,38 @@ func TestRuntimeMatchesPinnedPythonInference(t *testing.T) {
 	}
 }
 
+func TestTensorCacheIsBoundedAndEvictsLeastRecentlyUsed(t *testing.T) {
+	require.NoError(t, acquireEnvironment(runtimeLibrary(t)))
+	t.Cleanup(func() { require.NoError(t, releaseEnvironment()) })
+
+	extractor := &Extractor{tensors: make([]tensorCacheEntry, 0, maxTensorCacheEntries)}
+	t.Cleanup(func() {
+		for _, entry := range extractor.tensors {
+			entry.set.destroy()
+		}
+	})
+
+	keys := make([]tensorKey, maxTensorCacheEntries)
+	sets := make([]*tensorSet, maxTensorCacheEntries)
+	for index := range maxTensorCacheEntries {
+		keys[index] = tensorKey{tokens: 16 + index, words: 4 + index}
+		var err error
+		sets[index], err = extractor.tensorSet(keys[index])
+		require.NoError(t, err)
+	}
+	require.Len(t, extractor.tensors, maxTensorCacheEntries)
+
+	reused, err := extractor.tensorSet(keys[0])
+	require.NoError(t, err)
+	assert.Same(t, sets[0], reused)
+
+	_, err = extractor.tensorSet(tensorKey{tokens: 64, words: 16})
+	require.NoError(t, err)
+	assert.Len(t, extractor.tensors, maxTensorCacheEntries)
+	assert.NotNil(t, sets[0].inputIDs, "recently used entry must remain cached")
+	assert.Nil(t, sets[1].inputIDs, "least recently used native tensors must be destroyed")
+}
+
 func TestRuntimeCloseIsIdempotent(t *testing.T) {
 	bundle := referenceBundle(t)
 	if _, err := os.Stat(filepath.Join(bundle, "model.onnx")); err != nil {
@@ -92,7 +125,7 @@ func TestRuntimeCloseIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, extractor.Close())
 	require.NoError(t, extractor.Close())
-	_, err = extractor.Extract(context.Background(), "Jane Doe", Labels)
+	_, err = extractor.Extract(context.Background(), "Jane Doe")
 	assert.ErrorIs(t, err, ErrClosed)
 }
 func BenchmarkExtractor(b *testing.B) {
@@ -109,7 +142,7 @@ func BenchmarkExtractor(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		if _, err := extractor.Extract(ctx, text, Labels); err != nil {
+		if _, err := extractor.Extract(ctx, text); err != nil {
 			b.Fatal(err)
 		}
 	}

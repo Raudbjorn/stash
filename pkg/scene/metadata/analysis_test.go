@@ -15,7 +15,7 @@ type recordingExtractor struct {
 	spans []EntitySpan
 }
 
-func (e *recordingExtractor) Extract(_ context.Context, text string, _ []string) ([]EntitySpan, error) {
+func (e *recordingExtractor) Extract(_ context.Context, text string) ([]EntitySpan, error) {
 	e.calls = append(e.calls, text)
 	return append([]EntitySpan(nil), e.spans...), nil
 }

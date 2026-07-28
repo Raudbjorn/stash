@@ -143,9 +143,10 @@ type EntitySpan struct {
 	Score     float64
 }
 
-// EntityExtractor supplies optional local typed entity evidence.
+// EntityExtractor supplies optional local typed entity evidence. Its label
+// prompt is fixed by the extractor implementation and its model tensor shape.
 type EntityExtractor interface {
-	Extract(ctx context.Context, text string, labels []string) ([]EntitySpan, error)
+	Extract(ctx context.Context, text string) ([]EntitySpan, error)
 }
 
 // Inputs contains bounded typed sources and optional learned extraction.

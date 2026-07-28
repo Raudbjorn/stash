@@ -32,13 +32,13 @@ func getNamePlausibilityScorer() metadata.NamePlausibilityScorer {
 
 type managedSceneMetadataExtractor struct{}
 
-func (managedSceneMetadataExtractor) Extract(ctx context.Context, text string, labels []string) ([]metadata.EntitySpan, error) {
+func (managedSceneMetadataExtractor) Extract(ctx context.Context, text string) ([]metadata.EntitySpan, error) {
 	sceneMetadataEntityMu.RLock()
 	defer sceneMetadataEntityMu.RUnlock()
 	if sceneMetadataEntityExtractor == nil {
 		return nil, entity.ErrBundleMissing
 	}
-	return sceneMetadataEntityExtractor.Extract(ctx, text, labels)
+	return sceneMetadataEntityExtractor.Extract(ctx, text)
 }
 
 func getSceneMetadataEntityExtractor() metadata.EntityExtractor {
