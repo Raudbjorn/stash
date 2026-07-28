@@ -75,14 +75,38 @@ dependencies (torch, tensorflow, gradio, deepface) - its
 `requirements.txt` says as much ("Don't install this manually"). Never
 fold those into the shared venv.
 
-## Known follow-up (not yet addressed)
+## Known follow-up: `imghdr` removal in the `stash-sqlite` scraper (patched)
 
-`scrapers/community/stash-sqlite/stash-sqlite.py` imports the stdlib
-`imghdr` module, which Python 3.13 removed entirely (PEP 594). That
-scraper will fail under this venv if it's actually invoked. Not fixed
-here since it requires patching vendored scraper source and it's unclear
-whether that scraper is in active use - flagging it for whoever picks
-this up next.
+`scrapers/community/stash-sqlite/stash-sqlite.py` imported the stdlib
+`imghdr` module, which Python 3.13 removed entirely (PEP 594), causing
+`ModuleNotFoundError: No module named 'imghdr'` when that scraper ran
+under this venv.
+
+Patched directly on the host (2026-07-28) - `pillow` is already part of
+this venv's package set, so no new dependency was needed. The single
+call site,
+
+```python
+img_type = imghdr.what(None, h=image_data) or 'jpeg'
+```
+
+was replaced with:
+
+```python
+try:
+    img_type = (Image.open(io.BytesIO(image_data)).format or 'JPEG').lower()
+except Exception:
+    img_type = 'jpeg'
+```
+
+(plus `import io` and `from PIL import Image`, dropping `import imghdr`).
+A backup of the pre-patch file was left alongside it as
+`stash-sqlite.py.bak.20260728`.
+
+**This scraper is vendored content, not tracked in this repo** (same
+category as this whole directory) - if `scrapers/community/stash-sqlite/`
+is ever resynced or updated from upstream, this patch will be silently
+lost and needs reapplying.
 
 ## Usage
 
