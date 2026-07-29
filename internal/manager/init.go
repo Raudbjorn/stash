@@ -25,6 +25,7 @@ import (
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models/paths"
 	"github.com/stashapp/stash/pkg/plugin"
+	"github.com/stashapp/stash/pkg/python"
 	"github.com/stashapp/stash/pkg/scene"
 	"github.com/stashapp/stash/pkg/scraper"
 	"github.com/stashapp/stash/pkg/session"
@@ -195,6 +196,7 @@ func initJobManager(cfg *config.Config) *job.Manager {
 // is valid.
 func (s *Manager) postInit(ctx context.Context) error {
 	s.RefreshConfig()
+	s.PythonManager = python.NewManager(filepath.Join(s.Config.GetConfigPathAbs(), "python"))
 
 	s.SessionStore = session.NewStore(s.Config)
 	s.PluginCache.RegisterSessionStore(s.SessionStore)

@@ -40,6 +40,7 @@ type GlobalConfig interface {
 	GetScraperCDPPath() string
 	GetScraperCertCheck() bool
 	GetPythonPath() string
+	GetPythonRuntimeID() string
 	GetProxy() string
 	GetScraperExcludeTagPatterns() []string
 }

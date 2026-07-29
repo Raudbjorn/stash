@@ -148,3 +148,20 @@ func TestExecuteTask(t *testing.T) {
 	assert.Len(j.Details, 0)
 	m.mutex.Unlock()
 }
+
+func TestBeginTaskIdempotentCleanup(t *testing.T) {
+	m := NewManager()
+	j := &Job{}
+	p := createProgress(m, j)
+
+	end := p.BeginTask("resolving packages")
+	m.mutex.Lock()
+	assert.Equal(t, []string{"resolving packages"}, j.Details)
+	m.mutex.Unlock()
+
+	end()
+	end()
+	m.mutex.Lock()
+	assert.Empty(t, j.Details)
+	m.mutex.Unlock()
+}

@@ -1,0 +1,33 @@
+mutation InstallPythonManager {
+  installPythonManager
+}
+
+mutation InstallPythonRuntime($id: ID!) {
+  installPythonRuntime(id: $id)
+}
+
+mutation SelectPythonRuntime($id: ID!) {
+  selectPythonRuntime(id: $id)
+}
+
+mutation InstallPythonPackages($names: [String!]!) {
+  installPythonPackages(names: $names)
+}
+
+mutation UpdatePythonPackages($names: [String!]) {
+  updatePythonPackages(names: $names)
+}
+
+mutation UninstallPythonPackages($names: [String!]!) {
+  uninstallPythonPackages(names: $names)
+}
+
+mutation ConfigurePythonIndexes($indexes: [PythonIndexInput!]!) {
+  configurePythonIndexes(indexes: $indexes) {
+    ...PythonIndexData
+  }
+}
+
+mutation RefreshPythonPackageCatalog($index: String) {
+  refreshPythonPackageCatalog(index: $index)
+}
