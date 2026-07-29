@@ -415,14 +415,26 @@ func matchScrapedIdentityToLibrary(candidate string, library []performerIdentity
 		libraryByID[identity.ID] = identity
 	}
 
+	matchedID := 0
+	acceptEvidence := func(matches map[int]struct{}) bool {
+		if len(matches) == 0 {
+			return true
+		}
+		id, ok := singleID(matches)
+		if !ok || matchedID != 0 && matchedID != id {
+			return false
+		}
+		matchedID = id
+		return true
+	}
 	stored := make(map[int]struct{})
 	for _, identity := range verified {
 		if _, exists := libraryByID[identity.StoredID]; identity.StoredID > 0 && exists {
 			stored[identity.StoredID] = struct{}{}
 		}
 	}
-	if id, ok := singleID(stored); ok {
-		return id, true
+	if !acceptEvidence(stored) {
+		return 0, false
 	}
 
 	scrapedURLs := normalizedURLSetFromScraped(verified)
@@ -437,8 +449,8 @@ func matchScrapedIdentityToLibrary(candidate string, library []performerIdentity
 			}
 		}
 	}
-	if id, ok := singleID(urlMatches); ok {
-		return id, true
+	if !acceptEvidence(urlMatches) {
+		return 0, false
 	}
 
 	candidateKey := metadata.NormalizeKey(candidate)
@@ -458,8 +470,8 @@ func matchScrapedIdentityToLibrary(candidate string, library []performerIdentity
 			disambiguationMatches[identity.ID] = struct{}{}
 		}
 	}
-	if id, ok := singleID(disambiguationMatches); ok {
-		return id, true
+	if !acceptEvidence(disambiguationMatches) {
+		return 0, false
 	}
 
 	birthdates := make(map[string]struct{})
@@ -480,7 +492,10 @@ func matchScrapedIdentityToLibrary(candidate string, library []performerIdentity
 			birthdateMatches[identity.ID] = struct{}{}
 		}
 	}
-	return singleID(birthdateMatches)
+	if !acceptEvidence(birthdateMatches) || matchedID == 0 {
+		return 0, false
+	}
+	return matchedID, true
 }
 
 func scrapedIdentityComponents(verified []scrapedPerformerIdentity, library []performerIdentity) [][]scrapedPerformerIdentity {

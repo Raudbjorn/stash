@@ -562,6 +562,56 @@ func TestAnalyzeSceneMetadataStrongIdentity(t *testing.T) {
 	}
 }
 
+func TestMatchScrapedIdentityToLibraryRejectsConflictingEvidence(t *testing.T) {
+	library := []performerIdentity{
+		{ID: 1, Name: "Jane Doe", Disambiguation: "one", URLs: []string{"https://example.com/one"}},
+		{ID: 2, Name: "Jane Doe", Disambiguation: "two", URLs: []string{"https://example.com/two"}},
+	}
+	for _, test := range []struct {
+		name     string
+		verified []scrapedPerformerIdentity
+		wantID   int
+		wantOK   bool
+	}{
+		{
+			name: "conflicting stored IDs are not broken by a URL",
+			verified: []scrapedPerformerIdentity{
+				{Name: "Jane Doe", StoredID: 1, URLs: []string{"https://example.com/one"}},
+				{Name: "Jane Doe", StoredID: 2},
+			},
+		},
+		{
+			name: "stored ID and URL tiers disagree",
+			verified: []scrapedPerformerIdentity{
+				{Name: "Jane Doe", StoredID: 1},
+				{Name: "Jane Doe", URLs: []string{"https://example.com/two"}},
+			},
+		},
+		{
+			name: "multiple URL matches remain ambiguous",
+			verified: []scrapedPerformerIdentity{
+				{Name: "Jane Doe", URLs: []string{"https://example.com/one"}},
+				{Name: "Jane Doe", URLs: []string{"https://example.com/two"}},
+			},
+		},
+		{
+			name: "consistent stable evidence resolves",
+			verified: []scrapedPerformerIdentity{
+				{Name: "Jane Doe", StoredID: 1, URLs: []string{"https://example.com/one"}, Disambiguation: "one"},
+			},
+			wantID: 1,
+			wantOK: true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			gotID, gotOK := matchScrapedIdentityToLibrary("Jane Doe", library, test.verified)
+			if gotID != test.wantID || gotOK != test.wantOK {
+				t.Fatalf("matchScrapedIdentityToLibrary() = (%d, %v), want (%d, %v)", gotID, gotOK, test.wantID, test.wantOK)
+			}
+		})
+	}
+}
+
 func TestAnalyzeSceneMetadataIndistinguishableResults(t *testing.T) {
 	remote := "same-remote"
 	stable := []scrapedPerformerIdentity{

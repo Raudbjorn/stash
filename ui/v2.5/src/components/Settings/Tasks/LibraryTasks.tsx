@@ -790,6 +790,7 @@ export const LibraryTasks: React.FC = () => {
                   option.value
                 )
               )}
+              isLoading={false}
               isMulti
               closeMenuOnSelect={false}
               onChange={(selected) =>
