@@ -67,11 +67,12 @@ export const PythonPackages: React.FC<PythonPackagesProps> = ({
   });
 
   const packages = useMemo(() => {
+    if (!runtimeAvailable) return [];
     const term = filter.trim().toLowerCase();
     return (packageQuery.data?.pythonPackages ?? []).filter(
       (pkg) => !term || pkg.name.toLowerCase().includes(term)
     );
-  }, [filter, packageQuery.data]);
+  }, [filter, packageQuery.data, runtimeAvailable]);
 
   const availableNames = useMemo(() => {
     const results = [...(searchQuery.data?.searchPythonPackages ?? [])];
@@ -222,7 +223,7 @@ export const PythonPackages: React.FC<PythonPackagesProps> = ({
         <Button
           variant="secondary"
           onClick={adding ? () => setAdding(false) : openAddPackages}
-          disabled={!managerAvailable}
+          disabled={!managerAvailable || !runtimeAvailable}
         >
           <FormattedMessage id="config.python.add_packages" />
         </Button>
