@@ -77,19 +77,30 @@ func (m *Manager) RefreshCatalog(ctx context.Context, index Index, reporter Repo
 	if err != nil {
 		return err
 	}
+	var storedURL string
 	var etag, lastModified sql.NullString
-	_ = db.QueryRowContext(ctx, `SELECT etag, last_modified FROM indexes WHERE name = ?`, index.Name).Scan(&etag, &lastModified)
+	scanErr := db.QueryRowContext(
+		ctx,
+		`SELECT url, etag, last_modified FROM indexes WHERE name = ?`,
+		index.Name,
+	).Scan(&storedURL, &etag, &lastModified)
+	if scanErr != nil && !errors.Is(scanErr, sql.ErrNoRows) {
+		return scanErr
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, index.URL, nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Accept", "application/vnd.pypi.simple.v1+json")
-	if etag.Valid {
-		req.Header.Set("If-None-Match", etag.String)
-	}
-	if lastModified.Valid {
-		req.Header.Set("If-Modified-Since", lastModified.String)
+	reusedValidator := scanErr == nil && storedURL == index.URL && (etag.Valid || lastModified.Valid)
+	if scanErr == nil && storedURL == index.URL {
+		if etag.Valid {
+			req.Header.Set("If-None-Match", etag.String)
+		}
+		if lastModified.Valid {
+			req.Header.Set("If-Modified-Since", lastModified.String)
+		}
 	}
 	client := *m.httpClient
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -111,8 +122,13 @@ func (m *Manager) RefreshCatalog(ctx context.Context, index Index, reporter Repo
 	}
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusNotModified {
+		if !reusedValidator {
+			err = fmt.Errorf("package index %s returned unexpected %s", index.Name, response.Status)
+			m.recordCatalogError(db, index, err)
+			return err
+		}
 		now := m.now().UTC().Format(time.RFC3339Nano)
-		_, err = db.ExecContext(ctx, `UPDATE indexes SET url=?, refreshed_at=?, error_at=NULL, error=NULL WHERE name=?`, index.URL, now, index.Name)
+		_, err = db.ExecContext(ctx, `UPDATE indexes SET refreshed_at=?, error_at=NULL, error=NULL WHERE name=?`, now, index.Name)
 		return err
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
@@ -333,7 +349,10 @@ func (m *Manager) replaceCatalogProjects(ctx context.Context, db *sql.DB, index 
 func (m *Manager) recordCatalogError(db *sql.DB, index Index, catalogErr error) {
 	now := m.now().UTC().Format(time.RFC3339Nano)
 	_, _ = db.Exec(`INSERT INTO indexes(name,url,error_at,error) VALUES(?,?,?,?)
-		ON CONFLICT(name) DO UPDATE SET url=excluded.url,error_at=excluded.error_at,error=excluded.error`, index.Name, index.URL, now, catalogErr.Error())
+		ON CONFLICT(name) DO UPDATE SET url=excluded.url,
+		etag=CASE WHEN indexes.url=excluded.url THEN indexes.etag ELSE NULL END,
+		last_modified=CASE WHEN indexes.url=excluded.url THEN indexes.last_modified ELSE NULL END,
+		error_at=excluded.error_at,error=excluded.error`, index.Name, index.URL, now, catalogErr.Error())
 }
 
 func (m *Manager) CatalogStatuses(ctx context.Context, indexes []Index) ([]CatalogStatus, error) {

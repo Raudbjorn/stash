@@ -251,18 +251,20 @@ export const PythonIndexes: React.FC<PythonIndexesProps> = ({
             <Form.Label><FormattedMessage id="name" /></Form.Label>
             <Form.Control
               value={editing?.name ?? ""}
-              onChange={(event) =>
-                setEditing((current) => current && ({ ...current, name: event.currentTarget.value }))
-              }
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                setEditing((current) => current && ({ ...current, name: value }));
+              }}
             />
           </Form.Group>
           <Form.Group controlId="python-index-url">
             <Form.Label>URL</Form.Label>
             <Form.Control
               value={editing?.url ?? ""}
-              onChange={(event) =>
-                setEditing((current) => current && ({ ...current, url: event.currentTarget.value }))
-              }
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                setEditing((current) => current && ({ ...current, url: value }));
+              }}
             />
           </Form.Group>
           {editing && !validateIndex(editing, values) && (

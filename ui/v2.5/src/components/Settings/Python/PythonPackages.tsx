@@ -23,6 +23,7 @@ interface PythonPackagesProps {
   indexes: PythonIndexDataFragment[];
   catalogs: PythonCatalogStatusDataFragment[];
   managerAvailable: boolean;
+  runtimeAvailable: boolean;
   managedEnvironment: boolean;
   busy: boolean;
   onStartJob: StartPythonJob;
@@ -34,6 +35,7 @@ export const PythonPackages: React.FC<PythonPackagesProps> = ({
   indexes,
   catalogs,
   managerAvailable,
+  runtimeAvailable,
   managedEnvironment,
   busy,
   onStartJob,
@@ -50,7 +52,7 @@ export const PythonPackages: React.FC<PythonPackagesProps> = ({
 
   const packageQuery = usePythonPackagesQuery({
     variables: { outdated },
-    skip: !managerAvailable,
+    skip: !managerAvailable || !runtimeAvailable,
     notifyOnNetworkStatusChange: true,
   });
 
@@ -137,11 +139,15 @@ export const PythonPackages: React.FC<PythonPackagesProps> = ({
 
   return (
     <>
-      {!managedEnvironment && (
+      {!runtimeAvailable ? (
+        <div className="alert alert-info m-3">
+          <FormattedMessage id="config.python.packages_no_runtime" />
+        </div>
+      ) : !managedEnvironment ? (
         <div className="alert alert-warning m-3">
           <FormattedMessage id="config.python.packages_read_only" />
         </div>
-      )}
+      ) : null}
       <div className="python-toolbar">
         <ClearableInput
           value={filter}
@@ -150,7 +156,7 @@ export const PythonPackages: React.FC<PythonPackagesProps> = ({
         />
         <Button
           variant="secondary"
-          disabled={busy || !managerAvailable}
+          disabled={busy || !managerAvailable || !runtimeAvailable}
           onClick={() => setOutdated(true)}
         >
           <FormattedMessage id="config.python.check_updates" />

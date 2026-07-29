@@ -548,6 +548,7 @@
       "package_index": "Package index",
       "package_indexes": "Package indexes",
       "package_indexes_description": "Ordered sources used for package operations and package search. Exactly one index must be the default.",
+      "packages_no_runtime": "Install or select a Python runtime to inspect and manage packages.",
       "packages_read_only": "This is an external environment. Installed packages are visible, but Stash will not modify them. Choose Use on an installed runtime to create an isolated environment.",
       "provenance": "Source",
       "refresh_catalogs": "Refresh catalogs",

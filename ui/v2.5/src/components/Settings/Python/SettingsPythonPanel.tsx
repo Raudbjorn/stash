@@ -91,6 +91,7 @@ export const SettingsPythonPanel: React.FC = () => {
           indexes={pythonIndexes}
           catalogs={pythonCatalogs}
           managerAvailable={managerAvailable}
+          runtimeAvailable={!!pythonStatus.selectedRuntime}
           managedEnvironment={pythonStatus.managedEnvironment}
           busy={busy}
           onStartJob={startJob}

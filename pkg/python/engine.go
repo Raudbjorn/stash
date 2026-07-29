@@ -42,6 +42,9 @@ func (m *Manager) EngineStatus(ctx context.Context) ManagerStatus {
 
 	version, err := m.validateEngine(ctx, path)
 	if err != nil {
+		if source == EngineSourceManaged && errors.Is(err, os.ErrNotExist) {
+			return ManagerStatus{Path: stringPtr(path)}
+		}
 		message := err.Error()
 		return ManagerStatus{Path: stringPtr(path), Error: &message}
 	}
