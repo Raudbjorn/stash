@@ -36,11 +36,13 @@ import { SelectComponent } from "src/components/Shared/Select";
 interface IAnalyzeSceneMetadataTaskDefaults {
   dryRun: boolean;
   performerVerifierScraperIDs: string[];
+  performerVerifierStashBoxEndpoints: string[];
   performerConfidenceThreshold: number;
   dateConfidenceThreshold: number;
   overwriteExistingDate: boolean;
   overwriteExistingTitle: boolean;
   useDetails: boolean;
+  useLocalAIContext: boolean;
 }
 
 interface IAutoTagOptions {
@@ -149,11 +151,13 @@ export const LibraryTasks: React.FC = () => {
     useState<IAnalyzeSceneMetadataTaskDefaults>({
       dryRun: true,
       performerVerifierScraperIDs: [],
+      performerVerifierStashBoxEndpoints: [],
       performerConfidenceThreshold: 0.6,
       dateConfidenceThreshold: 0.6,
       overwriteExistingDate: false,
       overwriteExistingTitle: false,
       useDetails: false,
+      useLocalAIContext: false,
     });
   const [
     analyzeSceneMetadataOptionsInitialized,
@@ -169,6 +173,7 @@ export const LibraryTasks: React.FC = () => {
     loading: entityModelStatusLoading,
     refetch: refetchEntityModelStatus,
   } = useSceneMetadataEntityModelStatus();
+  const { configuration } = useConfigurationContext();
   const entityModelStatus =
     entityModelStatusData?.sceneMetadataEntityModelStatus;
   const performerVerifierOptions = useMemo(
@@ -180,10 +185,17 @@ export const LibraryTasks: React.FC = () => {
         .map((s) => ({ label: s.name, value: s.id })),
     [performerScrapersData]
   );
+  const stashBoxVerifierOptions = useMemo(
+    () =>
+      configuration.general.stashBoxes.map((box) => ({
+        label: box.name ? `${box.name} — ${box.endpoint}` : box.endpoint,
+        value: box.endpoint,
+      })),
+    [configuration.general.stashBoxes]
+  );
 
   type DialogOpenState = typeof dialogOpen;
 
-  const { configuration } = useConfigurationContext();
   const [configRead, setConfigRead] = useState(false);
 
   useEffect(() => {
@@ -238,6 +250,14 @@ export const LibraryTasks: React.FC = () => {
       | Partial<IAnalyzeSceneMetadataTaskDefaults>
       | undefined;
     const requestedIDs = persisted?.performerVerifierScraperIDs ?? [];
+    const requestedStashBoxEndpoints =
+      persisted?.performerVerifierStashBoxEndpoints ?? [];
+    const availableStashBoxEndpoints = new Set(
+      stashBoxVerifierOptions.map((option) => option.value)
+    );
+    const reconciledStashBoxEndpoints = requestedStashBoxEndpoints.filter(
+      (endpoint) => availableStashBoxEndpoints.has(endpoint)
+    );
     const availableIDs = new Set(
       performerVerifierOptions.map((option) => option.value)
     );
@@ -245,12 +265,14 @@ export const LibraryTasks: React.FC = () => {
     const nextOptions: IAnalyzeSceneMetadataTaskDefaults = {
       dryRun: persisted?.dryRun ?? true,
       performerVerifierScraperIDs: reconciledIDs,
+      performerVerifierStashBoxEndpoints: reconciledStashBoxEndpoints,
       performerConfidenceThreshold:
         persisted?.performerConfidenceThreshold ?? 0.6,
       dateConfidenceThreshold: persisted?.dateConfidenceThreshold ?? 0.6,
       overwriteExistingDate: persisted?.overwriteExistingDate ?? false,
       overwriteExistingTitle: persisted?.overwriteExistingTitle ?? false,
       useDetails: persisted?.useDetails ?? false,
+      useLocalAIContext: persisted?.useLocalAIContext ?? false,
     };
 
     setAnalyzeSceneMetadataOptions(nextOptions);
@@ -263,7 +285,8 @@ export const LibraryTasks: React.FC = () => {
           persisted[key as keyof IAnalyzeSceneMetadataTaskDefaults] ===
           undefined
       ) ||
-      reconciledIDs.length !== requestedIDs.length
+      reconciledIDs.length !== requestedIDs.length ||
+      reconciledStashBoxEndpoints.length !== requestedStashBoxEndpoints.length
     ) {
       saveUI({
         taskDefaults: {
@@ -278,6 +301,7 @@ export const LibraryTasks: React.FC = () => {
     performerScrapersLoading,
     performerScrapersError,
     performerVerifierOptions,
+    stashBoxVerifierOptions,
     saveUI,
     taskDefaults,
   ]);
@@ -399,9 +423,12 @@ export const LibraryTasks: React.FC = () => {
         intl.formatMessage(
           { id: "config.tasks.added_job_to_queue" },
           {
-            operation_name: intl.formatMessage({
-              id: "config.tasks.analyze_scene_metadata.model.install",
-            }),
+            operation_name: intl.formatMessage(
+              {
+                id: "config.tasks.analyze_scene_metadata.model.install",
+              },
+              { model: entityModelStatus?.modelID ?? "entity model" }
+            ),
           }
         )
       );
@@ -698,10 +725,14 @@ export const LibraryTasks: React.FC = () => {
               onClick={installSceneMetadataEntityModel}
               disabled={
                 entityModelStatusLoading ||
+                !entityModelStatus?.runtimeAvailable ||
                 entityModelStatus?.state === "loading"
               }
             >
-              <FormattedMessage id="config.tasks.analyze_scene_metadata.model.install" />
+              <FormattedMessage
+                id="config.tasks.analyze_scene_metadata.model.install"
+                values={{ model: entityModelStatus?.modelID ?? "entity model" }}
+              />
             </Button>
             <Button
               variant="secondary"
@@ -746,6 +777,36 @@ export const LibraryTasks: React.FC = () => {
             />
             <Form.Text className="text-muted">
               <FormattedMessage id="config.tasks.analyze_scene_metadata.performer_verifier_scrapers.help" />
+            </Form.Text>
+          </Form.Group>
+          <Form.Group controlId="analyze-scene-metadata-verifier-stash-boxes">
+            <Form.Label>
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.performer_verifier_stash_boxes.label" />
+            </Form.Label>
+            <SelectComponent
+              items={stashBoxVerifierOptions}
+              selectedOptions={stashBoxVerifierOptions.filter((option) =>
+                analyzeSceneMetadataOptions.performerVerifierStashBoxEndpoints.includes(
+                  option.value
+                )
+              )}
+              isLoading={false}
+              isMulti
+              closeMenuOnSelect={false}
+              onChange={(selected) =>
+                onSetAnalyzeSceneMetadataOptions({
+                  performerVerifierStashBoxEndpoints: selected.map(
+                    (option) => option.value
+                  ),
+                })
+              }
+              className="form-control react-select"
+              placeholder={intl.formatMessage({
+                id: "config.tasks.analyze_scene_metadata.performer_verifier_stash_boxes.placeholder",
+              })}
+            />
+            <Form.Text className="text-muted">
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.performer_verifier_stash_boxes.help" />
             </Form.Text>
           </Form.Group>
           <div className="row">
@@ -801,6 +862,20 @@ export const LibraryTasks: React.FC = () => {
             onChange={() =>
               onSetAnalyzeSceneMetadataOptions({
                 useDetails: !analyzeSceneMetadataOptions.useDetails,
+              })
+            }
+            className="mb-2"
+          />
+          <Form.Check
+            id="analyze-scene-metadata-use-local-ai-context"
+            checked={analyzeSceneMetadataOptions.useLocalAIContext}
+            label={intl.formatMessage({
+              id: "config.tasks.analyze_scene_metadata.use_local_ai_context",
+            })}
+            onChange={() =>
+              onSetAnalyzeSceneMetadataOptions({
+                useLocalAIContext:
+                  !analyzeSceneMetadataOptions.useLocalAIContext,
               })
             }
             className="mb-2"

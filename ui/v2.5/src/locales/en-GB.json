@@ -550,7 +550,7 @@
         "description": "Analyzes filename, title, adjacent NFO, and container metadata to link performers, studios, dates, and explicit movie scenes, then proposes a clean title. Existing metadata is preserved unless its overwrite control is enabled.",
         "model": {
           "checking": "Checking local entity model…",
-          "install": "Install local entity model",
+          "install": "Download and install {model}",
           "label": "Local entity extraction",
           "reload": "Reload model",
           "reloaded": "Local entity model reloaded",
@@ -564,11 +564,17 @@
           "label": "New performer confidence threshold"
         },
         "performer_verifier_scrapers": {
-          "help": "Only selected scrapers verify newly discovered performer names. An empty selection disables network verification and creation of newly discovered performers.",
+          "help": "Selected name scrapers and Stash-box endpoints verify newly discovered performer identities. Leaving both selections empty disables network verification and creation of newly discovered performers.",
           "label": "Performer verification scrapers",
           "placeholder": "Select performer scrapers…"
         },
-        "use_details": "Also analyze scene details"
+        "performer_verifier_stash_boxes": {
+          "help": "Uses exact-name performer results from the selected configured Stash-box APIs. Configure endpoints under Settings > Metadata providers.",
+          "label": "Performer verification Stash-box endpoints",
+          "placeholder": "Select Stash-box endpoints…"
+        },
+        "use_details": "Also analyze scene details",
+        "use_local_ai_context": "Use local AI context for ambiguous performer names"
       },
       "anonymise_and_download": "Makes an anonymised copy of the database and downloads the resulting file.",
       "anonymise_database": "Makes a copy of the database to the backups directory, anonymising all sensitive data. This can then be provided to others for troubleshooting and debugging purposes. The original database is not modified. Anonymised database uses the filename format {filename_format}.",

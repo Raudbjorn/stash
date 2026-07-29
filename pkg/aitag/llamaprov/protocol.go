@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 
 	"github.com/stashapp/stash/pkg/aitag"
@@ -61,12 +62,69 @@ type completionResponse struct {
 
 // ClassifyFrame returns one complete yes/no decision map for a raw RGB frame.
 func (p *Provider) ClassifyFrame(ctx context.Context, rgb []byte, width, height int) (map[string]bool, error) {
-	if p.waitReady != nil {
-		if err := p.waitReady(ctx); err != nil {
-			return nil, err
-		}
+	if err := p.waitUntilReady(ctx); err != nil {
+		return nil, err
 	}
 	return p.classifyFrame(ctx, rgb, width, height)
+}
+
+// CompleteJSON performs one bounded strict-schema text completion.
+func (p *Provider) CompleteJSON(ctx context.Context, systemPrompt, userPrompt, schemaName string, schema json.RawMessage, maxTokens int, target any) error {
+	if maxTokens <= 0 || maxTokens > 1024 {
+		return fmt.Errorf("max tokens must be between 1 and 1024")
+	}
+	if strings.TrimSpace(schemaName) == "" || !json.Valid(schema) {
+		return fmt.Errorf("a valid named JSON schema is required")
+	}
+	var schemaObject map[string]any
+	if err := json.Unmarshal(schema, &schemaObject); err != nil || schemaObject == nil {
+		return fmt.Errorf("a valid named JSON schema is required")
+	}
+	if target == nil {
+		return fmt.Errorf("completion target is required")
+	}
+	targetValue := reflect.ValueOf(target)
+	if targetValue.Kind() != reflect.Pointer || targetValue.IsNil() {
+		return fmt.Errorf("completion target must be a non-nil pointer")
+	}
+	if err := p.waitUntilReady(ctx); err != nil {
+		return err
+	}
+	payload := completionRequest{
+		Model: p.pair.Name,
+		Messages: []message{
+			{Role: "system", Content: []contentPart{{Type: "text", Text: systemPrompt}}},
+			{Role: "user", Content: []contentPart{{Type: "text", Text: userPrompt}}},
+		},
+		Temperature: 0,
+		Stream:      false,
+		CachePrompt: true,
+		MaxTokens:   maxTokens,
+		ResponseFormat: responseFormat{
+			Type: "json_schema",
+			JSONSchema: jsonSchema{
+				Name: strings.TrimSpace(schemaName), Strict: true, Schema: schema,
+			},
+		},
+	}
+	content, err := p.complete(ctx, payload)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(content, target); err != nil {
+		return fmt.Errorf("decode llama VLM completion: %w", err)
+	}
+	return nil
+}
+
+func (p *Provider) waitUntilReady(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if p.waitReady != nil {
+		return p.waitReady(ctx)
+	}
+	return nil
 }
 
 func (p *Provider) classifyFrame(ctx context.Context, rgb []byte, width, height int) (map[string]bool, error) {
@@ -95,6 +153,14 @@ func (p *Provider) classifyFrame(ctx context.Context, rgb []byte, width, height 
 			},
 		},
 	}
+	content, err := p.complete(ctx, payload)
+	if err != nil {
+		return nil, err
+	}
+	return p.parseDecisions(content)
+}
+
+func (p *Provider) complete(ctx context.Context, payload completionRequest) ([]byte, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
@@ -117,7 +183,6 @@ func (p *Provider) classifyFrame(ctx context.Context, rgb []byte, width, height 
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return nil, parseServerError(response.StatusCode, responseBody)
 	}
-
 	var completion completionResponse
 	if err := json.Unmarshal(responseBody, &completion); err != nil {
 		return nil, fmt.Errorf("decode llama VLM response: %w", err)
@@ -129,7 +194,7 @@ func (p *Provider) classifyFrame(ctx context.Context, rgb []byte, width, height 
 	if err := json.Unmarshal(completion.Choices[0].Message.Content, &content); err != nil || strings.TrimSpace(content) == "" {
 		return nil, fmt.Errorf("llama VLM choice has no textual content")
 	}
-	return p.parseDecisions([]byte(content))
+	return []byte(content), nil
 }
 
 func (p *Provider) parseDecisions(content []byte) (map[string]bool, error) {

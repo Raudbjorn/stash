@@ -22,7 +22,7 @@ var initConfigOnce sync.Once
 // newTestRepository spins up a fresh, isolated on-disk sqlite database (schema
 // created by db.Open's migrations) and returns its repository. The database is
 // closed and removed on test cleanup.
-func newTestRepository(t *testing.T) models.Repository {
+func newTestRepository(t testing.TB) models.Repository {
 	t.Helper()
 
 	initConfigOnce.Do(func() {
