@@ -14,8 +14,11 @@ import (
 	"github.com/stashapp/stash/pkg/scene/metadata/gliner"
 )
 
-// onnxRuntimeLibraryPaths are checked after the configured path and the
-// STASH_ONNXRUNTIME_LIB_PATH headless fallback.
+// onnxRuntimeLibraryPaths are checked after the configured
+// Settings > System path and the STASH_ONNXRUNTIME_LIB_PATH headless fallback.
+// They preserve the native Linux and Alpine defaults used by the former
+// MiniLM-only lifecycle. ONNXRUNTIME_LIB_PATH remains a separate test-only
+// opt-in used by the embedding integration tests.
 var onnxRuntimeLibraryPaths = []string{
 	"/usr/lib/libonnxruntime.so",
 	"/usr/lib/libonnxruntime.so.1",

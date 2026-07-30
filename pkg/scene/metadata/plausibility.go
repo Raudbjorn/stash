@@ -16,7 +16,7 @@ import (
 //     local MiniLM sentence-embedding model run through ONNX Runtime.
 //     Requires the onnxruntime shared library at runtime (not build time -
 //     see pkg/scene/metadata/embedding and
-//     internal/manager/name_plausibility_scorer.go for how the caller
+//     internal/manager/scene_metadata_models.go for how the caller
 //     selects between the two).
 type NamePlausibilityScorer interface {
 	Score(candidate string) float64
