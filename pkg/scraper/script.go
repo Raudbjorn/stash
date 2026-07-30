@@ -448,6 +448,10 @@ func (s *scriptScraper) scrape(ctx context.Context, command []string, input stri
 		var scene *models.ScrapedScene
 		err := s.runScraperScript(ctx, command, input, &scene)
 		return scene, err
+	case ScrapeContentTypeStudio:
+		var studio *models.ScrapedStudio
+		err := s.runScraperScript(ctx, command, input, &studio)
+		return studio, err
 	case ScrapeContentTypeMovie, ScrapeContentTypeGroup:
 		var movie *models.ScrapedMovie
 		err := s.runScraperScript(ctx, command, input, &movie)
@@ -486,6 +490,15 @@ func (s *scriptNameScraper) scrapeByName(ctx context.Context, name string, ty Sc
 		err = s.runScraperScript(ctx, s.definition.Script, input, &scenes)
 		if err == nil {
 			for _, s := range scenes {
+				v := s
+				ret = append(ret, &v)
+			}
+		}
+	case ScrapeContentTypeStudio:
+		var studios []models.ScrapedStudio
+		err = s.runScraperScript(ctx, s.definition.Script, input, &studios)
+		if err == nil {
+			for _, s := range studios {
 				v := s
 				ret = append(ret, &v)
 			}

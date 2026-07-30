@@ -141,6 +141,13 @@ func (g definedScraper) viaName(ctx context.Context, client *http.Client, name s
 
 		s := g.config.getNameScraper(*g.config.SceneByName, client, g.globalConf)
 		return s.scrapeByName(ctx, name, ty)
+	case ScrapeContentTypeStudio:
+		if g.config.StudioByName == nil {
+			break
+		}
+
+		s := g.config.getNameScraper(*g.config.StudioByName, client, g.globalConf)
+		return s.scrapeByName(ctx, name, ty)
 	}
 
 	return nil, fmt.Errorf("%w: cannot load %v by name", ErrNotSupported, ty)

@@ -52,6 +52,18 @@ type AnalyzeSceneMetadataInput struct {
 	// narrow ambiguous exact-name identities. It is off by default.
 	UseLocalAIContext bool `json:"useLocalAIContext"`
 	UseDetails        bool `json:"useDetails"`
+	// StudioVerifierScraperIDs selects configured studio-name scrapers.
+	// StudioVerifierStashBoxEndpoints selects configured Stash-box APIs that
+	// can look up studios by name. When both are empty, network verification
+	// of newly-discovered studio names is disabled.
+	StudioVerifierScraperIDs        []string `json:"studioVerifierScraperIDs"`
+	StudioVerifierStashBoxEndpoints []string `json:"studioVerifierStashBoxEndpoints"`
+	// UseLocalAIStudioProviderSelection optionally uses the active local
+	// llama.cpp provider to choose which configured studio metadata
+	// provider (scraper or Stash-box) should be queried for the scene's
+	// candidate studio name, based on the source strings (filename, title,
+	// NFO, container metadata). Off by default.
+	UseLocalAIStudioProviderSelection bool `json:"useLocalAIStudioProviderSelection"`
 	// OverwriteExistingTitle allows replacing a user-authored scene title.
 	// Without it, only empty or filename-derived default titles are changed.
 	OverwriteExistingTitle bool `json:"overwriteExistingTitle"`
@@ -83,8 +95,10 @@ type analyzeSceneMetadataJob struct {
 	studioRecords               []metadata.NamedAliases
 	groupRecords                []metadata.NamedAliases
 	performerVerifierScrapers   []*scraper.Scraper
+	studioVerifierScrapers      []*scraper.Scraper
 	configuredStashBoxes        []*models.StashBox
 	performerVerifierStashBoxes []performerStashBoxVerifier
+	studioVerifierStashBoxes    []studioStashBoxVerifier
 	completer                   structuredTextCompleter
 	lastVerifierScraperIDs      []string
 }
@@ -96,6 +110,8 @@ func (j *analyzeSceneMetadataJob) Execute(ctx context.Context, progress *job.Pro
 	}
 	j.resolvePerformerVerifierScrapers()
 	j.resolvePerformerVerifierStashBoxes()
+	j.resolveStudioVerifierScrapers()
+	j.resolveStudioVerifierStashBoxes()
 
 	sceneIDs, err := stringslice.StringSliceToIntSlice(j.input.SceneIDs)
 	if err != nil {
@@ -405,6 +421,18 @@ func (j *analyzeSceneMetadataJob) processScene(ctx context.Context, sc *models.S
 		partial.StudioID = models.NewOptionalInt(*analysis.StudioID)
 		sceneDirty = true
 	}
+	if sc.StudioID == nil {
+		if resolved, err := j.maybeResolveStudioCandidate(ctx, sc.ID, &analysis, sources); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			logger.Warnf("[scene metadata] scene %d: studio resolver error: %v", sc.ID, err)
+		} else if resolved != nil {
+			partial.StudioID = models.NewOptionalInt(resolved.StudioID)
+			sceneDirty = true
+			logStudioResolution(sc.ID, *resolved)
+		}
+	}
 	if resolvedDate := analysis.Date; resolvedDate != nil {
 		threshold := j.dateConfidenceThreshold()
 		sameExistingDate := sc.Date != nil && sc.Date.Time.Format("2006-01-02") == resolvedDate.Date.Format("2006-01-02")
@@ -520,4 +548,48 @@ func mergeIDs(existing, resolved []int) []int {
 	}
 
 	return ret
+}
+
+// maybeResolveStudioCandidate runs the studio resolver only when the
+// deterministic analyzer did not already produce a confident studio
+// ID. Returns nil with no error when there is nothing to do (no
+// candidate, no provider pool, or the analyzer already resolved one).
+func (j *analyzeSceneMetadataJob) maybeResolveStudioCandidate(ctx context.Context, sceneID int, analysis *metadata.Analysis, sources []metadata.Source) (*studioResolution, error) {
+	if !j.studioPoolAvailable() && !j.input.UseLocalAIStudioProviderSelection {
+		return nil, nil
+	}
+	if analysis == nil || analysis.StudioCandidate == nil {
+		return nil, nil
+	}
+	candidate := strings.TrimSpace(analysis.StudioCandidate.Value)
+	if candidate == "" {
+		return nil, nil
+	}
+	// If the analyzer already linked the candidate to an existing
+	// library studio, the deterministic path is enough.
+	if analysis.StudioID != nil {
+		return nil, nil
+	}
+	resolved, err := j.resolveStudioCandidate(ctx, sceneID, candidate, sources)
+	if err != nil {
+		return nil, err
+	}
+	if resolved.Status != studioResolutionExisting && resolved.Status != studioResolutionCreated {
+		logStudioResolution(sceneID, resolved)
+		return nil, nil
+	}
+	return &resolved, nil
+}
+
+func logStudioResolution(sceneID int, resolution studioResolution) {
+	logger.Infof(
+		"[scene metadata] studio_resolution scene_id=%d candidate=%q status=%q studio_id=%d matching_ids=%v provider_id=%q reason=%q",
+		sceneID,
+		resolution.Candidate,
+		string(resolution.Status),
+		resolution.StudioID,
+		resolution.MatchingIDs,
+		resolution.ProviderID,
+		resolution.Reason,
+	)
 }
