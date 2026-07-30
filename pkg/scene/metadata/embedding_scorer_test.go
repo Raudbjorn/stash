@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 
+	ort "github.com/yalue/onnxruntime_go"
+
 	"github.com/stashapp/stash/pkg/scene/metadata/embedding"
 )
 
@@ -31,11 +33,19 @@ func loadTestModel(t *testing.T) *embedding.Model {
 		if _, err := os.Stat(path); err != nil {
 			continue
 		}
-		model, err := embedding.Load(path)
-		if err != nil {
+		ort.SetSharedLibraryPath(path)
+		if err := ort.InitializeEnvironment(); err != nil {
 			continue
 		}
-		t.Cleanup(func() { model.Close() })
+		model, err := embedding.Load()
+		if err != nil {
+			_ = ort.DestroyEnvironment()
+			continue
+		}
+		t.Cleanup(func() {
+			_ = model.Close()
+			_ = ort.DestroyEnvironment()
+		})
 		return model
 	}
 

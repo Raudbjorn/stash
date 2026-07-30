@@ -118,6 +118,7 @@ func TestConcurrentConfigAccess(t *testing.T) {
 				i.SetInterface(ContinuePlaylistDefault, i.GetContinuePlaylistDefault())
 				i.SetInterface(PythonPath, i.GetPythonPath())
 				i.SetInterface(OnnxRuntimeLibPath, i.GetOnnxRuntimeLibPath())
+				i.SetInterface(SceneMetadataModelPath, i.GetSceneMetadataModelPath())
 				t.Logf("Worker %v iteration %v took %v", wk, l, time.Since(start))
 			}
 			wg.Done()

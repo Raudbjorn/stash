@@ -38,46 +38,37 @@ func TestFindOnnxRuntimeLibrary(t *testing.T) {
 	})
 }
 
-// resetNamePlausibilityScorerState resets the package-level singleton state
-// to its zero-value defaults (unloaded, heuristic scorer, no model). It's
-// called both before and after TestReloadNamePlausibilityScorer so the test
-// is self-contained regardless of what ran before it in the same process,
-// and doesn't leave state behind for whatever runs after it.
-func resetNamePlausibilityScorerState(t *testing.T) {
+func resetSceneMetadataModelState(t *testing.T) {
 	t.Helper()
-
-	namePlausibilityReloadMu.Lock()
-	namePlausibilityLoaded = false
-	namePlausibilityReloadMu.Unlock()
-
-	namePlausibilityScorerMu.Lock()
-	namePlausibilityScorer = metadata.HeuristicNamePlausibilityScorer{}
-	namePlausibilityModel = nil
-	namePlausibilityScorerMu.Unlock()
+	sceneMetadataModels.mu.Lock()
+	defer sceneMetadataModels.mu.Unlock()
+	if sceneMetadataModels.embeddingModel != nil {
+		_ = sceneMetadataModels.embeddingModel.Close()
+	}
+	sceneMetadataModels.destroyEnvironmentLocked()
+	sceneMetadataModels.loaded = false
+	sceneMetadataModels.embeddingModel = nil
+	sceneMetadataModels.plausibilityScorer = metadata.HeuristicNamePlausibilityScorer{}
 }
 
-// TestReloadNamePlausibilityScorer exercises the reload path with no
-// onnxruntime library available, which is the only path that runs
-// unconditionally in CI. It guards against the two failure modes a reload
-// mechanism can introduce: panicking when there's no previous model to
-// close, and panicking or deadlocking when reloaded repeatedly (simulating
-// repeated Settings saves).
-func TestReloadNamePlausibilityScorer(t *testing.T) {
+// TestReloadSceneMetadataModels exercises repeated fallback reloads.
+func TestReloadSceneMetadataModels(t *testing.T) {
 	originalPaths := onnxRuntimeLibraryPaths
 	onnxRuntimeLibraryPaths = []string{"/does/not/exist"}
 	t.Setenv("STASH_ONNXRUNTIME_LIB_PATH", "")
 
-	resetNamePlausibilityScorerState(t)
+	resetSceneMetadataModelState(t)
 	t.Cleanup(func() {
 		onnxRuntimeLibraryPaths = originalPaths
-		resetNamePlausibilityScorerState(t)
+		resetSceneMetadataModelState(t)
 	})
 
 	assertHeuristic := func(t *testing.T) {
 		t.Helper()
-		scorer := getNamePlausibilityScorer()
-		if _, ok := scorer.(metadata.HeuristicNamePlausibilityScorer); !ok {
-			t.Fatalf("scorer = %T, want metadata.HeuristicNamePlausibilityScorer", scorer)
+		got := getNamePlausibilityScorer().Score("Jane Doe")
+		want := (metadata.HeuristicNamePlausibilityScorer{}).Score("Jane Doe")
+		if got != want {
+			t.Fatalf("score = %v, want heuristic score %v", got, want)
 		}
 	}
 
@@ -86,10 +77,10 @@ func TestReloadNamePlausibilityScorer(t *testing.T) {
 
 	// A forced reload with still nothing available - no previous embedding
 	// model to close, must not panic.
-	reloadNamePlausibilityScorer()
+	reloadSceneMetadataModels()
 	assertHeuristic(t)
 
 	// A second forced reload, simulating a second Settings save in a row.
-	reloadNamePlausibilityScorer()
+	reloadSceneMetadataModels()
 	assertHeuristic(t)
 }

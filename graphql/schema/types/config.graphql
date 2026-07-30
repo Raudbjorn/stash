@@ -192,6 +192,8 @@ input ConfigGeneralInput {
   pythonPath: String
   "ONNX Runtime shared library path, used by the scene metadata analyzer's embedding-based name-plausibility scorer - common install locations are checked if unset"
   onnxRuntimeLibPath: String
+  "Root containing onnx/model_int8.onnx and tokenizer.json for scene metadata entity extraction"
+  sceneMetadataModelPath: String
 
   "Source of scraper packages"
   scraperPackageSources: [PackageSourceInput!]
@@ -352,6 +354,8 @@ type ConfigGeneralResult {
   pythonPath: String!
   "ONNX Runtime shared library path, used by the scene metadata analyzer's embedding-based name-plausibility scorer - common install locations are checked if unset"
   onnxRuntimeLibPath: String!
+  "Root containing onnx/model_int8.onnx and tokenizer.json for scene metadata entity extraction"
+  sceneMetadataModelPath: String!
 
   "Source of scraper packages"
   scraperPackageSources: [PackageSource!]!

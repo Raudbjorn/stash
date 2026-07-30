@@ -4,12 +4,12 @@ import (
 	"errors"
 	"os"
 	"testing"
+
+	ort "github.com/yalue/onnxruntime_go"
 )
 
-// candidateLibraryPaths mirrors the same list embedding_scorer_test.go (in
-// the metadata package) and internal/manager/name_plausibility_scorer.go
-// check, so this test runs wherever those do and skips (not fails)
-// everywhere else.
+// candidateLibraryPaths mirrors the manager's runtime lookup, so this test
+// runs wherever ONNX Runtime is available and skips everywhere else.
 var candidateLibraryPaths = []string{
 	os.Getenv("ONNXRUNTIME_LIB_PATH"),
 	"/usr/lib/libonnxruntime.so",
@@ -27,10 +27,19 @@ func loadTestModel(t *testing.T) *Model {
 		if _, err := os.Stat(path); err != nil {
 			continue
 		}
-		model, err := Load(path)
-		if err != nil {
+		ort.SetSharedLibraryPath(path)
+		if err := ort.InitializeEnvironment(); err != nil {
 			continue
 		}
+		model, err := Load()
+		if err != nil {
+			_ = ort.DestroyEnvironment()
+			continue
+		}
+		t.Cleanup(func() {
+			_ = model.Close()
+			_ = ort.DestroyEnvironment()
+		})
 		return model
 	}
 
@@ -38,11 +47,7 @@ func loadTestModel(t *testing.T) *Model {
 	return nil
 }
 
-// TestModel_EmbedAfterClose pins down the safety mechanism
-// internal/manager/name_plausibility_scorer.go's live reload depends on: a
-// Model reference held by an in-flight job must not run inference against
-// a destroyed onnxruntime session once a Settings-triggered reload has
-// closed it out from under that job.
+// TestModel_EmbedAfterClose pins down safe session teardown.
 func TestModel_EmbedAfterClose(t *testing.T) {
 	model := loadTestModel(t)
 
@@ -59,10 +64,7 @@ func TestModel_EmbedAfterClose(t *testing.T) {
 	}
 }
 
-// TestModel_CloseTwice confirms Close is idempotent - the reload path in
-// internal/manager/name_plausibility_scorer.go only ever closes a given
-// Model once today, but a double-close must stay safe rather than double-
-// freeing the underlying onnxruntime session/environment.
+// TestModel_CloseTwice confirms Close is idempotent.
 func TestModel_CloseTwice(t *testing.T) {
 	model := loadTestModel(t)
 

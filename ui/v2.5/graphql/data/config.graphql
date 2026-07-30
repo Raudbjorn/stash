@@ -62,6 +62,8 @@ fragment ConfigGeneralData on ConfigGeneralResult {
     max_requests_per_minute
   }
   pythonPath
+  onnxRuntimeLibPath
+  sceneMetadataModelPath
   transcodeInputArgs
   transcodeOutputArgs
   liveTranscodeInputArgs

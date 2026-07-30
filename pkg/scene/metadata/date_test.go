@@ -28,7 +28,7 @@ func TestResolveDate(t *testing.T) {
 		{
 			name: "single EXIF signal",
 			signals: []DateSignal{
-				{Date: d(2020, 5, 1), Priority: DatePriorityExif, Source: "exif"},
+				{Date: d(2020, 5, 1), Priority: DatePriorityProduction, Source: "exif"},
 			},
 			wantDate:       d(2020, 5, 1),
 			wantConfidence: 0.95,
@@ -36,8 +36,8 @@ func TestResolveDate(t *testing.T) {
 		{
 			name: "EXIF corroborated by video creation time on same day",
 			signals: []DateSignal{
-				{Date: d(2020, 5, 1), Priority: DatePriorityExif, Source: "exif"},
-				{Date: d(2020, 5, 1), Priority: DatePriorityVideoCreation, Source: "video"},
+				{Date: d(2020, 5, 1), Priority: DatePriorityProduction, Source: "exif"},
+				{Date: d(2020, 5, 1), Priority: DatePriorityContainerCreation, Source: "video"},
 			},
 			wantDate:       d(2020, 5, 1),
 			wantConfidence: dateMaxConfidence,
@@ -45,7 +45,7 @@ func TestResolveDate(t *testing.T) {
 		{
 			name: "EXIF contested by conflicting text date",
 			signals: []DateSignal{
-				{Date: d(2020, 5, 1), Priority: DatePriorityExif, Source: "exif"},
+				{Date: d(2020, 5, 1), Priority: DatePriorityProduction, Source: "exif"},
 				{Date: d(2019, 1, 1), Priority: DatePriorityTextFull, Source: "text"},
 			},
 			wantDate:      d(2020, 5, 1),
@@ -63,7 +63,7 @@ func TestResolveDate(t *testing.T) {
 		{
 			name: "future date beyond sanity bound is discarded",
 			signals: []DateSignal{
-				{Date: d(2099, 1, 1), Priority: DatePriorityExif, Source: "exif"},
+				{Date: d(2099, 1, 1), Priority: DatePriorityProduction, Source: "exif"},
 				{Date: d(2020, 5, 1), Priority: DatePriorityTextFull, Source: "text"},
 			},
 			wantDate:       d(2020, 5, 1),

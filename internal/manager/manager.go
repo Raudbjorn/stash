@@ -165,12 +165,9 @@ func (s *Manager) RefreshStreamManager() {
 	s.StreamManager = ffmpeg.NewStreamManager(cacheDir, s.FFMpeg, s.FFProbe, cfg, s.ReadLockManager)
 }
 
-// RefreshNamePlausibilityScorer reloads the scene metadata analyzer's
-// name-plausibility scorer. Call this when the configured ONNX Runtime
-// library path changes, so the Settings value takes effect without a
-// restart.
-func (s *Manager) RefreshNamePlausibilityScorer() {
-	reloadNamePlausibilityScorer()
+// RefreshSceneMetadataModels reloads every ONNX model used by scene metadata.
+func (s *Manager) RefreshSceneMetadataModels() {
+	reloadSceneMetadataModels()
 }
 
 // RefreshDLNA starts/stops the DLNA service as needed.

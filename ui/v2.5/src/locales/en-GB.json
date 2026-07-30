@@ -466,6 +466,10 @@
         "description": "Path to the onnxruntime shared library (e.g. libonnxruntime.so). Used by the scene metadata analyzer's embedding-based name-plausibility scorer. If blank, common install locations are checked; if none is found, a dependency-free heuristic scorer is used instead.",
         "heading": "ONNX Runtime library path"
       },
+      "scene_metadata_model_path": {
+        "description": "Directory containing the pinned GLiNER onnx/model_int8.onnx graph and tokenizer.json. If blank or invalid, scene metadata analysis keeps deterministic extraction and the name-plausibility fallback.",
+        "heading": "Scene metadata model path"
+      },
       "parallel_scan_head": "Parallel Scan/Generation",
       "plugins_path": {
         "description": "Directory location of plugin configuration files.",

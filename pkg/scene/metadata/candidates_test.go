@@ -18,6 +18,16 @@ func TestExtractNameCandidates(t *testing.T) {
 			want: []string{"Jane Doe"},
 		},
 		{
+			name: "title-cased prose before performer name",
+			text: "You Make Skinny Kenzie Reeves Cum Hard (POV Style)",
+			want: []string{"Kenzie Reeves"},
+		},
+		{
+			name: "common words remain valid name components",
+			text: "Summer Rae and Angel Young",
+			want: []string{"Summer Rae", "Angel Young"},
+		},
+		{
 			name:    "filename with delimiters, studio name excluded",
 			text:    "Studio Name - Jane Doe - Scene Title 1080p",
 			exclude: func(c string) bool { return c == "studio name" },

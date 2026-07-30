@@ -6,18 +6,22 @@ import "time"
 
 // Signal priority tiers, lower is higher priority.
 const (
-	DatePriorityExif          = 1
-	DatePriorityVideoCreation = 2
-	DatePriorityTextFull      = 3
-	DatePriorityTextYearOnly  = 4
+	DatePriorityProduction        = 1
+	DatePriorityContainerDate     = 2
+	DatePriorityTextFull          = 3
+	DatePriorityTextYearOnly      = 4
+	DatePriorityContainerCreation = 5
+	DatePriorityFileModification  = 6
 )
 
 // baseConfidence per priority tier.
 var dateSignalBaseConfidence = map[int]float64{
-	DatePriorityExif:          0.95,
-	DatePriorityVideoCreation: 0.85,
-	DatePriorityTextFull:      0.65,
-	DatePriorityTextYearOnly:  0.4,
+	DatePriorityProduction:        0.95,
+	DatePriorityContainerDate:     0.80,
+	DatePriorityTextFull:          0.65,
+	DatePriorityTextYearOnly:      0.40,
+	DatePriorityContainerCreation: 0.25,
+	DatePriorityFileModification:  0.15,
 }
 
 const (

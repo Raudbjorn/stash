@@ -16,8 +16,11 @@ var stopWords = map[string]struct{}{
 	"the": {}, "and": {}, "with": {}, "featuring": {}, "feat": {},
 	"scene": {}, "part": {}, "vol": {}, "volume": {}, "full": {}, "video": {},
 	"official": {}, "site": {}, "rip": {}, "web": {}, "hd": {}, "sd": {},
-	"new": {}, "best": {}, "top": {}, "of": {}, "for": {}, "in": {}, "on": {},
+	"new": {}, "best": {}, "top": {}, "first": {}, "of": {}, "for": {}, "in": {}, "on": {},
 	"her": {}, "his": {}, "she": {}, "him": {}, "com": {}, "net": {},
+	"make": {}, "makes": {}, "made": {}, "making": {},
+	"get": {}, "gets": {}, "got": {}, "getting": {},
+	"cum": {}, "cums": {}, "cumming": {},
 }
 
 // isNameLikeWord returns true if w looks like a capitalized proper-noun
@@ -45,10 +48,12 @@ func isStopWord(w string) bool {
 
 // ExtractNameCandidates scans normalized text for title-cased words (e.g.
 // "Jane Doe") and returns each adjacent pair as a candidate performer name.
-// Pairs are taken from non-overlapping runs of consecutive name-like words
-// (a run of 4 words yields 2 pairs, never a sliding window), so a run like
-// "Studio Name Jane Doe" can't produce a spurious crossover pair like "Name
-// Jane". exclude, if non-nil, is called with the lowercased candidate (e.g.
+// Pairs are taken from right-aligned, non-overlapping runs of consecutive
+// name-like words (a run of 4 words yields 2 pairs, never a sliding window).
+// Right alignment drops a leading modifier from odd-length runs, so "Skinny
+// Jane Doe" yields "Jane Doe"; non-overlap ensures "Studio Name Jane Doe"
+// cannot produce the spurious crossover pair "Name Jane". exclude, if
+// non-nil, is called with the lowercased candidate (e.g.
 // to drop the studio's own name); if it returns true the candidate is
 // dropped.
 //
@@ -81,7 +86,11 @@ func ExtractNameCandidates(text string, exclude func(candidate string) bool) []s
 		if runStart == -1 {
 			return
 		}
-		for i := runStart; i+1 < end; i += 2 {
+		start := runStart
+		if (end-runStart)%2 != 0 {
+			start++
+		}
+		for i := start; i+1 < end; i += 2 {
 			addPair(words[i], words[i+1])
 		}
 		runStart = -1

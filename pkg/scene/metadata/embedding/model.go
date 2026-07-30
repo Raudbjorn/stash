@@ -37,40 +37,29 @@ type Model struct {
 	outputTensor     *ort.Tensor[float32]
 }
 
-// Load initializes the ONNX Runtime environment against the shared library
-// at libraryPath and creates a session for the embedded MiniLM model.
-// Returns an error (never panics) if the library can't be loaded or the
-// session can't be created - callers are expected to fall back to a
-// non-embedding NamePlausibilityScorer in that case.
-func Load(libraryPath string) (*Model, error) {
+// Load creates a session for the embedded MiniLM model. The caller owns the
+// process-wide ONNX Runtime environment and must initialize it before Load.
+func Load() (*Model, error) {
 	tokenizer, err := NewTokenizer(bytes.NewReader(vocabBytes))
 	if err != nil {
 		return nil, fmt.Errorf("loading embedded vocab: %w", err)
-	}
-
-	ort.SetSharedLibraryPath(libraryPath)
-	if err := ort.InitializeEnvironment(); err != nil {
-		return nil, fmt.Errorf("initializing onnxruntime environment: %w", err)
 	}
 
 	shape := ort.NewShape(1, maxSeqLen)
 
 	inputIDsTensor, err := ort.NewEmptyTensor[int64](shape)
 	if err != nil {
-		ort.DestroyEnvironment()
 		return nil, fmt.Errorf("creating input_ids tensor: %w", err)
 	}
 	attentionTensor, err := ort.NewEmptyTensor[int64](shape)
 	if err != nil {
 		inputIDsTensor.Destroy()
-		ort.DestroyEnvironment()
 		return nil, fmt.Errorf("creating attention_mask tensor: %w", err)
 	}
 	tokenTypesTensor, err := ort.NewEmptyTensor[int64](shape)
 	if err != nil {
 		inputIDsTensor.Destroy()
 		attentionTensor.Destroy()
-		ort.DestroyEnvironment()
 		return nil, fmt.Errorf("creating token_type_ids tensor: %w", err)
 	}
 	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(1, maxSeqLen, embeddingDim))
@@ -78,7 +67,6 @@ func Load(libraryPath string) (*Model, error) {
 		inputIDsTensor.Destroy()
 		attentionTensor.Destroy()
 		tokenTypesTensor.Destroy()
-		ort.DestroyEnvironment()
 		return nil, fmt.Errorf("creating output tensor: %w", err)
 	}
 
@@ -95,7 +83,6 @@ func Load(libraryPath string) (*Model, error) {
 		attentionTensor.Destroy()
 		tokenTypesTensor.Destroy()
 		outputTensor.Destroy()
-		ort.DestroyEnvironment()
 		return nil, fmt.Errorf("creating onnxruntime session: %w", err)
 	}
 
@@ -109,11 +96,8 @@ func Load(libraryPath string) (*Model, error) {
 	}, nil
 }
 
-// Close releases the session, tensors, and the process-wide onnxruntime
-// environment. Only one Model is ever live per process (see
-// internal/manager/name_plausibility_scorer.go, which closes a Model before
-// loading its replacement), so owning the environment lifecycle here is
-// safe. Close is idempotent - calling it more than once is a no-op.
+// Close releases the session and tensors. The caller owns the process-wide
+// ONNX Runtime environment. Close is idempotent.
 func (m *Model) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -128,9 +112,6 @@ func (m *Model) Close() error {
 	m.attentionTensor.Destroy()
 	m.tokenTypesTensor.Destroy()
 	m.outputTensor.Destroy()
-	if envErr := ort.DestroyEnvironment(); err == nil {
-		err = envErr
-	}
 	return err
 }
 

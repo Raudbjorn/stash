@@ -247,6 +247,10 @@ const (
 	// scorer. If blank, common install locations are checked instead.
 	OnnxRuntimeLibPath = "onnxruntime_lib_path"
 
+	// SceneMetadataModelPath is the root containing the pinned external
+	// GLiNER graph and tokenizer used by the scene metadata analyzer.
+	SceneMetadataModelPath = "scene_metadata_model_path"
+
 	// plugin options
 	PluginsPath          = "plugins_path"
 	PluginsSetting       = "plugins.settings"
@@ -1038,6 +1042,10 @@ func (i *Config) GetPythonPath() string {
 
 func (i *Config) GetOnnxRuntimeLibPath() string {
 	return i.getString(OnnxRuntimeLibPath)
+}
+
+func (i *Config) GetSceneMetadataModelPath() string {
+	return i.getString(SceneMetadataModelPath)
 }
 
 func (i *Config) GetHost() string {

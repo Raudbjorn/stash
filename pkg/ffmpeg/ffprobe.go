@@ -103,6 +103,8 @@ type VideoFile struct {
 	Bitrate             int64
 	Size                int64
 	CreationTime        time.Time
+	FormatTags          FFProbeTags
+	StreamTags          []FFProbeTags
 
 	VideoCodec   string
 	VideoBitrate int64
@@ -277,9 +279,13 @@ func parse(filePath string, probeJSON *FFProbeJSON) (*VideoFile, error) {
 	}
 
 	result.Path = filePath
-	result.Title = probeJSON.Format.Tags.Title
-
-	result.Comment = probeJSON.Format.Tags.Comment
+	result.FormatTags = probeJSON.Format.Tags
+	result.StreamTags = make([]FFProbeTags, len(probeJSON.Streams))
+	for i := range probeJSON.Streams {
+		result.StreamTags[i] = probeJSON.Streams[i].Tags
+	}
+	result.Title = result.FormatTags.Get("title")
+	result.Comment = result.FormatTags.Get("comment")
 	result.Bitrate, _ = strconv.ParseInt(probeJSON.Format.BitRate, 10, 64)
 
 	result.Container = probeJSON.Format.FormatName
@@ -293,7 +299,7 @@ func parse(filePath string, probeJSON *FFProbeJSON) (*VideoFile, error) {
 	}
 	result.Size = fileStat.Size()
 	result.StartTime, _ = strconv.ParseFloat(probeJSON.Format.StartTime, 64)
-	result.CreationTime = probeJSON.Format.Tags.CreationTime.Time
+	result.CreationTime = result.FormatTags.Time("creation_time")
 
 	audioStream := result.getAudioStream()
 	if audioStream != nil {
@@ -347,7 +353,7 @@ func parse(filePath string, probeJSON *FFProbeJSON) (*VideoFile, error) {
 }
 
 func isRotated(s *FFProbeStream) bool {
-	rotate, _ := strconv.ParseInt(s.Tags.Rotate, 10, 64)
+	rotate, _ := strconv.ParseInt(s.Tags.Get("rotate"), 10, 64)
 	if rotate != 180 && rotate != 0 {
 		return true
 	}

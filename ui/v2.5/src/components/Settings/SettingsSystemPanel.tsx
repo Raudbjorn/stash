@@ -222,6 +222,14 @@ export const SettingsConfigurationPanel: React.FC = () => {
         />
 
         <StringSetting
+          id="scene-metadata-model-path"
+          headingID="config.general.scene_metadata_model_path.heading"
+          subHeadingID="config.general.scene_metadata_model_path.description"
+          value={general.sceneMetadataModelPath ?? undefined}
+          onChange={(v) => saveGeneral({ sceneMetadataModelPath: v })}
+        />
+
+        <StringSetting
           id="backup-directory-path"
           headingID="config.general.backup_directory_path.heading"
           subHeadingID="config.general.backup_directory_path.description"

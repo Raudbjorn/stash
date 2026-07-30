@@ -213,6 +213,18 @@ input AnalyzeSceneMetadataInput {
   overwriteExistingDate: Boolean
   "Also analyze the scene's details/description text (off by default; often noisy marketing copy)."
   useDetails: Boolean
+  "Assign an exactly matched existing studio when the scene has no studio."
+  applyStudio: Boolean
+  "Apply an uncontested canonical title proposal."
+  applyTitle: Boolean
+  "Minimum confidence for title proposals. Defaults to 0.90."
+  titleConfidenceThreshold: Float
+  "Allow replacing an existing non-filename-derived title."
+  overwriteExistingTitle: Boolean
+  "Add an unambiguous existing movie group and scene index."
+  applyMovieGroup: Boolean
+  "Read ffprobe container tags and EXIF metadata."
+  useEmbeddedMetadata: Boolean
 }
 
 type AutoTagMetadataOptions {

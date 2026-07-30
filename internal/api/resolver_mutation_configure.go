@@ -433,11 +433,16 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 		r.setConfigString(config.PythonPath, input.PythonPath)
 	}
 
-	refreshNamePlausibilityScorer := false
+	refreshSceneMetadataModels := false
 	existingOnnxRuntimeLibPath := c.GetOnnxRuntimeLibPath()
 	if input.OnnxRuntimeLibPath != nil && *input.OnnxRuntimeLibPath != existingOnnxRuntimeLibPath {
 		r.setConfigString(config.OnnxRuntimeLibPath, input.OnnxRuntimeLibPath)
-		refreshNamePlausibilityScorer = true
+		refreshSceneMetadataModels = true
+	}
+	existingSceneMetadataModelPath := c.GetSceneMetadataModelPath()
+	if input.SceneMetadataModelPath != nil && *input.SceneMetadataModelPath != existingSceneMetadataModelPath {
+		r.setConfigString(config.SceneMetadataModelPath, input.SceneMetadataModelPath)
+		refreshSceneMetadataModels = true
 	}
 
 	if input.TranscodeInputArgs != nil {
@@ -497,8 +502,8 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 	if refreshPluginSource {
 		manager.GetInstance().RefreshPluginSourceManager()
 	}
-	if refreshNamePlausibilityScorer {
-		manager.GetInstance().RefreshNamePlausibilityScorer()
+	if refreshSceneMetadataModels {
+		manager.GetInstance().RefreshSceneMetadataModels()
 	}
 
 	return makeConfigGeneralResult(), nil

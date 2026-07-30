@@ -138,6 +138,7 @@ func makeConfigGeneralResult() *ConfigGeneralResult {
 		MarkerSync:                    &markerSync,
 		PythonPath:                    config.GetPythonPath(),
 		OnnxRuntimeLibPath:            config.GetOnnxRuntimeLibPath(),
+		SceneMetadataModelPath:        config.GetSceneMetadataModelPath(),
 		TranscodeInputArgs:            config.GetTranscodeInputArgs(),
 		TranscodeOutputArgs:           config.GetTranscodeOutputArgs(),
 		LiveTranscodeInputArgs:        config.GetLiveTranscodeInputArgs(),
