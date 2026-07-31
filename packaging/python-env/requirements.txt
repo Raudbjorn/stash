@@ -1,0 +1,93 @@
+# Base Python environment for stash's community scrapers/plugins.
+#
+# This reproduces /var/lib/stash/stsh (the venv pointed at by the `python_path`
+# config option) as provisioned on d3ll on 2026-07-27. See README.md for how
+# and why.
+#
+# Pins are the exact versions verified working under Python 3.13.14. Most of
+# this list was reconstructed from the individual requirements.txt files
+# shipped by scrapers/plugins under scrapers/community/*/ and plugins/
+# community/*/ (excluded: LocalVisage, which manages its own dedicated venv
+# with heavy ML deps - torch/tensorflow/gradio - that must never land here).
+#
+# The entries below marked "no requirements.txt upstream" are scrapers that
+# import a third-party package directly with no accompanying requirements.txt
+# at all, so they only surface as a runtime ImportError. Known ones so far:
+#   - mechanicalsoup   (scrapers/community/IFeelMyself/IFeelMyself.py)
+#   - algoliasearch    (scrapers/community/AlgoliaAPI/AlgoliaAPI.py)
+#   - pycountry        (scrapers/community/PlayboyPlus/PlayboyPlus.py)
+#   - fastbencode      (scrapers/community/torrent/torrent.py)
+#   - free-proxy       (scrapers/community/AShemaleTube/AShemaleTube.py, as `fp`)
+# If a scraper reports a missing module not listed here, check whether it has
+# its own requirements.txt (most do) before assuming it's another one of
+# these undeclared cases.
+
+aiohappyeyeballs==2.6.2
+aiohttp==3.14.1
+aiosignal==1.4.0
+algoliasearch==4.44.4          # no requirements.txt upstream
+annotated-types==0.7.0
+async-timeout==5.0.1
+attrs==26.1.0
+beautifulsoup4==4.15.0
+cachetools==7.1.4
+certifi==2026.5.20
+cffi==2.0.0
+charset-normalizer==3.4.7
+click==8.4.1
+click-default-group==1.2.4
+cloudscraper==1.2.71
+cryptography==49.0.0
+emojis==0.7.0
+fastbencode==0.3.10            # no requirements.txt upstream
+free-proxy==1.2.2              # no requirements.txt upstream (imports as `fp`)
+frozenlist==1.8.0
+google-api-core==2.31.0
+google-api-python-client==2.197.0
+google-auth==2.54.0
+google-auth-httplib2==0.4.0
+googleapis-common-protos==1.75.0
+httplib2==0.31.2
+idna==3.18
+ImageIO==2.37.3
+imageio-ffmpeg==0.6.0
+lxml==6.1.1
+MechanicalSoup==1.4.0          # no requirements.txt upstream
+multidict==6.7.1
+numpy==2.4.6
+pillow==12.2.0
+pluggy==1.6.0
+propcache==0.5.2
+proto-plus==1.28.2
+protobuf==7.35.1
+psutil==7.2.2
+pyasn1==0.6.4
+pyasn1_modules==0.4.2
+pycountry==26.2.16             # no requirements.txt upstream
+pycparser==3.0
+pydantic==2.13.4
+pydantic_core==2.46.4
+PyExifTool==0.5.6
+pyexiv2==2.15.5
+pyparsing==3.3.2
+pysqlite3-binary==0.5.4.post2
+python-dateutil==2.9.0.post0
+requests==2.34.2
+requests-toolbelt==1.0.0
+rsa==4.9.1
+schedule==1.2.2
+Send2Trash==2.1.0
+six==1.17.0
+soupsieve==2.8.4
+sqlite-fts4==1.0.3
+sqlite-utils==3.39
+stashapp-tools==0.2.59
+tabulate==0.10.0
+typing_extensions==4.15.0
+typing-inspection==0.4.2
+Unidecode==1.4.0
+uritemplate==4.2.0
+urllib3==2.7.0
+watchdog==6.0.0
+xxhash==3.7.0
+yarl==1.24.2
