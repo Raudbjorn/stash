@@ -173,7 +173,7 @@ func (s *Manager) RefreshStreamManager() {
 // RefreshSceneMetadataEntityExtractor reloads the local GLiNER session after
 // the runtime library, cache path, or installed bundle changes.
 func (s *Manager) RefreshSceneMetadataEntityExtractor() {
-	reloadSceneMetadataEntityExtractor()
+	s.SceneMetadataModelReload()
 }
 
 // RefreshDLNA starts/stops the DLNA service as needed.
@@ -293,6 +293,9 @@ func (s *Manager) Setup(ctx context.Context, input SetupInput) error {
 		}
 
 		cfg.SetString(config.Cache, input.CacheLocation)
+	}
+	if _, err := migrateSceneMetadataEntityModelConfig(cfg); err != nil {
+		return fmt.Errorf("error migrating scene metadata model configuration: %w", err)
 	}
 
 	if input.SFWContentMode {

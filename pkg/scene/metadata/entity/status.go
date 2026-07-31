@@ -15,47 +15,62 @@ const (
 )
 
 type ModelStatus struct {
-	ModelID   string
-	Version   string
+	Key       string
 	State     ModelState
 	CachePath string
 	LastError string
 }
 
-var lifecycleStatus struct {
-	sync.RWMutex
+type modelLifecycle struct {
 	loading   bool
 	lastError string
 }
 
-func setLoading(loading bool) {
+var lifecycleStatus = struct {
+	sync.RWMutex
+	models map[string]modelLifecycle
+}{
+	models: make(map[string]modelLifecycle),
+}
+
+func setLoading(key string, loading bool) {
 	lifecycleStatus.Lock()
-	lifecycleStatus.loading = loading
+	status := lifecycleStatus.models[key]
+	status.loading = loading
+	lifecycleStatus.models[key] = status
 	lifecycleStatus.Unlock()
 }
 
-func setLastError(err error) {
+func setLastError(key string, err error) {
 	lifecycleStatus.Lock()
+	status := lifecycleStatus.models[key]
 	if err == nil {
-		lifecycleStatus.lastError = ""
+		status.lastError = ""
 	} else {
-		lifecycleStatus.lastError = err.Error()
+		status.lastError = err.Error()
 	}
+	lifecycleStatus.models[key] = status
 	lifecycleStatus.Unlock()
 }
 
-func Status(cachePath string) ModelStatus {
-	path := BundlePath(cachePath)
-	status := ModelStatus{ModelID: ModelID, Version: ModelVersion, CachePath: path}
+func Status(cachePath, key string) ModelStatus {
+	path := BundlePath(cachePath, key)
+	status := ModelStatus{Key: key, CachePath: path}
+	spec, ok := FindModel(key)
+	if !ok {
+		status.State = ModelInvalid
+		status.LastError = "unknown scene metadata model key"
+		return status
+	}
 	lifecycleStatus.RLock()
-	loading, lastError := lifecycleStatus.loading, lifecycleStatus.lastError
+	lifecycle := lifecycleStatus.models[key]
 	lifecycleStatus.RUnlock()
-	status.LastError = lastError
-	if loading {
+	status.LastError = lifecycle.lastError
+	if lifecycle.loading {
 		status.State = ModelLoading
 		return status
 	}
-	if err := ValidateBundle(path); err != nil {
+	if err := validateBundle(path, spec); err != nil {
 		if errors.Is(err, ErrBundleMissing) {
 			status.State = ModelMissing
 		} else {

@@ -13,9 +13,23 @@ import (
 	"time"
 )
 
-const pinnedResolveURL = "https://huggingface.co/" + ModelID + "/resolve/" + ModelRevision
-
 type InstallProgress func(completed, total int64)
+
+// ErrInsufficientDisk reports a model install that cannot fit in the cache
+// filesystem before any download is attempted.
+type ErrInsufficientDisk struct {
+	Required  int64
+	Available int64
+	Network   bool
+}
+
+func (e *ErrInsufficientDisk) Error() string {
+	location := "local filesystem"
+	if e.Network {
+		location = "network filesystem"
+	}
+	return fmt.Sprintf("insufficient disk space on %s: need %d bytes, have %d bytes", location, e.Required, e.Available)
+}
 
 // Installer downloads the immutable bundle into a temporary directory and
 // publishes it atomically only after checksums and the ONNX signature pass.
@@ -25,13 +39,17 @@ type Installer struct {
 	ValidateModel func(modelPath string) error
 }
 
-func (i Installer) Install(ctx context.Context, cachePath string, progress InstallProgress) (err error) {
-	setLoading(true)
-	defer setLoading(false)
-	defer func() { setLastError(err) }()
+func (i Installer) Install(ctx context.Context, cachePath, key string, progress InstallProgress) (err error) {
+	spec, ok := FindModel(key)
+	if !ok {
+		return fmt.Errorf("unknown scene metadata model key %q", key)
+	}
+	setLoading(key, true)
+	defer setLoading(key, false)
+	defer func() { setLastError(key, err) }()
 
-	destination := BundlePath(cachePath)
-	if ValidateBundle(destination) == nil {
+	destination := BundlePath(cachePath, key)
+	if validateBundle(destination, spec) == nil {
 		if i.ValidateModel == nil || i.ValidateModel(filepath.Join(destination, "model.onnx")) == nil {
 			return nil
 		}
@@ -41,7 +59,15 @@ func (i Installer) Install(ctx context.Context, cachePath string, progress Insta
 	if err = os.MkdirAll(parent, 0o755); err != nil {
 		return fmt.Errorf("create model cache: %w", err)
 	}
-	temporary, err := os.MkdirTemp(parent, "."+ModelVersion+"-tmp-")
+	var total int64
+	for _, artifact := range spec.Artifacts {
+		total += artifact.Size
+	}
+	if err = preflightDiskSpace(parent, total); err != nil {
+		return err
+	}
+
+	temporary, err := os.MkdirTemp(parent, "."+key+"-tmp-")
 	if err != nil {
 		return fmt.Errorf("create model staging directory: %w", err)
 	}
@@ -52,16 +78,16 @@ func (i Installer) Install(ctx context.Context, cachePath string, progress Insta
 		}
 	}()
 
-	var total int64
-	for _, artifact := range Artifacts {
-		total += artifact.Size
+	downloader := i
+	if strings.TrimSpace(downloader.ResolveURL) == "" {
+		downloader.ResolveURL = "https://huggingface.co/" + spec.HuggingFaceID + "/resolve/" + spec.Revision
 	}
 	var completed int64
-	for _, artifact := range Artifacts {
+	for _, artifact := range spec.Artifacts {
 		if err = ctx.Err(); err != nil {
 			return err
 		}
-		if err = i.downloadArtifact(ctx, temporary, artifact, func(delta int64) {
+		if err = downloader.downloadArtifact(ctx, temporary, artifact, func(delta int64) {
 			completed += delta
 			if progress != nil {
 				progress(completed, total)
@@ -71,7 +97,7 @@ func (i Installer) Install(ctx context.Context, cachePath string, progress Insta
 		}
 	}
 
-	if err = ValidateBundle(temporary); err != nil {
+	if err = validateBundle(temporary, spec); err != nil {
 		return fmt.Errorf("validate staged model bundle: %w", err)
 	}
 	if i.ValidateModel == nil {
@@ -106,7 +132,7 @@ func (i Installer) downloadArtifact(ctx context.Context, destination string, art
 	}
 	baseURL := strings.TrimRight(i.ResolveURL, "/")
 	if baseURL == "" {
-		baseURL = pinnedResolveURL
+		return fmt.Errorf("model resolve URL is required")
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/"+artifact.RemotePath+"?download=true", nil)
 	if err != nil {

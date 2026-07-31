@@ -258,8 +258,12 @@ type Query {
 
   # System status
   systemStatus: SystemStatus!
-  "Returns local scene-metadata entity model installation and runtime status."
-  sceneMetadataEntityModelStatus: SceneMetadataEntityModelStatus!
+  "Returns the pinned scene-metadata model catalog and installation state."
+  sceneMetadataModels: [SceneMetadataModel!]!
+  "Returns one model assignment for every scene-metadata role."
+  sceneMetadataModelAssignments: [SceneMetadataModelAssignment!]!
+  "Returns the active entity model installation and runtime status."
+  sceneMetadataModelStatus: SceneMetadataModelStatus!
 
   # Job status
   jobQueue: [Job!]
@@ -543,10 +547,14 @@ type Mutation {
   metadataDetectSceneCuts(input: DetectSceneCutsInput!): ID!
   "Analyze scene titles/filenames (and available EXIF/container metadata) to detect performers and scene date. Returns the job ID"
   metadataAnalyzeScenes(input: AnalyzeSceneMetadataInput!): ID!
-  "Download, checksum, validate, and activate the pinned local scene-metadata entity model. Returns the job ID."
-  sceneMetadataEntityModelInstall: ID!
-  "Reload the local scene-metadata entity model after runtime or cache changes."
-  sceneMetadataEntityModelReload: Boolean!
+  "Download, checksum, and validate a pinned scene-metadata model. Returns the job ID."
+  sceneMetadataModelInstall(modelKey: ID!): ID!
+  "Remove an unassigned scene-metadata model."
+  sceneMetadataModelUninstall(modelKey: ID!): Boolean!
+  "Assign a catalog model to a role, or null to disable the role."
+  sceneMetadataModelAssign(role: SceneMetadataModelRole!, modelKey: ID): Boolean!
+  "Reload the active scene-metadata entity model after runtime or cache changes."
+  sceneMetadataModelReload: Boolean!
   "Clean metadata. Returns the job ID"
   metadataClean(input: CleanMetadataInput!): ID!
   "Clean generated files. Returns the job ID"

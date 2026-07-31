@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
-import { Button, Form } from "react-bootstrap";
+import { Badge, Button, Form } from "react-bootstrap";
 import {
   mutateMetadataScan,
   mutateMetadataAutoTag,
@@ -9,9 +9,13 @@ import {
   mutateMetadataAnalyzeScenes,
   useListPerformerScrapers,
   useListStudioScrapers,
-  mutateSceneMetadataEntityModelInstall,
-  mutateSceneMetadataEntityModelReload,
-  useSceneMetadataEntityModelStatus,
+  mutateSceneMetadataModelAssign,
+  mutateSceneMetadataModelInstall,
+  mutateSceneMetadataModelReload,
+  mutateSceneMetadataModelUninstall,
+  useSceneMetadataModelAssignments,
+  useSceneMetadataModels,
+  useSceneMetadataModelStatus,
 } from "src/core/StashService";
 import { withoutTypename } from "src/utils/data";
 import { useConfigurationContext } from "src/hooks/Config";
@@ -33,6 +37,7 @@ import {
 } from "src/components/Shared/AutoTagConfirmDialog";
 import { useSettings } from "../context";
 import { SelectComponent } from "src/components/Shared/Select";
+import { FileSize } from "src/components/Shared/FileSize";
 
 interface IAnalyzeSceneMetadataTaskDefaults {
   dryRun: boolean;
@@ -93,6 +98,288 @@ const AutoTagOptions: React.FC<IAutoTagOptions> = ({
         onChange={(v) => setOptions({ tags: set(v) })}
       />
     </>
+  );
+};
+
+const SceneMetadataModelsPanel: React.FC = () => {
+  const intl = useIntl();
+  const Toast = useToast();
+  const [busyKey, setBusyKey] = useState<string>();
+  const {
+    data: modelsData,
+    loading: modelsLoading,
+    refetch: refetchModels,
+  } = useSceneMetadataModels();
+  const {
+    data: assignmentsData,
+    loading: assignmentsLoading,
+    refetch: refetchAssignments,
+  } = useSceneMetadataModelAssignments();
+  const {
+    data: statusData,
+    loading: statusLoading,
+    refetch: refetchStatus,
+  } = useSceneMetadataModelStatus();
+
+  const models = modelsData?.sceneMetadataModels ?? [];
+  const assignments =
+    assignmentsData?.sceneMetadataModelAssignments ?? [];
+  const status = statusData?.sceneMetadataModelStatus;
+  const assignedKeys = new Set(
+    assignments.flatMap((assignment) =>
+      assignment.modelKey ? [assignment.modelKey] : []
+    )
+  );
+  const roleRows: Array<{
+    role: GQL.SceneMetadataModelRole;
+    label: string;
+  }> = [
+    {
+      role: GQL.SceneMetadataModelRole.EntityExtraction,
+      label: "config.tasks.analyze_scene_metadata.model.assign_entity_extraction",
+    },
+    {
+      role: GQL.SceneMetadataModelRole.PerformerContext,
+      label: "config.tasks.analyze_scene_metadata.model.assign_performer_context",
+    },
+    {
+      role: GQL.SceneMetadataModelRole.StudioProviderSelection,
+      label:
+        "config.tasks.analyze_scene_metadata.model.assign_studio_provider_selection",
+    },
+  ];
+
+  async function install(modelKey: string) {
+    setBusyKey(modelKey);
+    try {
+      await mutateSceneMetadataModelInstall(modelKey);
+      Toast.success(
+        intl.formatMessage(
+          { id: "config.tasks.added_job_to_queue" },
+          {
+            operation_name: intl.formatMessage(
+              {
+                id: "config.tasks.analyze_scene_metadata.model.download",
+              },
+              { model: modelKey }
+            ),
+          }
+        )
+      );
+      await Promise.all([refetchModels(), refetchStatus()]);
+    } catch (error) {
+      Toast.error(error);
+    } finally {
+      setBusyKey(undefined);
+    }
+  }
+
+  async function uninstall(modelKey: string) {
+    setBusyKey(modelKey);
+    try {
+      await mutateSceneMetadataModelUninstall(modelKey);
+      await Promise.all([refetchModels(), refetchStatus()]);
+    } catch (error) {
+      Toast.error(error);
+    } finally {
+      setBusyKey(undefined);
+    }
+  }
+
+  async function assign(
+    role: GQL.SceneMetadataModelRole,
+    modelKey: string
+  ) {
+    setBusyKey(role);
+    try {
+      await mutateSceneMetadataModelAssign(role, modelKey || null);
+      await Promise.all([
+        refetchAssignments(),
+        refetchModels(),
+        refetchStatus(),
+      ]);
+    } catch (error) {
+      Toast.error(error);
+    } finally {
+      setBusyKey(undefined);
+    }
+  }
+
+  async function reload() {
+    setBusyKey("reload");
+    try {
+      await mutateSceneMetadataModelReload();
+      await Promise.all([refetchModels(), refetchStatus()]);
+      Toast.success(
+        intl.formatMessage({
+          id: "config.tasks.analyze_scene_metadata.model.reloaded",
+        })
+      );
+    } catch (error) {
+      Toast.error(error);
+    } finally {
+      setBusyKey(undefined);
+    }
+  }
+
+  const loading = modelsLoading || assignmentsLoading || statusLoading;
+  const runtimeLabel = status?.runtimeAvailable
+    ? "config.tasks.analyze_scene_metadata.model.runtime_available"
+    : "config.tasks.analyze_scene_metadata.model.runtime_missing";
+
+  return (
+    <div className="border rounded p-3 mb-3" aria-live="polite">
+      <div className="d-flex flex-wrap align-items-start justify-content-between mb-3">
+        <div className="mr-3">
+          <Form.Label className="mb-1 font-weight-bold">
+            <FormattedMessage id="config.tasks.analyze_scene_metadata.model.catalog_heading" />
+          </Form.Label>
+          <div className="text-muted small text-break">
+            {loading ? (
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.model.checking" />
+            ) : (
+              <FormattedMessage
+                id="config.tasks.analyze_scene_metadata.model.status"
+                values={{
+                  state: status?.state ?? "unknown",
+                  cachePath: status?.cachePath ?? "unknown",
+                  runtime: intl.formatMessage({ id: runtimeLabel }),
+                }}
+              />
+            )}
+          </div>
+          {status?.lastError ? (
+            <div className="text-danger small mt-1">{status.lastError}</div>
+          ) : null}
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          type="button"
+          onClick={reload}
+          disabled={
+            loading ||
+            busyKey !== undefined ||
+            !status?.runtimeAvailable ||
+            status?.state !== "ready"
+          }
+        >
+          <FormattedMessage id="config.tasks.analyze_scene_metadata.model.reload" />
+        </Button>
+      </div>
+
+      <div className="mb-4">
+        {models.map((model) => {
+          const active = status?.activeKey === model.key;
+          const assigned = assignedKeys.has(model.key);
+          return (
+            <div
+              className="d-flex flex-wrap align-items-center justify-content-between border-top py-2"
+              key={model.key}
+            >
+              <div className="mr-3 mb-1">
+                <div className="font-weight-bold">{model.displayName}</div>
+                <div className="text-muted small">
+                  <span className="mr-2">{model.key}</span>
+                  <span className="mr-2">{model.family}</span>
+                  <span className="mr-2">{model.precision}</span>
+                  <span className="mr-2">
+                    <FileSize size={model.size} />
+                  </span>
+                  <a
+                    href={model.licenseURL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {model.license}
+                  </a>
+                </div>
+                {model.lastError ? (
+                  <div className="text-danger small">{model.lastError}</div>
+                ) : null}
+              </div>
+              <div className="d-flex align-items-center mb-1">
+                <Badge
+                  variant={model.installed ? "success" : "secondary"}
+                  className="mr-2"
+                >
+                  <FormattedMessage
+                    id={
+                      model.installed
+                        ? "config.tasks.analyze_scene_metadata.model.installed"
+                        : "config.tasks.analyze_scene_metadata.model.not_installed"
+                    }
+                  />
+                </Badge>
+                {active ? (
+                  <Badge variant="info" className="mr-2">
+                    <FormattedMessage id="config.tasks.analyze_scene_metadata.model.active" />
+                  </Badge>
+                ) : null}
+                {!model.installed ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    type="button"
+                    disabled={busyKey !== undefined || !status?.runtimeAvailable}
+                    onClick={() => install(model.key)}
+                  >
+                    <FormattedMessage
+                      id="config.tasks.analyze_scene_metadata.model.download"
+                      values={{ model: model.key }}
+                    />
+                  </Button>
+                ) : !assigned ? (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    type="button"
+                    disabled={busyKey !== undefined}
+                    onClick={() => uninstall(model.key)}
+                  >
+                    <FormattedMessage id="config.tasks.analyze_scene_metadata.model.remove" />
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div>
+        {roleRows.map(({ role, label }) => {
+          const assignment = assignments.find((item) => item.role === role);
+          return (
+            <Form.Group controlId={`scene-metadata-model-${role}`} key={role}>
+              <Form.Label>
+                <FormattedMessage id={label} />
+              </Form.Label>
+              <Form.Control
+                as="select"
+                className="input-control"
+                value={assignment?.modelKey ?? ""}
+                disabled={loading || busyKey !== undefined}
+                onChange={(event) => assign(role, event.currentTarget.value)}
+              >
+                <option value="">
+                  {intl.formatMessage({
+                    id: "config.tasks.analyze_scene_metadata.model.unset",
+                  })}
+                </option>
+                {models.map((model) => (
+                  <option value={model.key} key={model.key}>
+                    {model.displayName}
+                  </option>
+                ))}
+              </Form.Control>
+            </Form.Group>
+          );
+        })}
+        <div className="text-muted small">
+          <FormattedMessage id="config.tasks.analyze_scene_metadata.model.reserved_role_hint" />
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -180,14 +467,7 @@ export const LibraryTasks: React.FC = () => {
     error: studioScrapersError,
     loading: studioScrapersLoading,
   } = useListStudioScrapers();
-  const {
-    data: entityModelStatusData,
-    loading: entityModelStatusLoading,
-    refetch: refetchEntityModelStatus,
-  } = useSceneMetadataEntityModelStatus();
   const { configuration } = useConfigurationContext();
-  const entityModelStatus =
-    entityModelStatusData?.sceneMetadataEntityModelStatus;
   const performerVerifierOptions = useMemo(
     () =>
       (performerScrapersData?.listScrapers ?? [])
@@ -460,41 +740,6 @@ export const LibraryTasks: React.FC = () => {
       Toast.error(e);
     }
   }
-  async function installSceneMetadataEntityModel() {
-    try {
-      await mutateSceneMetadataEntityModelInstall();
-      Toast.success(
-        intl.formatMessage(
-          { id: "config.tasks.added_job_to_queue" },
-          {
-            operation_name: intl.formatMessage(
-              {
-                id: "config.tasks.analyze_scene_metadata.model.install",
-              },
-              { model: entityModelStatus?.modelID ?? "entity model" }
-            ),
-          }
-        )
-      );
-      await refetchEntityModelStatus();
-    } catch (e) {
-      Toast.error(e);
-    }
-  }
-
-  async function reloadSceneMetadataEntityModel() {
-    try {
-      await mutateSceneMetadataEntityModelReload();
-      await refetchEntityModelStatus();
-      Toast.success(
-        intl.formatMessage({
-          id: "config.tasks.analyze_scene_metadata.model.reloaded",
-        })
-      );
-    } catch (e) {
-      Toast.error(e);
-    }
-  }
 
   function renderAutoTagAlert() {
     return (
@@ -728,70 +973,11 @@ export const LibraryTasks: React.FC = () => {
       </SettingSection>
 
       <SettingSection advanced>
+        <SceneMetadataModelsPanel />
         <Setting
           heading={<FormattedMessage id="actions.analyze_scene_metadata" />}
           subHeadingID="config.tasks.analyze_scene_metadata.description"
         >
-          <div className="border rounded p-3 mb-3" aria-live="polite">
-            <Form.Label className="mb-1">
-              <FormattedMessage id="config.tasks.analyze_scene_metadata.model.label" />
-            </Form.Label>
-            <div className="text-muted small mb-2">
-              {entityModelStatusLoading ? (
-                <FormattedMessage id="config.tasks.analyze_scene_metadata.model.checking" />
-              ) : (
-                <FormattedMessage
-                  id="config.tasks.analyze_scene_metadata.model.status"
-                  values={{
-                    state: entityModelStatus?.state ?? "unknown",
-                    version: entityModelStatus?.version ?? "unknown",
-                    runtime: entityModelStatus?.runtimeAvailable
-                      ? intl.formatMessage({
-                          id: "config.tasks.analyze_scene_metadata.model.runtime_available",
-                        })
-                      : intl.formatMessage({
-                          id: "config.tasks.analyze_scene_metadata.model.runtime_missing",
-                        }),
-                  }}
-                />
-              )}
-            </div>
-            {entityModelStatus?.lastError ? (
-              <div className="text-danger small mb-2">
-                {entityModelStatus.lastError}
-              </div>
-            ) : null}
-            <Button
-              variant="secondary"
-              size="sm"
-              type="button"
-              className="mr-2"
-              onClick={installSceneMetadataEntityModel}
-              disabled={
-                entityModelStatusLoading ||
-                !entityModelStatus?.runtimeAvailable ||
-                entityModelStatus?.state === "loading"
-              }
-            >
-              <FormattedMessage
-                id="config.tasks.analyze_scene_metadata.model.install"
-                values={{ model: entityModelStatus?.modelID ?? "entity model" }}
-              />
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              type="button"
-              onClick={reloadSceneMetadataEntityModel}
-              disabled={
-                entityModelStatusLoading ||
-                !entityModelStatus?.runtimeAvailable ||
-                entityModelStatus?.state !== "ready"
-              }
-            >
-              <FormattedMessage id="config.tasks.analyze_scene_metadata.model.reload" />
-            </Button>
-          </div>
 
           <Form.Group controlId="analyze-scene-metadata-verifier-scrapers">
             <Form.Label>

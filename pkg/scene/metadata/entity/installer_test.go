@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -59,8 +60,46 @@ func TestDownloadArtifactStreamsVerifiedFile(t *testing.T) {
 }
 
 func TestStatusReportsMissingBundle(t *testing.T) {
-	status := Status(t.TempDir())
+	const key = "gliner-small-v2.1-int8"
+	cachePath := t.TempDir()
+	status := Status(cachePath, key)
 	assert.Equal(t, ModelMissing, status.State)
-	assert.Equal(t, ModelID, status.ModelID)
-	assert.Equal(t, ModelVersion, status.Version)
+	assert.Equal(t, key, status.Key)
+	assert.Equal(t, BundlePath(cachePath, key), status.CachePath)
+}
+
+func TestInstallerPreflightRejectsInsufficientDisk(t *testing.T) {
+	original := availableDiskBytes
+	availableDiskBytes = func(string) (int64, error) { return 1, nil }
+	t.Cleanup(func() { availableDiskBytes = original })
+
+	err := (Installer{}).Install(context.Background(), t.TempDir(), "gliner-small-v2.1-int8", nil)
+	var insufficient *ErrInsufficientDisk
+	require.ErrorAs(t, err, &insufficient)
+	assert.Equal(t, int64(1), insufficient.Available)
+	assert.Greater(t, insufficient.Required, insufficient.Available)
+}
+
+func TestInstallerStaleKeyDoesNotCleanOther(t *testing.T) {
+	original := availableDiskBytes
+	availableDiskBytes = func(string) (int64, error) { return 1 << 40, nil }
+	t.Cleanup(func() { availableDiskBytes = original })
+
+	cachePath := t.TempDir()
+	otherBundle := BundlePath(cachePath, "gliner-medium-v2.1-int8")
+	require.NoError(t, os.MkdirAll(otherBundle, 0o755))
+	marker := filepath.Join(otherBundle, "keep")
+	require.NoError(t, os.WriteFile(marker, []byte("preserved"), 0o600))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "forced failure", http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	err := (Installer{ResolveURL: server.URL}).Install(context.Background(), cachePath, "gliner-small-v2.1-int8", nil)
+	require.Error(t, err)
+	assert.False(t, errors.Is(err, ErrBundleMissing))
+	data, readErr := os.ReadFile(marker)
+	require.NoError(t, readErr)
+	assert.Equal(t, []byte("preserved"), data)
 }

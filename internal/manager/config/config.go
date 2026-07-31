@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -30,6 +31,7 @@ import (
 	"github.com/stashapp/stash/pkg/models"
 	"github.com/stashapp/stash/pkg/models/paths"
 	"github.com/stashapp/stash/pkg/python"
+	"github.com/stashapp/stash/pkg/scene/metadata/entity"
 	"github.com/stashapp/stash/pkg/sliceutil"
 	"github.com/stashapp/stash/pkg/utils"
 )
@@ -296,11 +298,15 @@ const (
 	StashBoxes = "stash_boxes"
 
 	// marker sync options
-	MarkerSync = "marker_sync"
+	MarkerSync      = "marker_sync"
 	PythonPath      = "python_path"
 	PythonRuntimeID = "python.runtime_id"
 	PythonIndexes   = "python.indexes"
 
+	SceneMetadataEntityModel            = "scene_metadata_entity_model"
+	sceneMetadataEntityModelDefault     = "gliner-small-v2.1-int8"
+	SceneMetadataEntityModelAssignment  = "scene_metadata_entity_model_assignment"
+	sceneMetadataModelAssignmentDefault = `{"entity_extraction":"gliner-small-v2.1-int8"}`
 
 	// OnnxRuntimeLibPath overrides the ONNX Runtime shared library path used
 	// by the scene metadata analyzer's embedding-based name-plausibility
@@ -1162,6 +1168,73 @@ func restoreConfigValue(config *Config, key string, value interface{}, existed b
 	} else {
 		config.set(key, nil)
 	}
+}
+
+var sceneMetadataModelConfigWarnings sync.Map
+
+func logSceneMetadataModelConfigWarningOnce(key, message string) {
+	if _, loaded := sceneMetadataModelConfigWarnings.LoadOrStore(key, struct{}{}); !loaded {
+		logger.Infof("[scene metadata] %s", message)
+	}
+}
+
+func DefaultSceneMetadataEntityModel() string {
+	return sceneMetadataEntityModelDefault
+}
+
+func (i *Config) GetSceneMetadataEntityModel() string {
+	return i.getString(SceneMetadataEntityModel)
+}
+
+func (i *Config) SetSceneMetadataEntityModel(key string) {
+	i.SetString(SceneMetadataEntityModel, key)
+}
+
+func (i *Config) GetSceneMetadataEntityModelAssignments() map[entity.Role]string {
+	raw := i.getString(SceneMetadataEntityModelAssignment)
+	if raw == "" {
+		raw = sceneMetadataModelAssignmentDefault
+	}
+	var decoded map[string]string
+	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
+		logSceneMetadataModelConfigWarningOnce("invalid-json", "invalid model assignment configuration; using defaults")
+		decoded = map[string]string{string(entity.RoleEntityExtraction): sceneMetadataEntityModelDefault}
+	}
+	assignments := make(map[entity.Role]string, len(decoded)+1)
+	for rawRole, key := range decoded {
+		role := entity.Role(rawRole)
+		if !entity.ValidRole(role) {
+			continue
+		}
+		if key == "" {
+			assignments[role] = ""
+			continue
+		}
+		if _, ok := entity.FindModel(key); !ok {
+			logSceneMetadataModelConfigWarningOnce("unknown:"+key, fmt.Sprintf("dropping unknown model assignment %q", key))
+			continue
+		}
+		assignments[role] = key
+	}
+	if _, ok := assignments[entity.RoleEntityExtraction]; !ok {
+		assignments[entity.RoleEntityExtraction] = sceneMetadataEntityModelDefault
+	}
+	return assignments
+}
+
+func (i *Config) SetSceneMetadataEntityModelAssignments(assignments map[entity.Role]string) error {
+	encoded := make(map[string]string, len(assignments))
+	for role, key := range assignments {
+		if entity.ValidRole(role) {
+			encoded[string(role)] = key
+		}
+	}
+	data, err := json.Marshal(encoded)
+	if err != nil {
+		return fmt.Errorf("marshal scene metadata model assignments: %w", err)
+	}
+	i.SetString(SceneMetadataEntityModelAssignment, string(data))
+	return nil
 }
 
 func (i *Config) GetOnnxRuntimeLibPath() string {

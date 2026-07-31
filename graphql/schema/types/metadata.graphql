@@ -228,14 +228,35 @@ input AnalyzeSceneMetadataInput {
   "Allow replacing a user-authored title. By default only empty or filename-derived titles are changed."
   overwriteExistingTitle: Boolean
 }
-type SceneMetadataEntityModelStatus {
-  modelID: String!
-  version: String!
+enum SceneMetadataModelRole {
+  ENTITY_EXTRACTION
+  PERFORMER_CONTEXT
+  STUDIO_PROVIDER_SELECTION
+}
+
+type SceneMetadataModel {
+  key: String!
+  displayName: String!
+  family: String!
+  precision: String!
+  size: Int!
+  license: String!
+  licenseURL: String!
+  installed: Boolean!
+  lastError: String
+}
+
+type SceneMetadataModelAssignment {
+  role: SceneMetadataModelRole!
+  modelKey: String
+}
+
+type SceneMetadataModelStatus {
+  activeKey: String!
   state: String!
   cachePath: String!
-  lastError: String!
   runtimeAvailable: Boolean!
-  active: Boolean!
+  lastError: String!
 }
 
 

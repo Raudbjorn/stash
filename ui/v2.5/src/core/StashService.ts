@@ -3091,20 +3091,48 @@ export const mutateMetadataAnalyzeScenes = (
     mutation: GQL.MetadataAnalyzeScenesDocument,
     variables: { input },
   });
-export const useSceneMetadataEntityModelStatus = () =>
-  GQL.useSceneMetadataEntityModelStatusQuery({
+export const useSceneMetadataModels = () =>
+  GQL.useSceneMetadataModelsQuery({
     fetchPolicy: "no-cache",
     pollInterval: 5000,
   });
 
-export const mutateSceneMetadataEntityModelInstall = () =>
-  client.mutate<GQL.SceneMetadataEntityModelInstallMutation>({
-    mutation: GQL.SceneMetadataEntityModelInstallDocument,
+export const useSceneMetadataModelAssignments = () =>
+  GQL.useSceneMetadataModelAssignmentsQuery({
+    fetchPolicy: "no-cache",
+    pollInterval: 5000,
   });
 
-export const mutateSceneMetadataEntityModelReload = () =>
-  client.mutate<GQL.SceneMetadataEntityModelReloadMutation>({
-    mutation: GQL.SceneMetadataEntityModelReloadDocument,
+export const useSceneMetadataModelStatus = () =>
+  GQL.useSceneMetadataModelStatusQuery({
+    fetchPolicy: "no-cache",
+    pollInterval: 5000,
+  });
+
+export const mutateSceneMetadataModelInstall = (modelKey: string) =>
+  client.mutate<GQL.SceneMetadataModelInstallMutation>({
+    mutation: GQL.SceneMetadataModelInstallDocument,
+    variables: { modelKey },
+  });
+
+export const mutateSceneMetadataModelUninstall = (modelKey: string) =>
+  client.mutate<GQL.SceneMetadataModelUninstallMutation>({
+    mutation: GQL.SceneMetadataModelUninstallDocument,
+    variables: { modelKey },
+  });
+
+export const mutateSceneMetadataModelAssign = (
+  role: GQL.SceneMetadataModelRole,
+  modelKey: string | null
+) =>
+  client.mutate<GQL.SceneMetadataModelAssignMutation>({
+    mutation: GQL.SceneMetadataModelAssignDocument,
+    variables: { role, modelKey },
+  });
+
+export const mutateSceneMetadataModelReload = () =>
+  client.mutate<GQL.SceneMetadataModelReloadMutation>({
+    mutation: GQL.SceneMetadataModelReloadDocument,
   });
 
 export const mutateMetadataGenerate = (input: GQL.GenerateMetadataInput) =>
