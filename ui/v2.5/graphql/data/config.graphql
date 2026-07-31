@@ -63,7 +63,6 @@ fragment ConfigGeneralData on ConfigGeneralResult {
   }
   pythonPath
   onnxRuntimeLibPath
-  sceneMetadataModelPath
   transcodeInputArgs
   transcodeOutputArgs
   liveTranscodeInputArgs

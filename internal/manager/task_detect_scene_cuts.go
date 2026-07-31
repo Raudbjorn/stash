@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
 
 	"github.com/stashapp/stash/pkg/ffmpeg/transcoder"
+	"github.com/stashapp/stash/pkg/fsutil"
 	"github.com/stashapp/stash/pkg/job"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
@@ -27,6 +29,8 @@ const (
 	defaultSceneCutThreshold      = 0.4
 	defaultSceneCutDownscaleWidth = 320
 )
+
+var errSceneCutInputUnavailable = errors.New("scene-cut input file is unavailable")
 
 type DetectSceneCutsInput struct {
 	// SceneIDs to process. If empty, all scenes are processed.
@@ -95,6 +99,8 @@ func (j *detectSceneCutsJob) Execute(ctx context.Context, progress *job.Progress
 		LockManager:  instance.ReadLockManager,
 	}
 
+	skippedUnavailable := 0
+
 	for _, sc := range scenes {
 		if job.IsCancelled(ctx) {
 			return nil
@@ -106,17 +112,25 @@ func (j *detectSceneCutsJob) Execute(ctx context.Context, progress *job.Progress
 		})
 
 		if processErr != nil {
-			if errors.Is(processErr, context.Canceled) || errors.Is(processErr, context.DeadlineExceeded) {
+			switch {
+			case errors.Is(processErr, errSceneCutInputUnavailable):
+				skippedUnavailable++
+				logger.Debugf("[scene cuts] skipping scene %d because its primary file is unavailable", sc.ID)
+			case errors.Is(processErr, context.Canceled), errors.Is(processErr, context.DeadlineExceeded):
 				if job.IsCancelled(ctx) {
 					return nil
 				}
 				logger.Debugf("[scene cuts] processing scene %d was canceled: %v", sc.ID, processErr)
-			} else {
+			default:
 				logger.Errorf("[scene cuts] error processing scene %d: %v", sc.ID, processErr)
 			}
 		}
 
 		progress.Increment()
+	}
+
+	if skippedUnavailable > 0 {
+		logger.Warnf("[scene cuts] skipped %d scenes because their primary files are unavailable", skippedUnavailable)
 	}
 
 	return nil
@@ -151,6 +165,20 @@ func (j *detectSceneCutsJob) findOrCreateMarkerTag(ctx context.Context) (int, er
 	return tagID, nil
 }
 
+func validateSceneCutInput(path string) error {
+	exists, err := fsutil.FileExists(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return errSceneCutInputUnavailable
+		}
+		return fmt.Errorf("checking scene-cut input: %w", err)
+	}
+	if !exists {
+		return errSceneCutInputUnavailable
+	}
+	return nil
+}
+
 func (j *detectSceneCutsJob) processScene(ctx context.Context, g *generate.Generator, sc *models.Scene, tagID int, threshold float64, downscaleWidth int) error {
 	r := j.repository
 
@@ -183,6 +211,10 @@ func (j *detectSceneCutsJob) processScene(ctx context.Context, g *generate.Gener
 	videoFile := sc.Files.Primary()
 	if videoFile == nil {
 		return nil
+	}
+
+	if err := validateSceneCutInput(videoFile.Path); err != nil {
+		return err
 	}
 
 	timestamps, err := g.DetectSceneCuts(ctx, videoFile.Path, transcoder.SceneDetectOptions{

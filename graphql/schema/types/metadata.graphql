@@ -205,6 +205,10 @@ input AnalyzeSceneMetadataInput {
   sceneIDs: [ID!]
   "Compute and log proposed changes without writing anything."
   dryRun: Boolean
+  "Performer scraper IDs allowed to verify newly-discovered names."
+  performerVerifierScraperIDs: [ID!]
+  "Configured Stash-box endpoints allowed to verify newly-discovered performer names."
+  performerVerifierStashBoxEndpoints: [String!]
   "Minimum plausibility score (0-1) for a newly-discovered performer name to be looked up and, if confirmed, created. Defaults to 0.6."
   performerConfidenceThreshold: Float
   "Minimum confidence (0-1) for a resolved date to be written to a scene that doesn't already have one. Defaults to 0.6."
@@ -213,19 +217,21 @@ input AnalyzeSceneMetadataInput {
   overwriteExistingDate: Boolean
   "Also analyze the scene's details/description text (off by default; often noisy marketing copy)."
   useDetails: Boolean
-  "Assign an exactly matched existing studio when the scene has no studio."
-  applyStudio: Boolean
-  "Apply an uncontested canonical title proposal."
-  applyTitle: Boolean
-  "Minimum confidence for title proposals. Defaults to 0.90."
-  titleConfidenceThreshold: Float
-  "Allow replacing an existing non-filename-derived title."
+  "Use the active local llama.cpp provider once to narrow ambiguous exact-name performer identities."
+  useLocalAIContext: Boolean
+  "Allow replacing a user-authored title. By default only empty or filename-derived titles are changed."
   overwriteExistingTitle: Boolean
-  "Add an unambiguous existing movie group and scene index."
-  applyMovieGroup: Boolean
-  "Read ffprobe container tags and EXIF metadata."
-  useEmbeddedMetadata: Boolean
 }
+type SceneMetadataEntityModelStatus {
+  modelID: String!
+  version: String!
+  state: String!
+  cachePath: String!
+  lastError: String!
+  runtimeAvailable: Boolean!
+  active: Boolean!
+}
+
 
 type AutoTagMetadataOptions {
   """

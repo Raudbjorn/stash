@@ -2724,14 +2724,18 @@ function updateConfiguration(cache: ApolloCache<unknown>, result: FetchResult) {
 
 export const useConfigureGeneral = () =>
   GQL.useConfigureGeneralMutation({
-    update(cache, result) {
+    update(cache, result, options) {
       if (!result.data?.configureGeneral) return;
 
-      evictQueries(cache, [
+      const impacted = [
         GQL.ConfigurationDocument,
         ...scraperMutationImpactedQueries,
         ...pluginMutationImpactedQueries,
-      ]);
+      ];
+      if (options.variables?.input?.pythonPath !== undefined) {
+        impacted.push(GQL.PythonSettingsDocument, GQL.PythonPackagesDocument);
+      }
+      evictQueries(cache, impacted);
     },
   });
 
@@ -2951,6 +2955,106 @@ export const mutateUninstallPluginPackages = (
     },
   });
 
+/// Python
+
+export const pythonMutationImpactedQueries = [
+  GQL.PythonSettingsDocument,
+  GQL.PythonPackagesDocument,
+  GQL.ConfigurationDocument,
+];
+
+export const refreshPythonLifecycle = () =>
+  evictQueries(clientCache, pythonMutationImpactedQueries);
+
+export const refreshPythonPackages = () =>
+  evictQueries(clientCache, [
+    GQL.PythonSettingsDocument,
+    GQL.PythonPackagesDocument,
+  ]);
+
+export const refreshPythonCatalogs = () =>
+  evictQueries(clientCache, [
+    GQL.PythonSettingsDocument,
+    GQL.SearchPythonPackagesDocument,
+  ]);
+
+export const mutateInstallPythonManager = () =>
+  client.mutate<GQL.InstallPythonManagerMutation>({
+    mutation: GQL.InstallPythonManagerDocument,
+  });
+
+export const mutateInstallPythonRuntime = (id: string) =>
+  client.mutate<
+    GQL.InstallPythonRuntimeMutation,
+    GQL.InstallPythonRuntimeMutationVariables
+  >({
+    mutation: GQL.InstallPythonRuntimeDocument,
+    variables: { id },
+  });
+
+export const mutateSelectPythonRuntime = (id: string) =>
+  client.mutate<
+    GQL.SelectPythonRuntimeMutation,
+    GQL.SelectPythonRuntimeMutationVariables
+  >({
+    mutation: GQL.SelectPythonRuntimeDocument,
+    variables: { id },
+  });
+
+export const mutateInstallPythonPackages = (names: string[]) =>
+  client.mutate<
+    GQL.InstallPythonPackagesMutation,
+    GQL.InstallPythonPackagesMutationVariables
+  >({
+    mutation: GQL.InstallPythonPackagesDocument,
+    variables: { names },
+  });
+
+export const mutateUpdatePythonPackages = (names?: string[]) =>
+  client.mutate<
+    GQL.UpdatePythonPackagesMutation,
+    GQL.UpdatePythonPackagesMutationVariables
+  >({
+    mutation: GQL.UpdatePythonPackagesDocument,
+    variables: { names },
+  });
+
+export const mutateUninstallPythonPackages = (names: string[]) =>
+  client.mutate<
+    GQL.UninstallPythonPackagesMutation,
+    GQL.UninstallPythonPackagesMutationVariables
+  >({
+    mutation: GQL.UninstallPythonPackagesDocument,
+    variables: { names },
+  });
+
+export const mutateConfigurePythonIndexes = (
+  indexes: GQL.PythonIndexInput[]
+) =>
+  client.mutate<
+    GQL.ConfigurePythonIndexesMutation,
+    GQL.ConfigurePythonIndexesMutationVariables
+  >({
+    mutation: GQL.ConfigurePythonIndexesDocument,
+    variables: { indexes },
+    update(cache, result) {
+      if (!result.data?.configurePythonIndexes) return;
+      evictQueries(cache, [
+        GQL.PythonSettingsDocument,
+        GQL.SearchPythonPackagesDocument,
+      ]);
+    },
+  });
+
+export const mutateRefreshPythonPackageCatalog = (index?: string) =>
+  client.mutate<
+    GQL.RefreshPythonPackageCatalogMutation,
+    GQL.RefreshPythonPackageCatalogMutationVariables
+  >({
+    mutation: GQL.RefreshPythonPackageCatalogDocument,
+    variables: { index },
+  });
+
 /// Tasks
 
 export const mutateMetadataScan = (input: GQL.ScanMetadataInput) =>
@@ -2985,6 +3089,21 @@ export const mutateMetadataAnalyzeScenes = (
   client.mutate<GQL.MetadataAnalyzeScenesMutation>({
     mutation: GQL.MetadataAnalyzeScenesDocument,
     variables: { input },
+  });
+export const useSceneMetadataEntityModelStatus = () =>
+  GQL.useSceneMetadataEntityModelStatusQuery({
+    fetchPolicy: "no-cache",
+    pollInterval: 5000,
+  });
+
+export const mutateSceneMetadataEntityModelInstall = () =>
+  client.mutate<GQL.SceneMetadataEntityModelInstallMutation>({
+    mutation: GQL.SceneMetadataEntityModelInstallDocument,
+  });
+
+export const mutateSceneMetadataEntityModelReload = () =>
+  client.mutate<GQL.SceneMetadataEntityModelReloadMutation>({
+    mutation: GQL.SceneMetadataEntityModelReloadDocument,
   });
 
 export const mutateMetadataGenerate = (input: GQL.GenerateMetadataInput) =>

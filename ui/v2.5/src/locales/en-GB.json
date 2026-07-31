@@ -299,6 +299,7 @@
       "logs": "Logs",
       "metadata_providers": "Metadata Providers",
       "plugins": "Plugins",
+      "python": "Python",
       "scraping": "Scraping",
       "security": "Security",
       "services": "Services",
@@ -463,12 +464,8 @@
       "number_of_parallel_task_for_scan_generation_desc": "Set to 0 for auto-detection. Warning running more tasks than is required to achieve 100% CPU utilisation will decrease performance and potentially cause other issues.",
       "number_of_parallel_task_for_scan_generation_head": "Number of parallel task for scan/generation",
       "onnxruntime_lib_path": {
-        "description": "Path to the onnxruntime shared library (e.g. libonnxruntime.so). Used by the scene metadata analyzer's embedding-based name-plausibility scorer. If blank, common install locations are checked; if none is found, a dependency-free heuristic scorer is used instead.",
+        "description": "Path to the onnxruntime shared library (e.g. libonnxruntime.so). Used by the scene metadata entity extractor. If blank, common install locations are checked; if none is found, deterministic extraction remains available.",
         "heading": "ONNX Runtime library path"
-      },
-      "scene_metadata_model_path": {
-        "description": "Directory containing the pinned GLiNER onnx/model_int8.onnx graph and tokenizer.json. If blank or invalid, scene metadata analysis keeps deterministic extraction and the name-plausibility fallback.",
-        "heading": "Scene metadata model path"
       },
       "parallel_scan_head": "Parallel Scan/Generation",
       "plugins_path": {
@@ -512,6 +509,63 @@
     "logs": {
       "log_level": "Log level"
     },
+    "python": {
+      "actions": "Actions",
+      "add_index": "Add index",
+      "add_packages": "Add packages",
+      "all_indexes": "All indexes",
+      "automatic_path": "Resolved automatically from the server environment",
+      "available_versions": "Available Python versions",
+      "available_versions_description": "Install a Python managed by uv, or isolate an installed system interpreter for Stash.",
+      "catalog": "Catalog",
+      "check_updates": "Check for updates",
+      "current": "Current",
+      "current_environment": "Current environment",
+      "current_environment_description": "Python plugins and script scrapers run in this environment.",
+      "default_index": "Default",
+      "description": "Manage the isolated Python environment used by plugins and script scrapers.",
+      "external_path": "External Python path",
+      "external_path_description": "Advanced compatibility setting. Saving this path switches to an unmanaged environment. Packages remain visible, but Stash will not modify system packages.",
+      "install_uv": "Install uv 0.11.33",
+      "installed": "Installed",
+      "installed_packages": "Installed packages",
+      "installed_packages_description": "Review packages in the current interpreter and manage packages in a Stash-owned environment.",
+      "invalid_index": "Enter a unique ASCII name and an absolute HTTP or HTTPS URL without credentials, query parameters, or a fragment.",
+      "job_cancelled": "Cancelled",
+      "job_complete": "Complete",
+      "job_failed": "Failed",
+      "location": "Location",
+      "manage_python": "Manage Python",
+      "managed": "Managed",
+      "managed_by_uv": "Managed by uv",
+      "manager_description": "Stash pins uv and stores it only inside the configuration directory.",
+      "manager_heading": "Environment manager",
+      "move_down": "Move down",
+      "move_up": "Move up",
+      "no_runtime": "No Python runtime is currently available.",
+      "not_refreshed": "Not refreshed",
+      "package": "Package",
+      "package_index": "Package index",
+      "package_indexes": "Package indexes",
+      "package_indexes_description": "Ordered sources used for package operations and package search. Exactly one index must be the default.",
+      "packages_no_runtime": "Install or select a Python runtime to inspect and manage packages.",
+      "packages_read_only": "This is an external environment. Installed packages are visible, but Stash will not modify them. Choose Use on an installed runtime to create an isolated environment.",
+      "provenance": "Source",
+      "refresh_catalogs": "Refresh catalogs",
+      "runtime": "Runtime",
+      "search_packages": "Search packages",
+      "show_all_versions": "Show all versions",
+      "stale": "stale",
+      "stop_job": "Stop",
+      "system_summary": "Python is managed on the dedicated Python settings page.",
+      "unmanaged": "External / unmanaged",
+      "uninstall_confirmation": "Uninstall this package from the current Stash environment? If validation fails, Stash restores the previous package set.",
+      "update_all": "Update all",
+      "update_confirmation": "Update the selected package set? If validation fails, Stash restores the previous package set.",
+      "use": "Use",
+      "use_confirmation": "Stash will create and select an isolated environment from this interpreter. It will not modify or inherit packages from the base interpreter.",
+      "version": "Version"
+    },
     "plugins": {
       "available_plugins": "Available Plugins",
       "hooks": "Hooks",
@@ -548,7 +602,37 @@
     "tasks": {
       "added_job_to_queue": "Added {operation_name} to job queue",
       "analyze_scene_metadata": {
-        "description": "Analyzes scene titles/filenames (and available container/EXIF metadata) to detect performers and scene date. Attaches matched performers and fills in a blank date; existing dates are never overwritten unless explicitly enabled."
+        "date_confidence": {
+          "label": "Date confidence threshold"
+        },
+        "description": "Analyzes filename, title, adjacent NFO, and container metadata to link performers, studios, dates, and explicit movie scenes, then proposes a clean title. Existing metadata is preserved unless its overwrite control is enabled.",
+        "model": {
+          "checking": "Checking local entity model…",
+          "install": "Download and install {model}",
+          "label": "Local entity extraction",
+          "reload": "Reload model",
+          "reloaded": "Local entity model reloaded",
+          "runtime_available": "ONNX Runtime available",
+          "runtime_missing": "ONNX Runtime missing",
+          "status": "{state} · {version} · {runtime}"
+        },
+        "overwrite_date": "Overwrite an existing date only with high-confidence, uncontested evidence",
+        "overwrite_title": "Overwrite a user-authored title",
+        "performer_confidence": {
+          "label": "New performer confidence threshold"
+        },
+        "performer_verifier_scrapers": {
+          "help": "Selected name scrapers and Stash-box endpoints verify newly discovered performer identities. Leaving both selections empty disables network verification and creation of newly discovered performers.",
+          "label": "Performer verification scrapers",
+          "placeholder": "Select performer scrapers…"
+        },
+        "performer_verifier_stash_boxes": {
+          "help": "Uses exact-name performer results from the selected configured Stash-box APIs. Configure endpoints under Settings > Metadata providers.",
+          "label": "Performer verification Stash-box endpoints",
+          "placeholder": "Select Stash-box endpoints…"
+        },
+        "use_details": "Also analyze scene details",
+        "use_local_ai_context": "Use local AI context for ambiguous performer names"
       },
       "anonymise_and_download": "Makes an anonymised copy of the database and downloads the resulting file.",
       "anonymise_database": "Makes a copy of the database to the backups directory, anonymising all sensitive data. This can then be provided to others for troubleshooting and debugging purposes. The original database is not modified. Anonymised database uses the filename format {filename_format}.",

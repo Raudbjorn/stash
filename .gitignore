@@ -20,6 +20,7 @@ vendor
 
 # GraphQL generated output
 internal/api/generated_*.go
+ui/v2.5/src/core/generated-graphql.ts
 
 # Generated locale files
 ui/login/locales/*

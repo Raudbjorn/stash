@@ -1,173 +1,183 @@
 package metadata
 
 import (
+	"bytes"
 	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
-
-	"github.com/stashapp/stash/pkg/models"
 )
 
-// NFO is the structured subset of Kodi sidecar metadata used by scene analysis.
-type NFO struct {
-	Title     string
-	Premiered string
-	Year      string
-	Studio    string
-	Actors    []string
-	SetName   string
+const MaxNFOSize int64 = 2 << 20
+
+type NFOData struct {
+	Path       string
+	Title      string
+	Performers []string
+	Studio     string
+	Date       string
+	Group      string
+	SceneIndex *int
 }
 
-type nfoXML struct {
-	Title     string     `xml:"title"`
-	Premiered string     `xml:"premiered"`
-	Year      string     `xml:"year"`
-	Studio    string     `xml:"studio"`
-	Actors    []nfoActor `xml:"actor"`
-	Set       nfoSet     `xml:"set"`
+type nfoDocument struct {
+	Title         string `xml:"title"`
+	OriginalTitle string `xml:"originaltitle"`
+	Actors        []struct {
+		Name string `xml:"name"`
+	} `xml:"actor"`
+	Performers     []string `xml:"performer"`
+	Studio         string   `xml:"studio"`
+	Premiered      string   `xml:"premiered"`
+	ReleaseDate    string   `xml:"releasedate"`
+	ProductionDate string   `xml:"production_date"`
+	Date           string   `xml:"date"`
+	Year           string   `xml:"year"`
+	Movie          string   `xml:"movie"`
+	Group          string   `xml:"group"`
+	Set            struct {
+		Name string `xml:"name"`
+	} `xml:"set"`
+	Scene       string `xml:"scene"`
+	SceneNumber string `xml:"scene_number"`
+	Index       string `xml:"index"`
 }
 
-type nfoActor struct {
-	Name string `xml:"name"`
-}
-
-type nfoSet struct {
-	Name string `xml:"name"`
-	Text string `xml:",chardata"`
-}
-
-var commonVideoExtensions = map[string]struct{}{
-	".3g2": {}, ".3gp": {}, ".asf": {}, ".avi": {}, ".divx": {},
-	".flv": {}, ".m2ts": {}, ".m4v": {}, ".mkv": {}, ".mov": {},
-	".mp4": {}, ".mpeg": {}, ".mpg": {}, ".mts": {}, ".ogv": {},
-	".rm": {}, ".rmvb": {}, ".ts": {}, ".vob": {}, ".webm": {}, ".wmv": {},
-}
-
-// ReadNFO reads a same-basename sidecar, or an unambiguous movie.nfo fallback.
-// A nil result with nil error means no eligible sidecar exists.
-func ReadNFO(filesystem models.FS, video *models.VideoFile) (*NFO, error) {
-	if filesystem == nil || video == nil || video.BaseFile == nil {
-		return nil, nil
-	}
-
-	activeFS := filesystem
-	var zipFS models.ZipFS
-	if video.ZipFile != nil {
-		var err error
-		zipFS, err = filesystem.OpenZip(video.ZipFile.Base().Path, video.ZipFile.Base().Size)
-		if err != nil {
-			return nil, fmt.Errorf("opening sidecar archive: %w", err)
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
 		}
-		defer zipFS.Close()
-		activeFS = zipFS
+	}
+	return ""
+}
+
+func parsePositiveInt(values ...string) *int {
+	value := firstNonEmpty(values...)
+	if value == "" {
+		return nil
+	}
+	parsed, err := strconv.ParseInt(value, 10, 32)
+	if err != nil || parsed <= 0 {
+		return nil
+	}
+	ret := int(parsed)
+	return &ret
+}
+
+func ParseNFO(reader io.Reader) (*NFOData, error) {
+	limited := io.LimitReader(reader, MaxNFOSize+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, fmt.Errorf("read NFO: %w", err)
+	}
+	if int64(len(data)) > MaxNFOSize {
+		return nil, fmt.Errorf("NFO exceeds %d bytes", MaxNFOSize)
+	}
+	upper := bytes.ToUpper(data)
+	if bytes.Contains(upper, []byte("<!DOCTYPE")) || bytes.Contains(upper, []byte("<!ENTITY")) {
+		return nil, errors.New("NFO DTD and entity declarations are not allowed")
+	}
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.Strict = true
+	var document nfoDocument
+	if err := decoder.Decode(&document); err != nil {
+		return nil, fmt.Errorf("parse NFO XML: %w", err)
 	}
 
-	directory := filepath.Dir(video.Path)
-	dir, err := activeFS.Open(directory)
-	if err != nil {
-		if isNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("opening sidecar directory %q: %w", directory, err)
+	ret := &NFOData{
+		Title:      firstNonEmpty(document.Title, document.OriginalTitle),
+		Studio:     firstNonEmpty(document.Studio),
+		Date:       firstNonEmpty(document.Premiered, document.ReleaseDate, document.ProductionDate, document.Date, document.Year),
+		Group:      firstNonEmpty(document.Movie, document.Group, document.Set.Name),
+		SceneIndex: parsePositiveInt(document.Scene, document.SceneNumber, document.Index),
 	}
-	entries, err := dir.ReadDir(-1)
-	closeErr := dir.Close()
-	if err != nil {
-		return nil, fmt.Errorf("reading sidecar directory %q: %w", directory, err)
-	}
-	if closeErr != nil {
-		return nil, fmt.Errorf("closing sidecar directory %q: %w", directory, closeErr)
-	}
-
-	stem := strings.TrimSuffix(filepath.Base(video.Path), filepath.Ext(video.Path))
-	var sameBasename, movieNFO string
-	videoCount := 0
-	primaryExtension := strings.ToLower(filepath.Ext(video.Path))
-	for _, entry := range entries {
-		if entry.IsDir() {
+	seenPerformers := make(map[string]struct{}, len(document.Actors)+len(document.Performers))
+	for _, actor := range document.Actors {
+		name := strings.TrimSpace(actor.Name)
+		key := NormalizeKey(name)
+		if key == "" {
 			continue
 		}
-		name := entry.Name()
-		extension := strings.ToLower(filepath.Ext(name))
-		if extension == ".nfo" {
-			entryStem := strings.TrimSuffix(name, filepath.Ext(name))
-			switch {
-			case strings.EqualFold(entryStem, stem):
-				sameBasename = filepath.Join(directory, name)
-			case strings.EqualFold(name, "movie.nfo"):
-				movieNFO = filepath.Join(directory, name)
-			}
-		}
-		if isRegularVideoEntry(entry, extension, primaryExtension) {
-			videoCount++
+		if _, exists := seenPerformers[key]; !exists {
+			seenPerformers[key] = struct{}{}
+			ret.Performers = append(ret.Performers, name)
 		}
 	}
-
-	nfoPath := sameBasename
-	if nfoPath == "" && movieNFO != "" && videoCount == 1 {
-		nfoPath = movieNFO
-	}
-	if nfoPath == "" {
-		return nil, nil
-	}
-
-	var reader io.ReadCloser
-	if zipFS != nil {
-		reader, err = zipFS.OpenOnly(nfoPath)
-	} else {
-		reader, err = filesystem.Open(nfoPath)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("opening NFO %q: %w", nfoPath, err)
-	}
-	defer reader.Close()
-
-	var raw nfoXML
-	if err := xml.NewDecoder(reader).Decode(&raw); err != nil {
-		return nil, fmt.Errorf("decoding NFO %q: %w", nfoPath, err)
-	}
-
-	ret := &NFO{
-		Title:     strings.TrimSpace(raw.Title),
-		Premiered: strings.TrimSpace(raw.Premiered),
-		Year:      strings.TrimSpace(raw.Year),
-		Studio:    strings.TrimSpace(raw.Studio),
-		SetName:   strings.TrimSpace(raw.Set.Name),
-	}
-	if ret.SetName == "" {
-		ret.SetName = strings.TrimSpace(raw.Set.Text)
-	}
-	seenActors := map[string]struct{}{}
-	for _, actor := range raw.Actors {
-		if name := strings.TrimSpace(actor.Name); name != "" {
-			key := strings.ToLower(name)
-			if _, seen := seenActors[key]; !seen {
-				seenActors[key] = struct{}{}
-				ret.Actors = append(ret.Actors, name)
-			}
+	for _, rawName := range document.Performers {
+		name := strings.TrimSpace(rawName)
+		key := NormalizeKey(name)
+		if key == "" {
+			continue
+		}
+		if _, exists := seenPerformers[key]; !exists {
+			seenPerformers[key] = struct{}{}
+			ret.Performers = append(ret.Performers, name)
 		}
 	}
 	return ret, nil
 }
 
-func isRegularVideoEntry(entry fs.DirEntry, extension, primaryExtension string) bool {
-	if entry.Type()&fs.ModeType != 0 {
-		info, err := entry.Info()
-		if err != nil || !info.Mode().IsRegular() {
-			return false
-		}
-	}
-	if extension == primaryExtension {
-		return true
-	}
-	_, ok := commonVideoExtensions[extension]
-	return ok
+var videoExtensions = map[string]struct{}{
+	".3gp": {}, ".avi": {}, ".flv": {}, ".m2ts": {}, ".m4v": {}, ".mkv": {},
+	".mov": {}, ".mp4": {}, ".mpeg": {}, ".mpg": {}, ".mts": {}, ".ts": {}, ".webm": {}, ".wmv": {},
 }
 
-func isNotExist(err error) bool {
-	return err != nil && (errors.Is(err, fs.ErrNotExist) || strings.Contains(strings.ToLower(err.Error()), "not exist"))
+func soleVideoInDirectory(videoPath string) (bool, error) {
+	entries, err := os.ReadDir(filepath.Dir(videoPath))
+	if err != nil {
+		return false, err
+	}
+	videos := 0
+	foundPrimary := false
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if _, ok := videoExtensions[strings.ToLower(filepath.Ext(entry.Name()))]; ok {
+			if entry.Name() == filepath.Base(videoPath) {
+				foundPrimary = true
+			}
+			videos++
+			if videos > 1 {
+				return false, nil
+			}
+		}
+	}
+	return videos == 1 && foundPrimary, nil
+}
+
+// ReadAdjacentNFO checks only the case-sensitive sidecar names allowed by the
+// scene analyzer. Missing sidecars are a normal nil result.
+func ReadAdjacentNFO(videoPath string) (*NFOData, error) {
+	directory := filepath.Dir(videoPath)
+	stem := strings.TrimSuffix(filepath.Base(videoPath), filepath.Ext(videoPath))
+	candidates := []string{filepath.Join(directory, stem+".nfo")}
+	if sole, err := soleVideoInDirectory(videoPath); err == nil && sole {
+		candidates = append(candidates, filepath.Join(directory, "movie.nfo"))
+	}
+	for _, candidate := range candidates {
+		file, err := os.Open(candidate)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, fmt.Errorf("open NFO %s: %w", candidate, err)
+		}
+		parsed, parseErr := ParseNFO(file)
+		closeErr := file.Close()
+		if parseErr != nil {
+			return nil, fmt.Errorf("%s: %w", candidate, parseErr)
+		}
+		if closeErr != nil {
+			return nil, fmt.Errorf("close NFO %s: %w", candidate, closeErr)
+		}
+		parsed.Path = candidate
+		return parsed, nil
+	}
+	return nil, nil
 }

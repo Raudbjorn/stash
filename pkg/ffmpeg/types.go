@@ -1,34 +1,12 @@
 package ffmpeg
 
 import (
+	stdjson "encoding/json"
 	"strings"
-	"time"
+	"unicode/utf8"
 
-	"github.com/stashapp/stash/pkg/utils"
+	modeljson "github.com/stashapp/stash/pkg/models/json"
 )
-
-// FFProbeTags preserves arbitrary format and stream metadata tags.
-type FFProbeTags map[string]string
-
-// Get returns a tag value using a case-insensitive key comparison.
-func (t FFProbeTags) Get(key string) string {
-	for candidate, value := range t {
-		if strings.EqualFold(candidate, key) {
-			return value
-		}
-	}
-	return ""
-}
-
-// Time parses a tag value as a timestamp. Invalid or absent values return zero.
-func (t FFProbeTags) Time(key string) time.Time {
-	value := strings.TrimSpace(t.Get(key))
-	if value == "" {
-		return time.Time{}
-	}
-	ret, _ := utils.ParseDateStringAsTime(value)
-	return ret
-}
 
 // FFProbeJSON is the JSON output of ffprobe.
 type FFProbeJSON struct {
@@ -50,6 +28,71 @@ type FFProbeJSON struct {
 		Code   int    `json:"code"`
 		String string `json:"string"`
 	} `json:"error"`
+}
+
+const (
+	maxProbeTagKeyLength   = 128
+	maxProbeTagValueLength = 4096
+)
+
+var allowedProbeTags = map[string]struct{}{
+	"title": {}, "comment": {}, "description": {}, "date": {}, "creation_time": {},
+	"com.apple.quicktime.creationdate": {}, "encoder": {},
+	"artist": {}, "album_artist": {}, "publisher": {}, "copyright": {},
+	"show": {}, "episode_id": {}, "handler_name": {}, "language": {}, "rotate": {},
+}
+
+// FFProbeTags preserves bounded, allowlisted format and stream metadata.
+type FFProbeTags struct {
+	CreationTime modeljson.JSONTime
+	Title        string
+	Comment      string
+	Encoder      string
+	Allowed      map[string]string
+}
+
+// Get returns an allowlisted tag value using a case-insensitive key.
+func (t FFProbeTags) Get(key string) string {
+	return t.Allowed[strings.ToLower(strings.TrimSpace(key))]
+}
+
+func (t *FFProbeTags) UnmarshalJSON(data []byte) error {
+	var raw map[string]stdjson.RawMessage
+	if err := stdjson.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	t.Allowed = make(map[string]string, len(raw))
+	for originalKey, encoded := range raw {
+		key := strings.ToLower(strings.TrimSpace(originalKey))
+		if len(key) == 0 || len(key) > maxProbeTagKeyLength {
+			continue
+		}
+		if _, ok := allowedProbeTags[key]; !ok {
+			continue
+		}
+		var value string
+		if err := stdjson.Unmarshal(encoded, &value); err != nil {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if value == "" || len(value) > maxProbeTagValueLength || !utf8.ValidString(value) {
+			continue
+		}
+		t.Allowed[key] = value
+		switch key {
+		case "title":
+			t.Title = value
+		case "comment":
+			t.Comment = value
+		case "encoder":
+			t.Encoder = value
+		case "creation_time":
+			if err := stdjson.Unmarshal(encoded, &t.CreationTime); err != nil {
+				t.CreationTime = modeljson.JSONTime{}
+			}
+		}
+	}
+	return nil
 }
 
 // FFProbeStream is a JSON representation of an ffmpeg stream.

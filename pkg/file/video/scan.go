@@ -44,17 +44,22 @@ func (d *Decorator) Decorate(ctx context.Context, fs models.FS, f models.File) (
 	}
 
 	return &models.VideoFile{
-		BaseFile:     base,
-		Format:       string(container),
-		VideoCodec:   videoFile.VideoCodec,
-		AudioCodec:   videoFile.AudioCodec,
-		Width:        videoFile.Width,
-		Height:       videoFile.Height,
-		Duration:     videoFile.FileDuration,
-		FrameRate:    videoFile.FrameRate,
-		BitRate:      videoFile.Bitrate,
-		Interactive:  interactive,
-		CreationTime: videoFile.CreationTime,
+		BaseFile:       base,
+		Format:         string(container),
+		VideoCodec:     videoFile.VideoCodec,
+		AudioCodec:     videoFile.AudioCodec,
+		Width:          videoFile.Width,
+		Height:         videoFile.Height,
+		Duration:       videoFile.FileDuration,
+		FrameRate:      videoFile.FrameRate,
+		BitRate:        videoFile.Bitrate,
+		Interactive:    interactive,
+		CreationTime:   videoFile.CreationTime,
+		Title:          videoFile.Title,
+		Comment:        videoFile.Comment,
+		Encoder:        videoFile.Encoder,
+		Tags:           videoFile.Tags,
+		MetadataProbed: true,
 	}, nil
 }
 

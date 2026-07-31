@@ -205,13 +205,24 @@ export const SettingsConfigurationPanel: React.FC = () => {
           </Button>
         </Setting>
 
-        <StringSetting
-          id="python-path"
-          headingID="config.general.python_path.heading"
-          subHeadingID="config.general.python_path.description"
-          value={general.pythonPath ?? undefined}
-          onChange={(v) => saveGeneral({ pythonPath: v })}
-        />
+        <Setting
+          heading={<FormattedMessage id="config.general.python_path.heading" />}
+          subHeadingID="config.python.system_summary"
+        >
+          <div>
+            <div className="value">
+              {general.pythonPath || (
+                <FormattedMessage id="config.python.automatic_path" />
+              )}
+            </div>
+            <Button
+              variant="secondary"
+              onClick={() => history.push("/settings?tab=python")}
+            >
+              <FormattedMessage id="config.python.manage_python" />
+            </Button>
+          </div>
+        </Setting>
 
         <StringSetting
           id="onnxruntime-lib-path"
@@ -219,14 +230,6 @@ export const SettingsConfigurationPanel: React.FC = () => {
           subHeadingID="config.general.onnxruntime_lib_path.description"
           value={general.onnxRuntimeLibPath ?? undefined}
           onChange={(v) => saveGeneral({ onnxRuntimeLibPath: v })}
-        />
-
-        <StringSetting
-          id="scene-metadata-model-path"
-          headingID="config.general.scene_metadata_model_path.heading"
-          subHeadingID="config.general.scene_metadata_model_path.description"
-          value={general.sceneMetadataModelPath ?? undefined}
-          onChange={(v) => saveGeneral({ sceneMetadataModelPath: v })}
         />
 
         <StringSetting

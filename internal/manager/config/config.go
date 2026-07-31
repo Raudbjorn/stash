@@ -29,6 +29,7 @@ import (
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
 	"github.com/stashapp/stash/pkg/models/paths"
+	"github.com/stashapp/stash/pkg/python"
 	"github.com/stashapp/stash/pkg/sliceutil"
 	"github.com/stashapp/stash/pkg/utils"
 )
@@ -216,6 +217,63 @@ const (
 	ollamaTimeoutDefault            = 30000
 	OllamaFallbackToTraditionalDict = "ollama_fallback_to_traditional_dict"
 	ollamaFallbackDefault           = true
+
+	// AI server (opt-in, disabled by default). When AIEnabled is false nothing
+	// is started, no database file is created, and every /api/v1 route answers
+	// 503 - Stash behaves exactly as it did before the feature existed.
+	AIEnabled        = "ai_enabled"
+	aiEnabledDefault = false
+	// AIDatabasePath is the AI server's own database file, deliberately
+	// separate from Stash's so that AI schema changes can never block or
+	// corrupt Stash's migration chain. Empty means "stash-ai.db next to the
+	// config file".
+	AIDatabasePath = "ai_database_path"
+	// AITaskLoopInterval bounds scheduling latency in seconds. It lives here
+	// rather than in the AI database because the scheduler needs it before a
+	// database exists.
+	AITaskLoopInterval        = "ai_task_loop_interval"
+	aiTaskLoopIntervalDefault = 0.05
+	AITaskDebug               = "ai_task_debug"
+	aiTaskDebugDefault        = false
+
+	// AITaggingProvider selects the inference backend: "native",
+	// "skier_aitagging", "openai_moderation", "llama_vlm", or "" for neither.
+	// Empty by default: analysis needs either a model download or a running
+	// server, and starting one unrequested would be a surprise.
+	AITaggingProvider = "ai_tagging_provider"
+	// AITaggingServerURL is the remote server for the HTTP provider.
+	AITaggingServerURL = "ai_tagging_server_url"
+	// AITaggingOpenAIKey authenticates the moderation provider. Honours the
+	// OPENAI_API_KEY environment variable as a fallback, so a key need not be
+	// written into the config file.
+	AITaggingOpenAIKey = "ai_tagging_openai_key"
+	// AITaggingModelDir is where downloaded models and the ONNX runtime live.
+	// Unset, it sits beside the config file.
+	AITaggingModelDir = "ai_tagging_model_dir"
+	// AITaggingRulesDir holds the per-category CSV marker rules. Unset, it
+	// sits beside the config file; absent, no markers are generated.
+	AITaggingRulesDir = "ai_tagging_rules_dir"
+	// AITaggingFrameInterval is the sampling period in seconds.
+	AITaggingFrameInterval        = "ai_tagging_frame_interval"
+	aiTaggingFrameIntervalDefault = 2.0
+	// AITaggingThreshold is the minimum confidence for a label.
+	AITaggingThreshold        = "ai_tagging_threshold"
+	aiTaggingThresholdDefault = 0.5
+	// AITaggingMaxSpanMerge is the stage-one gap tolerance in seconds. The
+	// upstream code defaults to 2 but its shipped configuration overrides it to
+	// 4, and matching the deployed behaviour matters more than the default.
+	AITaggingMaxSpanMerge        = "ai_tagging_max_span_merge"
+	aiTaggingMaxSpanMergeDefault = 4.0
+	// AITaggingVLMModel selects one checksum-pinned vision-language pair.
+	AITaggingVLMModel        = "ai_tagging_vlm_model"
+	aiTaggingVLMModelDefault = "internvl3-2b"
+	// AITaggingVLMLabels is the required open-vocabulary action taxonomy.
+	AITaggingVLMLabels = "ai_tagging_vlm_labels"
+	// AITaggingVLMGPULayers enables explicit llama.cpp GPU offload. Zero is CPU.
+	AITaggingVLMGPULayers = "ai_tagging_vlm_gpu_layers"
+	// AITaggingVLMContext overrides the selected pair's context window. Zero
+	// keeps the pair's checksum-pinned default.
+	AITaggingVLMContext = "ai_tagging_vlm_context"
 	// MistralAPIKey is the Mistral AI API key used as an alternative dictionary
 	// provider. Empty by default; the MISTRAL_API_KEY environment variable is
 	// honored as a fallback.
@@ -238,18 +296,15 @@ const (
 	StashBoxes = "stash_boxes"
 
 	// marker sync options
-	MarkerSync = "marker_sync"
-
-	PythonPath = "python_path"
+	MarkerSync      = "marker_sync"
+	PythonPath      = "python_path"
+	PythonRuntimeID = "python.runtime_id"
+	PythonIndexes   = "python.indexes"
 
 	// OnnxRuntimeLibPath overrides the ONNX Runtime shared library path used
-	// by the scene metadata analyzer's embedding-based name-plausibility
-	// scorer. If blank, common install locations are checked instead.
+	// by the scene metadata entity extractor. If blank, common install
+	// locations are checked instead.
 	OnnxRuntimeLibPath = "onnxruntime_lib_path"
-
-	// SceneMetadataModelPath is the root containing the pinned external
-	// GLiNER graph and tokenizer used by the scene metadata analyzer.
-	SceneMetadataModelPath = "scene_metadata_model_path"
 
 	// plugin options
 	PluginsPath          = "plugins_path"
@@ -601,6 +656,10 @@ func (i *Config) Write() error {
 	i.Lock()
 	defer i.Unlock()
 
+	return i.writeLocked()
+}
+
+func (i *Config) writeLocked() error {
 	data, err := i.marshal()
 	if err != nil {
 		return err
@@ -1039,13 +1098,73 @@ func (i *Config) GetDisabledPlugins() []string {
 func (i *Config) GetPythonPath() string {
 	return i.getString(PythonPath)
 }
+func (i *Config) GetPythonRuntimeID() string {
+	return i.getString(PythonRuntimeID)
+}
+
+func (i *Config) GetPythonIndexes() []python.Index {
+	var indexes []python.Index
+	if err := i.unmarshalKey(PythonIndexes, &indexes); err != nil || len(indexes) == 0 {
+		return python.DefaultIndexes()
+	}
+	normalized, err := python.ValidateIndexes(indexes)
+	if err != nil {
+		logger.Warnf("invalid Python package indexes in configuration: %v", err)
+		return python.DefaultIndexes()
+	}
+	return normalized
+}
+
+func (i *Config) UpdatePythonSelection(runtimeID, executable string) error {
+	i.Lock()
+	defer i.Unlock()
+
+	oldRuntime, hadRuntime := i.main.Get(PythonRuntimeID), i.main.Exists(PythonRuntimeID)
+	oldPath, hadPath := i.main.Get(PythonPath), i.main.Exists(PythonPath)
+	i.set(PythonRuntimeID, runtimeID)
+	i.set(PythonPath, executable)
+	if err := i.writeLocked(); err != nil {
+		restoreConfigValue(i, PythonRuntimeID, oldRuntime, hadRuntime)
+		restoreConfigValue(i, PythonPath, oldPath, hadPath)
+		return err
+	}
+	return nil
+}
+
+func (i *Config) UpdatePythonIndexes(indexes []python.Index) error {
+	normalized, err := python.ValidateIndexes(indexes)
+	if err != nil {
+		return err
+	}
+
+	i.Lock()
+	defer i.Unlock()
+	oldIndexes, hadIndexes := i.main.Get(PythonIndexes), i.main.Exists(PythonIndexes)
+	i.set(PythonIndexes, normalized)
+	if err := i.writeLocked(); err != nil {
+		restoreConfigValue(i, PythonIndexes, oldIndexes, hadIndexes)
+		return err
+	}
+	return nil
+}
+
+func (i *Config) SetPythonExternalPath(executable string) {
+	i.Lock()
+	defer i.Unlock()
+	i.set(PythonRuntimeID, nil)
+	i.set(PythonPath, executable)
+}
+
+func restoreConfigValue(config *Config, key string, value interface{}, existed bool) {
+	if existed {
+		config.set(key, value)
+	} else {
+		config.set(key, nil)
+	}
+}
 
 func (i *Config) GetOnnxRuntimeLibPath() string {
 	return i.getString(OnnxRuntimeLibPath)
-}
-
-func (i *Config) GetSceneMetadataModelPath() string {
-	return i.getString(SceneMetadataModelPath)
 }
 
 func (i *Config) GetHost() string {
@@ -1998,6 +2117,135 @@ func (i *Config) GetOllamaFallbackToTraditionalDict() bool {
 	return i.getBoolDefault(OllamaFallbackToTraditionalDict, ollamaFallbackDefault)
 }
 
+// GetAIEnabled reports whether the in-process AI server should start.
+func (i *Config) GetAIEnabled() bool {
+	return i.getBoolDefault(AIEnabled, aiEnabledDefault)
+}
+
+// GetAIDatabasePath returns the absolute path of the AI server's database.
+//
+// It is a separate file from Stash's own database on purpose. Unset, it sits
+// beside the config file as stash-ai.db. Note this file is NOT covered by
+// Stash's backup routine.
+func (i *Config) GetAIDatabasePath() string {
+	if p := i.getString(AIDatabasePath); p != "" {
+		if filepath.IsAbs(p) {
+			return p
+		}
+		return filepath.Join(i.GetConfigPath(), p)
+	}
+	return filepath.Join(i.GetConfigPath(), "stash-ai.db")
+}
+
+// GetAITaskLoopInterval returns the AI scheduler's maximum scheduling latency
+// in seconds. This bounds how long a queued task may wait when nothing else
+// wakes the scheduler; it is not a poll period.
+func (i *Config) GetAITaskLoopInterval() float64 {
+	ret := i.getFloat64(AITaskLoopInterval)
+	if ret <= 0 {
+		return aiTaskLoopIntervalDefault
+	}
+	return ret
+}
+
+// GetAITaskDebug reports whether the AI scheduler should log verbosely.
+func (i *Config) GetAITaskDebug() bool {
+	return i.getBoolDefault(AITaskDebug, aiTaskDebugDefault)
+}
+
+// GetAITaggingProvider returns the configured inference backend, or "".
+func (i *Config) GetAITaggingProvider() string {
+	return i.getString(AITaggingProvider)
+}
+
+// GetAITaggingServerURL returns the remote AI server URL for the HTTP provider.
+func (i *Config) GetAITaggingServerURL() string {
+	return i.getString(AITaggingServerURL)
+}
+
+// GetAITaggingOpenAIKey returns the OpenAI key for the moderation provider.
+//
+// Falls back to OPENAI_API_KEY, following the pattern the Mistral key already
+// uses, so a credential can stay out of the config file.
+func (i *Config) GetAITaggingOpenAIKey() string {
+	if key := i.getString(AITaggingOpenAIKey); key != "" {
+		return key
+	}
+	return os.Getenv("OPENAI_API_KEY")
+}
+
+// GetAITaggingModelDir returns where models and the ONNX runtime are stored.
+func (i *Config) GetAITaggingModelDir() string {
+	if p := i.getString(AITaggingModelDir); p != "" {
+		if filepath.IsAbs(p) {
+			return p
+		}
+		return filepath.Join(i.GetConfigPath(), p)
+	}
+	return filepath.Join(i.GetConfigPath(), "ai-models")
+}
+
+// GetAITaggingRulesDir returns where the per-category marker rules live.
+func (i *Config) GetAITaggingRulesDir() string {
+	if p := i.getString(AITaggingRulesDir); p != "" {
+		if filepath.IsAbs(p) {
+			return p
+		}
+		return filepath.Join(i.GetConfigPath(), p)
+	}
+	return filepath.Join(i.GetConfigPath(), "ai-categories")
+}
+
+// GetAITaggingFrameInterval returns the sampling period in seconds.
+func (i *Config) GetAITaggingFrameInterval() float64 {
+	ret := i.getFloat64(AITaggingFrameInterval)
+	if ret <= 0 {
+		return aiTaggingFrameIntervalDefault
+	}
+	return ret
+}
+
+// GetAITaggingThreshold returns the minimum confidence for a label.
+func (i *Config) GetAITaggingThreshold() float64 {
+	ret := i.getFloat64(AITaggingThreshold)
+	if ret <= 0 || ret >= 1 {
+		return aiTaggingThresholdDefault
+	}
+	return ret
+}
+
+// GetAITaggingMaxSpanMerge returns the stage-one gap tolerance in seconds.
+func (i *Config) GetAITaggingMaxSpanMerge() float64 {
+	ret := i.getFloat64(AITaggingMaxSpanMerge)
+	if ret <= 0 {
+		return aiTaggingMaxSpanMergeDefault
+	}
+	return ret
+}
+
+// GetAITaggingVLMModel returns the selected vision-language pair.
+func (i *Config) GetAITaggingVLMModel() string {
+	if model := i.getString(AITaggingVLMModel); model != "" {
+		return model
+	}
+	return aiTaggingVLMModelDefault
+}
+
+// GetAITaggingVLMLabels returns the configured open-vocabulary taxonomy.
+func (i *Config) GetAITaggingVLMLabels() []string {
+	return i.getStringSlice(AITaggingVLMLabels)
+}
+
+// GetAITaggingVLMGPULayers returns explicit llama.cpp GPU offload layers.
+func (i *Config) GetAITaggingVLMGPULayers() int {
+	return i.getInt(AITaggingVLMGPULayers)
+}
+
+// GetAITaggingVLMContext returns the configured context override, or zero.
+func (i *Config) GetAITaggingVLMContext() int {
+	return i.getInt(AITaggingVLMContext)
+}
+
 // GetMistralAPIKey returns the Mistral AI API key, honoring the MISTRAL_API_KEY
 // environment variable as a fallback when not configured.
 func (i *Config) GetMistralAPIKey() string {
@@ -2139,6 +2387,10 @@ func (i *Config) setDefaultValues() {
 	i.setDefault(OllamaModel, ollamaModelDefault)
 	i.setDefault(OllamaTimeout, ollamaTimeoutDefault)
 	i.setDefault(OllamaFallbackToTraditionalDict, ollamaFallbackDefault)
+
+	i.setDefault(AIEnabled, aiEnabledDefault)
+	i.setDefault(AITaskLoopInterval, aiTaskLoopIntervalDefault)
+	i.setDefault(AITaskDebug, aiTaskDebugDefault)
 
 	i.setDefault(WriteImageThumbnails, writeImageThumbnailsDefault)
 	i.setDefault(CreateImageClipsFromVideos, createImageClipsFromVideosDefault)

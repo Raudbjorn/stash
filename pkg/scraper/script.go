@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	stashExec "github.com/stashapp/stash/pkg/exec"
@@ -255,6 +256,8 @@ func imageInputFromImage(image *models.Image) imageInput {
 
 var ErrScraperScript = errors.New("scraper script error")
 
+var scraperCompatibilityWarningOnce sync.Once
+
 type scriptScraper struct {
 	definition   Definition
 	globalConfig GlobalConfig
@@ -282,18 +285,43 @@ func (s *scriptScraper) runScraperScript(ctx context.Context, command []string, 
 	// kill the process. This records whether cancellation actually caused the
 	// command to terminate, so a later ctx.Err() cannot mask a completed failure.
 	detachedCtx := context.WithoutCancel(ctx)
+	if len(command) == 0 {
+		return errors.New("empty scraper command")
+	}
+
+	var releasePython func()
+	if python.IsPythonCommand(command[0]) {
+		var err error
+		releasePython, err = python.AcquireExecution(ctx)
+		if err != nil {
+			return fmt.Errorf("acquire Python execution lease: %w", err)
+		}
+		defer releasePython()
+	}
 
 	var cmd *exec.Cmd
 	if python.IsPythonCommand(command[0]) {
+		runtimeID := s.globalConfig.GetPythonRuntimeID()
 		pythonPath := s.globalConfig.GetPythonPath()
-		p, err := python.Resolve(pythonPath)
+		p, err := python.ResolveSelection(runtimeID, pythonPath)
 
 		if err != nil {
+			if runtimeID != "" {
+				return err
+			}
 			logger.Warnf("%s", err)
 		} else {
 			cmd = p.Command(detachedCtx, command[1:])
-			envVariable, _ := filepath.Abs(filepath.Dir(filepath.Dir(s.definition.path)))
-			python.AppendPythonPath(cmd, envVariable)
+			scraperRoot, _ := filepath.Abs(filepath.Dir(filepath.Dir(s.definition.path)))
+			compatibilityPath, compatibilityErr := python.ScraperCompatibilityPath()
+			if compatibilityErr != nil {
+				scraperCompatibilityWarningOnce.Do(func() {
+					logger.Warnf("Python scraper compatibility unavailable; running without it: %v", compatibilityErr)
+				})
+				python.AppendPythonPath(cmd, scraperRoot)
+			} else {
+				python.AppendPythonPath(cmd, compatibilityPath, scraperRoot)
+			}
 		}
 	}
 

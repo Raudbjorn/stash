@@ -3,6 +3,8 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -27,6 +29,36 @@ const (
 	captionFilenameColumn = "filename"
 	captionTypeColumn     = "caption_type"
 )
+
+type stringMap map[string]string
+
+func (m *stringMap) Scan(value interface{}) error {
+	if value == nil {
+		*m = nil
+		return nil
+	}
+	var data []byte
+	switch typed := value.(type) {
+	case string:
+		data = []byte(typed)
+	case []byte:
+		data = typed
+	default:
+		return fmt.Errorf("scan string map from %T", value)
+	}
+	if len(data) == 0 {
+		*m = nil
+		return nil
+	}
+	return json.Unmarshal(data, m)
+}
+
+func (m stringMap) Value() (driver.Value, error) {
+	if len(m) == 0 {
+		return nil, nil
+	}
+	return json.Marshal(m)
+}
 
 type basicFileRow struct {
 	ID             models.FileID   `db:"id" goqu:"skipinsert"`
@@ -65,6 +97,11 @@ type videoFileRow struct {
 	Interactive      bool          `db:"interactive"`
 	InteractiveSpeed null.Int      `db:"interactive_speed"`
 	CreationTime     NullTimestamp `db:"creation_time"`
+	Title            null.String   `db:"title"`
+	Comment          null.String   `db:"comment"`
+	Encoder          null.String   `db:"encoder"`
+	Tags             stringMap     `db:"tags"`
+	MetadataProbed   bool          `db:"metadata_probed"`
 }
 
 func (f *videoFileRow) fromVideoFile(ff models.VideoFile) {
@@ -82,6 +119,11 @@ func (f *videoFileRow) fromVideoFile(ff models.VideoFile) {
 	if !ff.CreationTime.IsZero() {
 		f.CreationTime = NullTimestamp{Timestamp: ff.CreationTime, Valid: true}
 	}
+	f.Title = null.NewString(ff.Title, ff.Title != "")
+	f.Comment = null.NewString(ff.Comment, ff.Comment != "")
+	f.Encoder = null.NewString(ff.Encoder, ff.Encoder != "")
+	f.Tags = stringMap(ff.Tags)
+	f.MetadataProbed = ff.MetadataProbed
 }
 
 type imageFileRow struct {
@@ -113,6 +155,11 @@ type videoFileQueryRow struct {
 	Interactive      null.Bool     `db:"interactive"`
 	InteractiveSpeed null.Int      `db:"interactive_speed"`
 	CreationTime     NullTimestamp `db:"creation_time"`
+	Title            null.String   `db:"video_title"`
+	Comment          null.String   `db:"video_comment"`
+	Encoder          null.String   `db:"video_encoder"`
+	Tags             stringMap     `db:"video_tags"`
+	MetadataProbed   null.Bool     `db:"video_metadata_probed"`
 }
 
 func (f *videoFileQueryRow) resolve() *models.VideoFile {
@@ -128,6 +175,11 @@ func (f *videoFileQueryRow) resolve() *models.VideoFile {
 		Interactive:      f.Interactive.Bool,
 		InteractiveSpeed: nullIntPtr(f.InteractiveSpeed),
 		CreationTime:     f.CreationTime.Timestamp,
+		Title:            f.Title.String,
+		Comment:          f.Comment.String,
+		Encoder:          f.Encoder.String,
+		Tags:             map[string]string(f.Tags),
+		MetadataProbed:   f.MetadataProbed.Bool,
 	}
 }
 
@@ -146,6 +198,11 @@ func videoFileQueryColumns() []interface{} {
 		table.Col("interactive"),
 		table.Col("interactive_speed"),
 		table.Col("creation_time"),
+		table.Col("title").As("video_title"),
+		table.Col("comment").As("video_comment"),
+		table.Col("encoder").As("video_encoder"),
+		table.Col("tags").As("video_tags"),
+		table.Col("metadata_probed").As("video_metadata_probed"),
 	}
 }
 

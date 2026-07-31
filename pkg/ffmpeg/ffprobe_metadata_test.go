@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestParsePreservesArbitraryFormatAndStreamTags(t *testing.T) {
+func TestParsePreservesAllowlistedFormatAndStreamTags(t *testing.T) {
 	file, err := os.CreateTemp(t.TempDir(), "video-*.mp4")
 	if err != nil {
 		t.Fatal(err)
@@ -55,8 +55,11 @@ func TestParsePreservesArbitraryFormatAndStreamTags(t *testing.T) {
 	if got.Title != "Canonical Title" || got.Comment != "Description" {
 		t.Errorf("legacy fields = title %q comment %q", got.Title, got.Comment)
 	}
-	if got.FormatTags.Get("PUBLISHER") != "Example Studio" || got.FormatTags.Get("custom-key") != "custom-value" {
+	if got.FormatTags.Get("PUBLISHER") != "Example Studio" {
 		t.Errorf("format tags = %#v", got.FormatTags)
+	}
+	if got.FormatTags.Get("custom-key") != "" {
+		t.Errorf("unallowlisted format tag was retained: %#v", got.FormatTags)
 	}
 	if len(got.StreamTags) != 1 || got.StreamTags[0].Get("handler_name") != "VideoHandler" {
 		t.Errorf("stream tags = %#v", got.StreamTags)

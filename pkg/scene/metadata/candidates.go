@@ -10,17 +10,58 @@ import (
 // contiguous runs of letters (in any script) as tokens.
 var wordSplitRE = regexp.MustCompile(`[^\p{L}]+`)
 
-// stopWords are common non-name tokens that should never be treated as
-// part of a candidate performer name, even when title-cased.
-var stopWords = map[string]struct{}{
+// nonNameTokens are common non-name tokens that should never be treated as
+// part of a candidate performer name, even when title-cased. Adult-content
+// titles routinely sentence-case a marketing phrase or descriptor alongside
+// the actual performer name, so this includes both common English words and
+// recurring descriptor vocabulary. Extraction and plausibility scoring share
+// this set so lexical boundaries and low-score guards cannot disagree.
+var nonNameTokens = map[string]struct{}{
 	"the": {}, "and": {}, "with": {}, "featuring": {}, "feat": {},
 	"scene": {}, "part": {}, "vol": {}, "volume": {}, "full": {}, "video": {},
 	"official": {}, "site": {}, "rip": {}, "web": {}, "hd": {}, "sd": {},
-	"new": {}, "best": {}, "top": {}, "first": {}, "of": {}, "for": {}, "in": {}, "on": {},
+	"new": {}, "best": {}, "top": {}, "of": {}, "for": {}, "in": {}, "on": {},
 	"her": {}, "his": {}, "she": {}, "him": {}, "com": {}, "net": {},
-	"make": {}, "makes": {}, "made": {}, "making": {},
-	"get": {}, "gets": {}, "got": {}, "getting": {},
-	"cum": {}, "cums": {}, "cumming": {},
+
+	// common function/filler words that frequently appear title-cased at the
+	// start of a sentence-cased marketing phrase
+	"you": {}, "your": {}, "yours": {}, "my": {}, "mine": {}, "our": {}, "ours": {},
+	"their": {}, "theirs": {}, "its": {}, "who": {}, "whom": {}, "whose": {},
+	"make": {}, "makes": {}, "making": {}, "made": {},
+	"get": {}, "gets": {}, "getting": {}, "got": {},
+	"want": {}, "wants": {}, "wanting": {},
+	"love": {}, "loves": {}, "loving": {},
+	"come": {}, "comes": {}, "coming": {},
+	"leave": {}, "leaves": {}, "leaving": {},
+	"work": {}, "works": {}, "working": {},
+	"every": {}, "each": {}, "time": {}, "times": {},
+	"when": {}, "why": {}, "how": {}, "what": {}, "that": {}, "this": {},
+	"these": {}, "those": {}, "are": {}, "is": {}, "was": {}, "were": {},
+	"will": {}, "would": {}, "can": {}, "could": {}, "dont": {}, "wont": {},
+	"cant": {}, "just": {}, "so": {}, "too": {}, "very": {}, "not": {},
+	"now": {}, "then": {}, "than": {}, "more": {}, "most": {}, "some": {},
+	"any": {}, "all": {}, "again": {}, "still": {}, "back": {}, "only": {},
+	"where": {}, "which": {}, "while": {}, "after": {}, "before": {},
+	"about": {}, "against": {}, "between": {}, "into": {}, "through": {},
+	"during": {}, "without": {}, "under": {}, "over": {},
+	"eyes": {}, "friends": {}, "secret": {},
+
+	// recurring adult-content descriptor/genre vocabulary that is not a name
+	"skinny": {}, "busty": {}, "chubby": {}, "curvy": {}, "tiny": {}, "thicc": {},
+	"petite": {}, "blonde": {}, "brunette": {}, "redhead": {}, "hot": {},
+	"sexy": {}, "cute": {}, "wild": {}, "naughty": {}, "innocent": {},
+	"young": {}, "old": {}, "mature": {}, "big": {}, "small": {}, "huge": {},
+	"tight": {}, "wet": {}, "hard": {}, "rough": {}, "gentle": {}, "sweet": {},
+	"bad": {}, "good": {}, "real": {}, "first": {}, "second": {}, "third": {},
+	"last": {}, "next": {}, "step": {}, "mom": {}, "dad": {}, "sister": {},
+	"stepmom": {}, "stepsister": {}, "stepdad": {}, "teacher": {}, "boss": {},
+	"neighbor": {}, "teen": {}, "milf": {}, "goth": {}, "punk": {}, "nerdy": {},
+	"girls": {}, "boys": {}, "guys": {},
+
+	// marketing superlatives and temporal title fragments
+	"amazing": {}, "beautiful": {}, "gorgeous": {}, "incredible": {},
+	"exclusive": {}, "extreme": {}, "ultimate": {}, "perfect": {},
+	"morning": {}, "night": {}, "day": {}, "week": {}, "year": {},
 }
 
 // isNameLikeWord returns true if w looks like a capitalized proper-noun
@@ -41,19 +82,17 @@ func isNameLikeWord(w string) bool {
 	return true
 }
 
-func isStopWord(w string) bool {
-	_, ok := stopWords[strings.ToLower(w)]
+func isNonNameToken(w string) bool {
+	_, ok := nonNameTokens[strings.ToLower(w)]
 	return ok
 }
 
 // ExtractNameCandidates scans normalized text for title-cased words (e.g.
 // "Jane Doe") and returns each adjacent pair as a candidate performer name.
-// Pairs are taken from right-aligned, non-overlapping runs of consecutive
-// name-like words (a run of 4 words yields 2 pairs, never a sliding window).
-// Right alignment drops a leading modifier from odd-length runs, so "Skinny
-// Jane Doe" yields "Jane Doe"; non-overlap ensures "Studio Name Jane Doe"
-// cannot produce the spurious crossover pair "Name Jane". exclude, if
-// non-nil, is called with the lowercased candidate (e.g.
+// Pairs are taken from non-overlapping runs of consecutive name-like words
+// (a run of 4 words yields 2 pairs, never a sliding window), so a run like
+// "Studio Name Jane Doe" can't produce a spurious crossover pair like "Name
+// Jane". exclude, if non-nil, is called with the lowercased candidate (e.g.
 // to drop the studio's own name); if it returns true the candidate is
 // dropped.
 //
@@ -86,18 +125,14 @@ func ExtractNameCandidates(text string, exclude func(candidate string) bool) []s
 		if runStart == -1 {
 			return
 		}
-		start := runStart
-		if (end-runStart)%2 != 0 {
-			start++
-		}
-		for i := start; i+1 < end; i += 2 {
+		for i := runStart; i+1 < end; i += 2 {
 			addPair(words[i], words[i+1])
 		}
 		runStart = -1
 	}
 
 	for i, w := range words {
-		if isNameLikeWord(w) && !isStopWord(w) {
+		if isNameLikeWord(w) && !isNonNameToken(w) {
 			if runStart == -1 {
 				runStart = i
 			}

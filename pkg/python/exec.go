@@ -55,6 +55,26 @@ func Resolve(configuredPythonPath string) (*Python, error) {
 	return &ret, nil
 }
 
+// ResolveSelection resolves the configured execution policy. A non-empty
+// runtime ID is an explicit managed selection and must never fall back to a
+// system interpreter when its configured environment is unavailable.
+func ResolveSelection(runtimeID, configuredPythonPath string) (*Python, error) {
+	if runtimeID == "" {
+		return Resolve(configuredPythonPath)
+	}
+	if configuredPythonPath == "" {
+		return nil, fmt.Errorf("managed Python runtime %q has no configured environment", runtimeID)
+	}
+	isFile, err := fsutil.FileExists(configuredPythonPath)
+	if err != nil {
+		return nil, fmt.Errorf("use managed Python runtime %q: %w", runtimeID, err)
+	}
+	if !isFile {
+		return nil, fmt.Errorf("managed Python runtime %q executable is not a file: %s", runtimeID, configuredPythonPath)
+	}
+	return New(configuredPythonPath), nil
+}
+
 // IsPythonCommand returns true if arg is "python" or "python3"
 func IsPythonCommand(arg string) bool {
 	return arg == "python" || arg == "python3"

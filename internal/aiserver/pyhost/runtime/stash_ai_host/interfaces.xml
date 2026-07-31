@@ -1,0 +1,201 @@
+<!--
+  The canonical IPC contract between Stash and the Python plugin host.
+
+  This file is the single source of truth: the Python side loads it with
+  Gio.DBusNodeInfo, and the Go side uses the same method names. Introspection
+  tooling (`gdbus introspect --address=...`) reads it from a live host, which is
+  most of the reason the transport is D-Bus at all.
+
+  Payload convention: control-plane arguments use native D-Bus types so
+  introspection stays readable, but USER payloads travel as JSON in a string.
+  Action parameters and results originate as arbitrary JSON from a TypeScript
+  frontend, and D-Bus's a{sv} cannot represent heterogeneous arrays or null
+  without lossy encoding. Being explicit about that beats a leaky mapping.
+-->
+<node>
+  <!-- Host lifecycle and liveness. -->
+  <interface name='dev.stash.ai.Host1'>
+    <!--
+      Hello gates every other call. Until the shared token is presented the host
+      answers nothing, so a local process that finds the socket still cannot
+      drive the Bridge.
+    -->
+    <method name='Hello'>
+      <arg type='s' name='token' direction='in'/>
+      <arg type='u' name='protocol' direction='in'/>
+      <arg type='s' name='host_version' direction='out'/>
+      <arg type='u' name='protocol' direction='out'/>
+    </method>
+
+    <method name='Ping'>
+      <arg type='t' name='monotonic_ns' direction='out'/>
+    </method>
+
+    <method name='GetInfo'>
+      <arg type='s' name='info_json' direction='out'/>
+    </method>
+
+    <method name='SetLogLevel'>
+      <arg type='s' name='level' direction='in'/>
+    </method>
+
+    <!-- Begin draining; exit once in-flight work finishes or grace expires. -->
+    <method name='Shutdown'>
+      <arg type='u' name='grace_ms' direction='in'/>
+    </method>
+  </interface>
+
+  <!-- Loading and unloading plugin code. -->
+  <interface name='dev.stash.ai.Plugins1'>
+    <!--
+      The manifest is parsed in Go and passed in already parsed, so there is
+      exactly one interpretation of a plugin.yml rather than two that can drift.
+      registry_json returns everything the plugin registered.
+    -->
+    <method name='Load'>
+      <arg type='s' name='name' direction='in'/>
+      <arg type='s' name='dir' direction='in'/>
+      <arg type='s' name='manifest_json' direction='in'/>
+      <arg type='s' name='status' direction='out'/>
+      <arg type='s' name='error' direction='out'/>
+      <arg type='s' name='registry_json' direction='out'/>
+    </method>
+
+    <method name='Unload'>
+      <arg type='s' name='name' direction='in'/>
+    </method>
+
+    <method name='List'>
+      <arg type='s' name='registry_json' direction='out'/>
+    </method>
+  </interface>
+
+  <!-- Running plugin code. -->
+  <interface name='dev.stash.ai.Dispatch1'>
+    <method name='InvokeAction'>
+      <arg type='s' name='invocation_id' direction='in'/>
+      <arg type='s' name='action_id' direction='in'/>
+      <arg type='s' name='context_json' direction='in'/>
+      <arg type='s' name='params_json' direction='in'/>
+      <arg type='s' name='result_json' direction='out'/>
+    </method>
+
+    <method name='InvokeRecommender'>
+      <arg type='s' name='invocation_id' direction='in'/>
+      <arg type='s' name='recommender_id' direction='in'/>
+      <arg type='s' name='request_json' direction='in'/>
+      <arg type='s' name='result_json' direction='out'/>
+    </method>
+
+    <!--
+      Cancel is a separate call on the same multiplexed connection, so it is
+      never queued behind the long-running invoke it is cancelling.
+    -->
+    <method name='Cancel'>
+      <arg type='s' name='invocation_id' direction='in'/>
+    </method>
+
+    <!--
+      Serve an HTTP request a plugin registered a route for.
+
+      Request and response bodies are base64 in a string rather than 'ay': a
+      plugin route may return an image or a zip, and D-Bus byte arrays would
+      otherwise have to be marshalled element by element through PyGObject,
+      which is markedly slower for payloads of any size.
+    -->
+    <method name='HandleHTTP'>
+      <arg type='s' name='request_id' direction='in'/>
+      <arg type='s' name='method' direction='in'/>
+      <arg type='s' name='path' direction='in'/>
+      <arg type='s' name='query' direction='in'/>
+      <arg type='s' name='headers_json' direction='in'/>
+      <arg type='s' name='body_b64' direction='in'/>
+      <arg type='q' name='status' direction='out'/>
+      <arg type='s' name='headers_json' direction='out'/>
+      <arg type='s' name='body_b64' direction='out'/>
+    </method>
+
+    <signal name='Progress'>
+      <arg type='s' name='invocation_id'/>
+      <arg type='d' name='fraction'/>
+      <arg type='s' name='message'/>
+      <arg type='s' name='detail_json'/>
+    </signal>
+
+    <signal name='Log'>
+      <arg type='s' name='plugin'/>
+      <arg type='u' name='level'/>
+      <arg type='s' name='message'/>
+    </signal>
+  </interface>
+
+  <!--
+    Exported by GO, called by the host on the same connection. This is what lets
+    plugins reach Stash without the host needing its own credentials: no API key
+    ever leaves the Go process.
+  -->
+  <interface name='dev.stash.ai.Bridge1'>
+    <method name='Query'>
+      <arg type='s' name='plugin' direction='in'/>
+      <arg type='s' name='sql' direction='in'/>
+      <arg type='s' name='params_json' direction='in'/>
+      <arg type='s' name='rows_json' direction='out'/>
+    </method>
+
+    <method name='Execute'>
+      <arg type='s' name='plugin' direction='in'/>
+      <arg type='s' name='sql' direction='in'/>
+      <arg type='s' name='params_json' direction='in'/>
+      <arg type='t' name='rows_affected' direction='out'/>
+    </method>
+
+    <!--
+      Several statements in one transaction and one round trip. Per-row round
+      trips are the obvious performance trap of a proxied database, so plugins
+      are given an alternative rather than left to discover it.
+    -->
+    <method name='ExecuteBatch'>
+      <arg type='s' name='plugin' direction='in'/>
+      <arg type='s' name='batch_json' direction='in'/>
+      <arg type='t' name='rows_affected' direction='out'/>
+    </method>
+
+    <method name='GetSettings'>
+      <arg type='s' name='plugin' direction='in'/>
+      <arg type='s' name='settings_json' direction='out'/>
+    </method>
+
+    <method name='SetSetting'>
+      <arg type='s' name='plugin' direction='in'/>
+      <arg type='s' name='key' direction='in'/>
+      <arg type='s' name='value_json' direction='in'/>
+    </method>
+
+    <method name='StashGraphQL'>
+      <arg type='s' name='plugin' direction='in'/>
+      <arg type='s' name='query' direction='in'/>
+      <arg type='s' name='vars_json' direction='in'/>
+      <arg type='s' name='result_json' direction='out'/>
+    </method>
+
+    <method name='SubmitTask'>
+      <arg type='s' name='plugin' direction='in'/>
+      <arg type='s' name='action_id' direction='in'/>
+      <arg type='s' name='context_json' direction='in'/>
+      <arg type='s' name='params_json' direction='in'/>
+      <arg type='s' name='parent_invocation_id' direction='in'/>
+      <arg type='s' name='priority' direction='in'/>
+      <arg type='s' name='invocation_id' direction='out'/>
+    </method>
+
+    <!--
+      Declare the calling task a coordinator, releasing its concurrency slot so
+      it can wait on the children it just submitted without deadlocking its own
+      service against itself.
+    -->
+    <method name='MarkController'>
+      <arg type='s' name='plugin' direction='in'/>
+      <arg type='s' name='invocation_id' direction='in'/>
+    </method>
+  </interface>
+</node>

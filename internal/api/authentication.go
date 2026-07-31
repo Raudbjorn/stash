@@ -16,6 +16,10 @@ import (
 	"github.com/stashapp/stash/pkg/signedurl"
 )
 
+// aiAPIPrefix is the AI server's JSON API root. Requests under it must fail
+// with 401 rather than being redirected to the login page.
+const aiAPIPrefix = "/api/v1"
+
 func allowUnauthenticated(r *http.Request) bool {
 	// #2715 - allow access to UI files
 	// Allow access to internal image routes for cover image URLs
@@ -133,8 +137,14 @@ func authenticateHandler() func(http.Handler) http.Handler {
 				// authentication is required
 				if userID == "" && !allowUnauthenticated(r) {
 					// if graphql or a non-webpage was requested, we just return a forbidden error
+					// /api/v1 is the AI server's JSON API. Without this
+					// case it falls through to the login redirect below and a
+					// fetch() receives an HTML page with status 200, which is
+					// confusing to debug from the browser.
 					ext := path.Ext(r.URL.Path)
-					if r.URL.Path == gqlEndpoint || (ext != "" && ext != ".html") {
+					isAPIRequest := r.URL.Path == gqlEndpoint ||
+						strings.HasPrefix(r.URL.Path, aiAPIPrefix)
+					if isAPIRequest || (ext != "" && ext != ".html") {
 						w.Header().Add("WWW-Authenticate", "FormBased")
 						w.WriteHeader(http.StatusUnauthorized)
 						return
