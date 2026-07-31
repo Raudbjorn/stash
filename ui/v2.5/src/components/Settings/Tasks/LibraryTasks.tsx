@@ -8,6 +8,7 @@ import {
   mutateMetadataDetectSceneCuts,
   mutateMetadataAnalyzeScenes,
   useListPerformerScrapers,
+  useListStudioScrapers,
   mutateSceneMetadataEntityModelInstall,
   mutateSceneMetadataEntityModelReload,
   useSceneMetadataEntityModelStatus,
@@ -43,6 +44,9 @@ interface IAnalyzeSceneMetadataTaskDefaults {
   overwriteExistingTitle: boolean;
   useDetails: boolean;
   useLocalAIContext: boolean;
+  studioVerifierScraperIDs: string[];
+  studioVerifierStashBoxEndpoints: string[];
+  useLocalAIStudioProviderSelection: boolean;
 }
 
 interface IAutoTagOptions {
@@ -158,6 +162,9 @@ export const LibraryTasks: React.FC = () => {
       overwriteExistingTitle: false,
       useDetails: false,
       useLocalAIContext: false,
+      studioVerifierScraperIDs: [],
+      studioVerifierStashBoxEndpoints: [],
+      useLocalAIStudioProviderSelection: false,
     });
   const [
     analyzeSceneMetadataOptionsInitialized,
@@ -168,6 +175,11 @@ export const LibraryTasks: React.FC = () => {
     error: performerScrapersError,
     loading: performerScrapersLoading,
   } = useListPerformerScrapers();
+  const {
+    data: studioScrapersData,
+    error: studioScrapersError,
+    loading: studioScrapersLoading,
+  } = useListStudioScrapers();
   const {
     data: entityModelStatusData,
     loading: entityModelStatusLoading,
@@ -184,6 +196,15 @@ export const LibraryTasks: React.FC = () => {
         )
         .map((s) => ({ label: s.name, value: s.id })),
     [performerScrapersData]
+  );
+  const studioVerifierScraperOptions = useMemo(
+    () =>
+      (studioScrapersData?.listScrapers ?? [])
+        .filter((s) =>
+          s.studio?.supported_scrapes.includes(GQL.ScrapeType.Name)
+        )
+        .map((s) => ({ label: s.name, value: s.id })),
+    [studioScrapersData]
   );
   const stashBoxVerifierOptions = useMemo(
     () =>
@@ -262,6 +283,19 @@ export const LibraryTasks: React.FC = () => {
       performerVerifierOptions.map((option) => option.value)
     );
     const reconciledIDs = requestedIDs.filter((id) => availableIDs.has(id));
+    const requestedStudioIDs = persisted?.studioVerifierScraperIDs ?? [];
+    const requestedStudioStashBoxEndpoints =
+      persisted?.studioVerifierStashBoxEndpoints ?? [];
+    const reconciledStudioStashBoxEndpoints =
+      requestedStudioStashBoxEndpoints.filter((endpoint) =>
+        availableStashBoxEndpoints.has(endpoint)
+      );
+    const availableStudioIDs = new Set(
+      studioVerifierScraperOptions.map((option) => option.value)
+    );
+    const reconciledStudioIDs = requestedStudioIDs.filter((id) =>
+      availableStudioIDs.has(id)
+    );
     const nextOptions: IAnalyzeSceneMetadataTaskDefaults = {
       dryRun: persisted?.dryRun ?? true,
       performerVerifierScraperIDs: reconciledIDs,
@@ -273,6 +307,10 @@ export const LibraryTasks: React.FC = () => {
       overwriteExistingTitle: persisted?.overwriteExistingTitle ?? false,
       useDetails: persisted?.useDetails ?? false,
       useLocalAIContext: persisted?.useLocalAIContext ?? false,
+      studioVerifierScraperIDs: reconciledStudioIDs,
+      studioVerifierStashBoxEndpoints: reconciledStudioStashBoxEndpoints,
+      useLocalAIStudioProviderSelection:
+        persisted?.useLocalAIStudioProviderSelection ?? false,
     };
 
     setAnalyzeSceneMetadataOptions(nextOptions);
@@ -286,7 +324,10 @@ export const LibraryTasks: React.FC = () => {
           undefined
       ) ||
       reconciledIDs.length !== requestedIDs.length ||
-      reconciledStashBoxEndpoints.length !== requestedStashBoxEndpoints.length
+      reconciledStashBoxEndpoints.length !== requestedStashBoxEndpoints.length ||
+      reconciledStudioIDs.length !== requestedStudioIDs.length ||
+      reconciledStudioStashBoxEndpoints.length !==
+        requestedStudioStashBoxEndpoints.length
     ) {
       saveUI({
         taskDefaults: {
@@ -300,10 +341,13 @@ export const LibraryTasks: React.FC = () => {
     loading,
     performerScrapersLoading,
     performerScrapersError,
+    studioScrapersLoading,
+    studioScrapersError,
     performerVerifierOptions,
+    studioVerifierScraperOptions,
     stashBoxVerifierOptions,
-    saveUI,
     taskDefaults,
+    saveUI,
   ]);
 
   function configureDefaults(partial: Record<string, object>) {
@@ -853,6 +897,80 @@ export const LibraryTasks: React.FC = () => {
               />
             </Form.Group>
           </div>
+          <Form.Group controlId="analyze-scene-metadata-studio-verifier-scrapers">
+            <Form.Label>
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.studio_verifier_scrapers.label" />
+            </Form.Label>
+            <SelectComponent
+              items={studioVerifierScraperOptions}
+              selectedOptions={studioVerifierScraperOptions.filter((option) =>
+                analyzeSceneMetadataOptions.studioVerifierScraperIDs.includes(
+                  option.value
+                )
+              )}
+              isLoading={studioScrapersLoading}
+              isMulti
+              closeMenuOnSelect={false}
+              onChange={(selected) =>
+                onSetAnalyzeSceneMetadataOptions({
+                  studioVerifierScraperIDs: selected.map(
+                    (option) => option.value
+                  ),
+                })
+              }
+              className="form-control react-select"
+              placeholder={intl.formatMessage({
+                id: "config.tasks.analyze_scene_metadata.studio_verifier_scrapers.placeholder",
+              })}
+            />
+            <Form.Text className="text-muted">
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.studio_verifier_scrapers.help" />
+            </Form.Text>
+          </Form.Group>
+          <Form.Group controlId="analyze-scene-metadata-studio-verifier-stash-boxes">
+            <Form.Label>
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.studio_verifier_stash_boxes.label" />
+            </Form.Label>
+            <SelectComponent
+              items={stashBoxVerifierOptions}
+              selectedOptions={stashBoxVerifierOptions.filter((option) =>
+                analyzeSceneMetadataOptions.studioVerifierStashBoxEndpoints.includes(
+                  option.value
+                )
+              )}
+              isLoading={false}
+              isMulti
+              closeMenuOnSelect={false}
+              onChange={(selected) =>
+                onSetAnalyzeSceneMetadataOptions({
+                  studioVerifierStashBoxEndpoints: selected.map(
+                    (option) => option.value
+                  ),
+                })
+              }
+              className="form-control react-select"
+              placeholder={intl.formatMessage({
+                id: "config.tasks.analyze_scene_metadata.studio_verifier_stash_boxes.placeholder",
+              })}
+            />
+            <Form.Text className="text-muted">
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.studio_verifier_stash_boxes.help" />
+            </Form.Text>
+          </Form.Group>
+          <Form.Check
+            id="analyze-scene-metadata-use-local-ai-studio-provider"
+            checked={analyzeSceneMetadataOptions.useLocalAIStudioProviderSelection}
+            label={intl.formatMessage({
+              id: "config.tasks.analyze_scene_metadata.use_local_ai_studio_provider_selection",
+            })}
+            onChange={() =>
+              onSetAnalyzeSceneMetadataOptions({
+                useLocalAIStudioProviderSelection:
+                  !analyzeSceneMetadataOptions.useLocalAIStudioProviderSelection,
+              })
+            }
+            className="mb-2"
+          />
           <Form.Check
             id="analyze-scene-metadata-use-details"
             checked={analyzeSceneMetadataOptions.useDetails}
