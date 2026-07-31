@@ -1,0 +1,60 @@
+fragment PythonManagerStatusData on PythonManagerStatus {
+  installed
+  version
+  path
+  source
+  error
+}
+
+fragment PythonRuntimeData on PythonRuntime {
+  id
+  key
+  version
+  implementation
+  architecture
+  libc
+  variant
+  source
+  installed
+  selected
+  path
+  environmentPath
+  downloadURL
+}
+
+fragment PythonStatusData on PythonStatus {
+  manager {
+    ...PythonManagerStatusData
+  }
+  selectedRuntime {
+    ...PythonRuntimeData
+  }
+  configuredPythonPath
+  managedEnvironment
+}
+
+fragment PythonPackageData on PythonPackage {
+  name
+  version
+  latestVersion
+  latestFiletype
+}
+
+fragment PythonIndexData on PythonIndex {
+  name
+  url
+  default
+}
+
+fragment PythonCatalogStatusData on PythonCatalogStatus {
+  index
+  refreshedAt
+  projectCount
+  stale
+  error
+}
+
+fragment PythonPackageSearchResultData on PythonPackageSearchResult {
+  name
+  indexes
+}

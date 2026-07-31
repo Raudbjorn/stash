@@ -145,6 +145,46 @@ func TestScraperScriptDecodeErrorHelper(t *testing.T) {
 	assert.NoError(t, os.WriteFile(marker, nil, 0o600))
 }
 
+type pythonPathGlobalConfig struct {
+	mockGlobalConfig
+	path string
+}
+
+func (c pythonPathGlobalConfig) GetPythonPath() string {
+	return c.path
+}
+
+func TestImghdrCompatibilityScraperSubprocess(t *testing.T) {
+	pythonPath := os.Getenv("STASH_TEST_PYTHON")
+	if pythonPath == "" {
+		t.Skip("STASH_TEST_PYTHON is not set")
+	}
+	root := t.TempDir()
+	scraperDir := filepath.Join(root, "scrapers")
+	if err := os.MkdirAll(scraperDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(scraperDir, "imghdr_scraper.py")
+	script := `import imghdr, json, sys
+assert imghdr.what(None, b"\x89PNG\r\n\x1a\n") == "png"
+json.dump({"name": "Compatibility Performer"}, sys.stdout)
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := &scriptScraper{
+		definition:   Definition{path: scriptPath},
+		globalConfig: pythonPathGlobalConfig{path: pythonPath},
+	}
+	var output models.ScrapedPerformer
+	if err := s.runScraperScript(context.Background(), []string{"python", scriptPath}, `{}`, &output); err != nil {
+		t.Fatalf("runScraperScript() error = %v", err)
+	}
+	if output.Name == nil || *output.Name != "Compatibility Performer" {
+		t.Fatalf("scraped performer name = %v, want Compatibility Performer", output.Name)
+	}
+}
+
 func getImageStringValue(index int, field string) string {
 	return fmt.Sprintf("image_%04d_%s", index, field)
 }

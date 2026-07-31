@@ -169,14 +169,23 @@ func (p *Progress) removeTask(t *task) {
 	}
 }
 
+// BeginTask adds a task detail and returns an idempotent closure that removes
+// it. It is useful for work whose lifetime is not contained in one callback.
+func (p *Progress) BeginTask(description string) func() {
+	t := &task{description: description}
+	p.addTask(t)
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			p.removeTask(t)
+		})
+	}
+}
+
 // ExecuteTask executes a task as part of a job. The description is used to
 // populate the Details slice in the parent Job.
 func (p *Progress) ExecuteTask(description string, fn func()) {
-	t := &task{
-		description: description,
-	}
-
-	p.addTask(t)
-	defer p.removeTask(t)
+	end := p.BeginTask(description)
+	defer end()
 	fn()
 }

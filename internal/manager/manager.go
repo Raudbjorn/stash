@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/remeh/sizedwaitgroup"
+	"github.com/stashapp/stash/internal/aiserver"
 	"github.com/stashapp/stash/internal/dlna"
 	"github.com/stashapp/stash/internal/log"
 	"github.com/stashapp/stash/internal/manager/config"
@@ -26,6 +27,7 @@ import (
 	"github.com/stashapp/stash/pkg/models/paths"
 	"github.com/stashapp/stash/pkg/pkg"
 	"github.com/stashapp/stash/pkg/plugin"
+	"github.com/stashapp/stash/pkg/python"
 	"github.com/stashapp/stash/pkg/scheduler"
 	"github.com/stashapp/stash/pkg/scraper"
 	"github.com/stashapp/stash/pkg/session"
@@ -61,6 +63,7 @@ type Manager struct {
 
 	PluginPackageManager  *pkg.Manager
 	ScraperPackageManager *pkg.Manager
+	PythonManager         *python.Manager
 
 	DLNAService *dlna.Service
 
@@ -86,6 +89,8 @@ type Manager struct {
 	ImageService   ImageService
 	GalleryService GalleryService
 	GroupService   GroupService
+
+	AIServer *aiserver.Server
 
 	scanSubs *subscriptionManager
 }
@@ -165,12 +170,10 @@ func (s *Manager) RefreshStreamManager() {
 	s.StreamManager = ffmpeg.NewStreamManager(cacheDir, s.FFMpeg, s.FFProbe, cfg, s.ReadLockManager)
 }
 
-// RefreshNamePlausibilityScorer reloads the scene metadata analyzer's
-// name-plausibility scorer. Call this when the configured ONNX Runtime
-// library path changes, so the Settings value takes effect without a
-// restart.
-func (s *Manager) RefreshNamePlausibilityScorer() {
-	reloadNamePlausibilityScorer()
+// RefreshSceneMetadataEntityExtractor reloads the local GLiNER session after
+// the runtime library, cache path, or installed bundle changes.
+func (s *Manager) RefreshSceneMetadataEntityExtractor() {
+	reloadSceneMetadataEntityExtractor()
 }
 
 // RefreshDLNA starts/stops the DLNA service as needed.
@@ -428,14 +431,39 @@ func (s *Manager) Shutdown() {
 
 	s.StopScanScheduler()
 	s.StopFileWatcher()
+	closeSceneMetadataEntityExtractor()
 
 	if s.StreamManager != nil {
 		s.StreamManager.Shutdown()
 		s.StreamManager = nil
 	}
+	if s.PythonManager != nil {
+		if err := s.PythonManager.Close(); err != nil {
+			logger.Errorf("Error closing Python manager: %s", err)
+		}
+		s.PythonManager = nil
+	}
+
+	// Before closing the database: the AI subsystem holds read transactions
+	// against Stash's repository while ingesting.
+	if s.AIServer != nil {
+		s.AIServer.Shutdown()
+	}
 
 	err := s.Database.Close()
 	if err != nil {
 		logger.Errorf("Error closing database: %s", err)
+	}
+}
+
+// RefreshAIServer restarts the AI subsystem after a configuration change, so
+// that toggling ai_enabled or repointing ai_database_path takes effect without
+// restarting Stash.
+func (s *Manager) RefreshAIServer(ctx context.Context) {
+	if s.AIServer == nil {
+		return
+	}
+	if err := s.AIServer.Refresh(ctx); err != nil {
+		logger.Errorf("Error refreshing AI server: %v", err)
 	}
 }

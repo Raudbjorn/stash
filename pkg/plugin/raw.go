@@ -45,12 +45,22 @@ func (t *rawPluginTask) Start() error {
 	}
 
 	var cmd *exec.Cmd
+	var releasePython func()
 	if python.IsPythonCommand(command[0]) {
-		pythonPath := t.serverConfig.GetPythonPath()
-		p, err := python.Resolve(pythonPath)
-
+		var err error
+		releasePython, err = python.AcquireExecution(context.TODO())
 		if err != nil {
-			logger.Warnf("%s", err)
+			return fmt.Errorf("acquire Python execution lease: %w", err)
+		}
+		runtimeID := t.serverConfig.GetPythonRuntimeID()
+		pythonPath := t.serverConfig.GetPythonPath()
+		p, resolveErr := python.ResolveSelection(runtimeID, pythonPath)
+		if resolveErr != nil {
+			if runtimeID != "" {
+				releasePython()
+				return resolveErr
+			}
+			logger.Warnf("%s", resolveErr)
 		} else {
 			cmd = p.Command(context.TODO(), command[1:])
 
@@ -60,12 +70,15 @@ func (t *rawPluginTask) Start() error {
 	}
 
 	if cmd == nil {
-		// if could not find python, just use the command args as-is
+		// Preserve legacy command lookup only when there is no managed selection.
 		cmd = stashExec.Command(command[0], command[1:]...)
 	}
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
+		if releasePython != nil {
+			releasePython()
+		}
 		return fmt.Errorf("error getting plugin process stdin: %v", err)
 	}
 
@@ -94,6 +107,10 @@ func (t *rawPluginTask) Start() error {
 	t.waitGroup.Add(1)
 	t.done = make(chan bool, 1)
 	if err = cmd.Start(); err != nil {
+		t.waitGroup.Done()
+		if releasePython != nil {
+			releasePython()
+		}
 		return fmt.Errorf("error running plugin: %v", err)
 	}
 
@@ -106,6 +123,9 @@ func (t *rawPluginTask) Start() error {
 	go func() {
 		defer t.waitGroup.Done()
 		defer close(t.done)
+		if releasePython != nil {
+			defer releasePython()
+		}
 		stdoutData, _ := io.ReadAll(stdout)
 		stdoutString := string(stdoutData)
 

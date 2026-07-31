@@ -17,6 +17,7 @@ import { SettingsServicesPanel } from "./SettingsServicesPanel";
 import { SettingsContext, useSettings } from "./context";
 import { SettingsLibraryPanel } from "./SettingsLibraryPanel";
 import { SettingsSecurityPanel } from "./SettingsSecurityPanel";
+import { SettingsPythonPanel } from "./Python/SettingsPythonPanel";
 import Changelog from "../Changelog/Changelog";
 import { TroubleshootingModeButton } from "../TroubleshootingMode/TroubleshootingModeButton";
 import { useTroubleshootingMode } from "../TroubleshootingMode/useTroubleshootingMode";
@@ -29,6 +30,7 @@ const validTabs = [
   "metadata-providers",
   "services",
   "system",
+  "python",
   "plugins",
   "logs",
   "tools",
@@ -101,6 +103,13 @@ const SettingTabs: React.FC<{ tab: TabKey }> = ({ tab }) => {
               <LinkContainer to="/settings?tab=system">
                 <Nav.Link eventKey="system">
                   <FormattedMessage id="config.categories.system" />
+                </Nav.Link>
+              </LinkContainer>
+            </Nav.Item>
+            <Nav.Item>
+              <LinkContainer to="/settings?tab=python">
+                <Nav.Link eventKey="python">
+                  <FormattedMessage id="config.categories.python" />
                 </Nav.Link>
               </LinkContainer>
             </Nav.Item>
@@ -185,6 +194,9 @@ const SettingTabs: React.FC<{ tab: TabKey }> = ({ tab }) => {
             </Tab.Pane>
             <Tab.Pane eventKey="system">
               <SettingsConfigurationPanel />
+            </Tab.Pane>
+            <Tab.Pane eventKey="python" unmountOnExit>
+              <SettingsPythonPanel />
             </Tab.Pane>
             <Tab.Pane eventKey="plugins" unmountOnExit>
               <SettingsPluginsPanel />

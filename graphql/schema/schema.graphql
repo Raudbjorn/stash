@@ -258,6 +258,8 @@ type Query {
 
   # System status
   systemStatus: SystemStatus!
+  "Returns local scene-metadata entity model installation and runtime status."
+  sceneMetadataEntityModelStatus: SceneMetadataEntityModelStatus!
 
   # Job status
   jobQueue: [Job!]
@@ -293,6 +295,17 @@ type Query {
   ollamaModels: [String!]!
   "Check if Ollama service is available"
   ollamaAvailable: Boolean!
+  # Python environment management
+  pythonStatus: PythonStatus!
+  pythonRuntimes(allVersions: Boolean = false): [PythonRuntime!]!
+  pythonPackages(outdated: Boolean = false): [PythonPackage!]!
+  pythonIndexes: [PythonIndex!]!
+  pythonCatalogs: [PythonCatalogStatus!]!
+  searchPythonPackages(
+    query: String!
+    index: String
+    limit: Int = 50
+  ): [PythonPackageSearchResult!]!
 
   # Scheduled scans
   "Returns all configured scan schedules"
@@ -530,6 +543,10 @@ type Mutation {
   metadataDetectSceneCuts(input: DetectSceneCutsInput!): ID!
   "Analyze scene titles/filenames (and available EXIF/container metadata) to detect performers and scene date. Returns the job ID"
   metadataAnalyzeScenes(input: AnalyzeSceneMetadataInput!): ID!
+  "Download, checksum, validate, and activate the pinned local scene-metadata entity model. Returns the job ID."
+  sceneMetadataEntityModelInstall: ID!
+  "Reload the local scene-metadata entity model after runtime or cache changes."
+  sceneMetadataEntityModelReload: Boolean!
   "Clean metadata. Returns the job ID"
   metadataClean(input: CleanMetadataInput!): ID!
   "Clean generated files. Returns the job ID"
@@ -669,6 +686,15 @@ type Mutation {
   ollamaGenerate(input: OllamaGenerateInput!): OllamaGenerateResult!
   "Explain a word in context using Ollama"
   ollamaExplainWord(input: OllamaExplainWordInput!): OllamaDictionaryEntry!
+  # Python environment management
+  installPythonManager: ID!
+  installPythonRuntime(id: ID!): ID!
+  selectPythonRuntime(id: ID!): ID!
+  installPythonPackages(names: [String!]!): ID!
+  updatePythonPackages(names: [String!]): ID!
+  uninstallPythonPackages(names: [String!]!): ID!
+  configurePythonIndexes(indexes: [PythonIndexInput!]!): [PythonIndex!]!
+  refreshPythonPackageCatalog(index: String): ID!
 }
 
 type Subscription {

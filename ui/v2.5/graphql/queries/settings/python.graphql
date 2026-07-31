@@ -1,0 +1,30 @@
+query PythonSettings($allVersions: Boolean = false) {
+  pythonStatus {
+    ...PythonStatusData
+  }
+  pythonRuntimes(allVersions: $allVersions) {
+    ...PythonRuntimeData
+  }
+  pythonIndexes {
+    ...PythonIndexData
+  }
+  pythonCatalogs {
+    ...PythonCatalogStatusData
+  }
+}
+
+query PythonPackages($outdated: Boolean = false) {
+  pythonPackages(outdated: $outdated) {
+    ...PythonPackageData
+  }
+}
+
+query SearchPythonPackages(
+  $query: String!
+  $index: String
+  $limit: Int = 50
+) {
+  searchPythonPackages(query: $query, index: $index, limit: $limit) {
+    ...PythonPackageSearchResultData
+  }
+}

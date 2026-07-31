@@ -5,38 +5,12 @@ import (
 	"unicode"
 )
 
-// NamePlausibilityScorer scores how plausible it is that a candidate string
-// is a real personal name, as a soft filter on top of the regex-based
-// candidate extraction in ExtractNameCandidates. Returns a score in [0, 1].
-//
-// Two implementations exist behind this interface:
-//   - HeuristicNamePlausibilityScorer: dependency-free stopword/structure
-//     heuristics. Always available, used as a fallback.
-//   - EmbeddingNamePlausibilityScorer (embedding_scorer.go): scores via a
-//     local MiniLM sentence-embedding model run through ONNX Runtime.
-//     Requires the onnxruntime shared library at runtime (not build time -
-//     see pkg/scene/metadata/embedding and
-//     internal/manager/name_plausibility_scorer.go for how the caller
-//     selects between the two).
+// NamePlausibilityScorer is the dependency-free structural guard used only
+// for heuristic two-word candidates from ExtractNameCandidates. Typed NFO
+// actors and GLiNER spans use their own trust/confidence evidence instead.
+// Scores are in [0, 1].
 type NamePlausibilityScorer interface {
 	Score(candidate string) float64
-}
-
-// commonEnglishWords are frequent non-name English words that survive the
-// title-case heuristic in ExtractNameCandidates (e.g. at the start of a
-// sentence, or in ALL-CAPS-then-titlecased marketing text) but are not
-// personal names. This is intentionally short - it's a cheap sanity check,
-// not a dictionary; the scraper-verification step downstream is the real
-// precision gate for genuinely new names.
-var commonEnglishWords = map[string]struct{}{
-	"this": {}, "that": {}, "these": {}, "those": {}, "what": {}, "when": {},
-	"where": {}, "which": {}, "while": {}, "after": {}, "before": {},
-	"about": {}, "again": {}, "against": {}, "between": {}, "into": {},
-	"through": {}, "during": {}, "without": {}, "under": {}, "over": {},
-	"first": {}, "second": {}, "third": {}, "last": {}, "next": {},
-	"amazing": {}, "beautiful": {}, "gorgeous": {}, "incredible": {},
-	"exclusive": {}, "extreme": {}, "ultimate": {}, "perfect": {},
-	"morning": {}, "night": {}, "day": {}, "week": {}, "year": {},
 }
 
 // HeuristicNamePlausibilityScorer scores candidates using cheap structural
@@ -57,8 +31,7 @@ func (HeuristicNamePlausibilityScorer) Score(candidate string) float64 {
 	score := 0.7
 
 	for _, w := range words {
-		lower := strings.ToLower(w)
-		if _, common := commonEnglishWords[lower]; common {
+		if isNonNameToken(w) {
 			return 0.1
 		}
 

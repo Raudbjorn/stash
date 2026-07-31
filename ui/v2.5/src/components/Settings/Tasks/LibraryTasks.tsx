@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import { Button, Form } from "react-bootstrap";
 import {
@@ -7,6 +7,10 @@ import {
   mutateMetadataGenerate,
   mutateMetadataDetectSceneCuts,
   mutateMetadataAnalyzeScenes,
+  useListPerformerScrapers,
+  mutateSceneMetadataEntityModelInstall,
+  mutateSceneMetadataEntityModelReload,
+  useSceneMetadataEntityModelStatus,
 } from "src/core/StashService";
 import { withoutTypename } from "src/utils/data";
 import { useConfigurationContext } from "src/hooks/Config";
@@ -27,6 +31,19 @@ import {
   AutoTagWarning,
 } from "src/components/Shared/AutoTagConfirmDialog";
 import { useSettings } from "../context";
+import { SelectComponent } from "src/components/Shared/Select";
+
+interface IAnalyzeSceneMetadataTaskDefaults {
+  dryRun: boolean;
+  performerVerifierScraperIDs: string[];
+  performerVerifierStashBoxEndpoints: string[];
+  performerConfidenceThreshold: number;
+  dateConfidenceThreshold: number;
+  overwriteExistingDate: boolean;
+  overwriteExistingTitle: boolean;
+  useDetails: boolean;
+  useLocalAIContext: boolean;
+}
 
 interface IAutoTagOptions {
   options: GQL.AutoTagMetadataInput;
@@ -130,12 +147,55 @@ export const LibraryTasks: React.FC = () => {
   const [generateOptions, setGenerateOptions] =
     useState<GQL.GenerateMetadataInput>(getDefaultGenerateOptions());
 
-  const [analyzeSceneMetadataDryRun, setAnalyzeSceneMetadataDryRun] =
-    useState(true);
+  const [analyzeSceneMetadataOptions, setAnalyzeSceneMetadataOptions] =
+    useState<IAnalyzeSceneMetadataTaskDefaults>({
+      dryRun: true,
+      performerVerifierScraperIDs: [],
+      performerVerifierStashBoxEndpoints: [],
+      performerConfidenceThreshold: 0.6,
+      dateConfidenceThreshold: 0.6,
+      overwriteExistingDate: false,
+      overwriteExistingTitle: false,
+      useDetails: false,
+      useLocalAIContext: false,
+    });
+  const [
+    analyzeSceneMetadataOptionsInitialized,
+    setAnalyzeSceneMetadataOptionsInitialized,
+  ] = useState(false);
+  const {
+    data: performerScrapersData,
+    error: performerScrapersError,
+    loading: performerScrapersLoading,
+  } = useListPerformerScrapers();
+  const {
+    data: entityModelStatusData,
+    loading: entityModelStatusLoading,
+    refetch: refetchEntityModelStatus,
+  } = useSceneMetadataEntityModelStatus();
+  const { configuration } = useConfigurationContext();
+  const entityModelStatus =
+    entityModelStatusData?.sceneMetadataEntityModelStatus;
+  const performerVerifierOptions = useMemo(
+    () =>
+      (performerScrapersData?.listScrapers ?? [])
+        .filter((s) =>
+          s.performer?.supported_scrapes.includes(GQL.ScrapeType.Name)
+        )
+        .map((s) => ({ label: s.name, value: s.id })),
+    [performerScrapersData]
+  );
+  const stashBoxVerifierOptions = useMemo(
+    () =>
+      configuration.general.stashBoxes.map((box) => ({
+        label: box.name ? `${box.name} — ${box.endpoint}` : box.endpoint,
+        value: box.endpoint,
+      })),
+    [configuration.general.stashBoxes]
+  );
 
   type DialogOpenState = typeof dialogOpen;
 
-  const { configuration } = useConfigurationContext();
   const [configRead, setConfigRead] = useState(false);
 
   useEffect(() => {
@@ -176,8 +236,78 @@ export const LibraryTasks: React.FC = () => {
     }
   }, [configuration, configRead, taskDefaults, loading]);
 
+  useEffect(() => {
+    if (
+      loading ||
+      performerScrapersLoading ||
+      performerScrapersError ||
+      analyzeSceneMetadataOptionsInitialized
+    ) {
+      return;
+    }
+
+    const persisted = taskDefaults?.analyzeSceneMetadata as
+      | Partial<IAnalyzeSceneMetadataTaskDefaults>
+      | undefined;
+    const requestedIDs = persisted?.performerVerifierScraperIDs ?? [];
+    const requestedStashBoxEndpoints =
+      persisted?.performerVerifierStashBoxEndpoints ?? [];
+    const availableStashBoxEndpoints = new Set(
+      stashBoxVerifierOptions.map((option) => option.value)
+    );
+    const reconciledStashBoxEndpoints = requestedStashBoxEndpoints.filter(
+      (endpoint) => availableStashBoxEndpoints.has(endpoint)
+    );
+    const availableIDs = new Set(
+      performerVerifierOptions.map((option) => option.value)
+    );
+    const reconciledIDs = requestedIDs.filter((id) => availableIDs.has(id));
+    const nextOptions: IAnalyzeSceneMetadataTaskDefaults = {
+      dryRun: persisted?.dryRun ?? true,
+      performerVerifierScraperIDs: reconciledIDs,
+      performerVerifierStashBoxEndpoints: reconciledStashBoxEndpoints,
+      performerConfidenceThreshold:
+        persisted?.performerConfidenceThreshold ?? 0.6,
+      dateConfidenceThreshold: persisted?.dateConfidenceThreshold ?? 0.6,
+      overwriteExistingDate: persisted?.overwriteExistingDate ?? false,
+      overwriteExistingTitle: persisted?.overwriteExistingTitle ?? false,
+      useDetails: persisted?.useDetails ?? false,
+      useLocalAIContext: persisted?.useLocalAIContext ?? false,
+    };
+
+    setAnalyzeSceneMetadataOptions(nextOptions);
+    setAnalyzeSceneMetadataOptionsInitialized(true);
+
+    if (
+      !persisted ||
+      Object.keys(nextOptions).some(
+        (key) =>
+          persisted[key as keyof IAnalyzeSceneMetadataTaskDefaults] ===
+          undefined
+      ) ||
+      reconciledIDs.length !== requestedIDs.length ||
+      reconciledStashBoxEndpoints.length !== requestedStashBoxEndpoints.length
+    ) {
+      saveUI({
+        taskDefaults: {
+          ...taskDefaults,
+          analyzeSceneMetadata: nextOptions,
+        },
+      });
+    }
+  }, [
+    analyzeSceneMetadataOptionsInitialized,
+    loading,
+    performerScrapersLoading,
+    performerScrapersError,
+    performerVerifierOptions,
+    stashBoxVerifierOptions,
+    saveUI,
+    taskDefaults,
+  ]);
+
   function configureDefaults(partial: Record<string, object>) {
-    saveUI({ taskDefaults: { ...partial } });
+    saveUI({ taskDefaults: { ...taskDefaults, ...partial } });
   }
 
   function onSetScanOptions(s: GQL.ScanMetadataInput) {
@@ -193,6 +323,14 @@ export const LibraryTasks: React.FC = () => {
   function onSetAutoTagOptions(s: GQL.AutoTagMetadataInput) {
     configureDefaults({ autoTag: s });
     setAutoTagOptions(s);
+  }
+
+  function onSetAnalyzeSceneMetadataOptions(
+    partial: Partial<IAnalyzeSceneMetadataTaskDefaults>
+  ) {
+    const nextOptions = { ...analyzeSceneMetadataOptions, ...partial };
+    configureDefaults({ analyzeSceneMetadata: nextOptions });
+    setAnalyzeSceneMetadataOptions(nextOptions);
   }
 
   function setDialogOpen(s: Partial<DialogOpenState>) {
@@ -262,9 +400,7 @@ export const LibraryTasks: React.FC = () => {
 
   async function runAnalyzeSceneMetadata() {
     try {
-      await mutateMetadataAnalyzeScenes({
-        dryRun: analyzeSceneMetadataDryRun,
-      });
+      await mutateMetadataAnalyzeScenes(analyzeSceneMetadataOptions);
 
       Toast.success(
         intl.formatMessage(
@@ -275,6 +411,41 @@ export const LibraryTasks: React.FC = () => {
             }),
           }
         )
+      );
+    } catch (e) {
+      Toast.error(e);
+    }
+  }
+  async function installSceneMetadataEntityModel() {
+    try {
+      await mutateSceneMetadataEntityModelInstall();
+      Toast.success(
+        intl.formatMessage(
+          { id: "config.tasks.added_job_to_queue" },
+          {
+            operation_name: intl.formatMessage(
+              {
+                id: "config.tasks.analyze_scene_metadata.model.install",
+              },
+              { model: entityModelStatus?.modelID ?? "entity model" }
+            ),
+          }
+        )
+      );
+      await refetchEntityModelStatus();
+    } catch (e) {
+      Toast.error(e);
+    }
+  }
+
+  async function reloadSceneMetadataEntityModel() {
+    try {
+      await mutateSceneMetadataEntityModelReload();
+      await refetchEntityModelStatus();
+      Toast.success(
+        intl.formatMessage({
+          id: "config.tasks.analyze_scene_metadata.model.reloaded",
+        })
       );
     } catch (e) {
       Toast.error(e);
@@ -517,12 +688,234 @@ export const LibraryTasks: React.FC = () => {
           heading={<FormattedMessage id="actions.analyze_scene_metadata" />}
           subHeadingID="config.tasks.analyze_scene_metadata.description"
         >
+          <div className="border rounded p-3 mb-3" aria-live="polite">
+            <Form.Label className="mb-1">
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.model.label" />
+            </Form.Label>
+            <div className="text-muted small mb-2">
+              {entityModelStatusLoading ? (
+                <FormattedMessage id="config.tasks.analyze_scene_metadata.model.checking" />
+              ) : (
+                <FormattedMessage
+                  id="config.tasks.analyze_scene_metadata.model.status"
+                  values={{
+                    state: entityModelStatus?.state ?? "unknown",
+                    version: entityModelStatus?.version ?? "unknown",
+                    runtime: entityModelStatus?.runtimeAvailable
+                      ? intl.formatMessage({
+                          id: "config.tasks.analyze_scene_metadata.model.runtime_available",
+                        })
+                      : intl.formatMessage({
+                          id: "config.tasks.analyze_scene_metadata.model.runtime_missing",
+                        }),
+                  }}
+                />
+              )}
+            </div>
+            {entityModelStatus?.lastError ? (
+              <div className="text-danger small mb-2">
+                {entityModelStatus.lastError}
+              </div>
+            ) : null}
+            <Button
+              variant="secondary"
+              size="sm"
+              type="button"
+              className="mr-2"
+              onClick={installSceneMetadataEntityModel}
+              disabled={
+                entityModelStatusLoading ||
+                !entityModelStatus?.runtimeAvailable ||
+                entityModelStatus?.state === "loading"
+              }
+            >
+              <FormattedMessage
+                id="config.tasks.analyze_scene_metadata.model.install"
+                values={{ model: entityModelStatus?.modelID ?? "entity model" }}
+              />
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              type="button"
+              onClick={reloadSceneMetadataEntityModel}
+              disabled={
+                entityModelStatusLoading ||
+                !entityModelStatus?.runtimeAvailable ||
+                entityModelStatus?.state !== "ready"
+              }
+            >
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.model.reload" />
+            </Button>
+          </div>
+
+          <Form.Group controlId="analyze-scene-metadata-verifier-scrapers">
+            <Form.Label>
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.performer_verifier_scrapers.label" />
+            </Form.Label>
+            <SelectComponent
+              items={performerVerifierOptions}
+              selectedOptions={performerVerifierOptions.filter((option) =>
+                analyzeSceneMetadataOptions.performerVerifierScraperIDs.includes(
+                  option.value
+                )
+              )}
+              isLoading={performerScrapersLoading}
+              isMulti
+              closeMenuOnSelect={false}
+              onChange={(selected) =>
+                onSetAnalyzeSceneMetadataOptions({
+                  performerVerifierScraperIDs: selected.map(
+                    (option) => option.value
+                  ),
+                })
+              }
+              className="form-control react-select"
+              placeholder={intl.formatMessage({
+                id: "config.tasks.analyze_scene_metadata.performer_verifier_scrapers.placeholder",
+              })}
+            />
+            <Form.Text className="text-muted">
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.performer_verifier_scrapers.help" />
+            </Form.Text>
+          </Form.Group>
+          <Form.Group controlId="analyze-scene-metadata-verifier-stash-boxes">
+            <Form.Label>
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.performer_verifier_stash_boxes.label" />
+            </Form.Label>
+            <SelectComponent
+              items={stashBoxVerifierOptions}
+              selectedOptions={stashBoxVerifierOptions.filter((option) =>
+                analyzeSceneMetadataOptions.performerVerifierStashBoxEndpoints.includes(
+                  option.value
+                )
+              )}
+              isLoading={false}
+              isMulti
+              closeMenuOnSelect={false}
+              onChange={(selected) =>
+                onSetAnalyzeSceneMetadataOptions({
+                  performerVerifierStashBoxEndpoints: selected.map(
+                    (option) => option.value
+                  ),
+                })
+              }
+              className="form-control react-select"
+              placeholder={intl.formatMessage({
+                id: "config.tasks.analyze_scene_metadata.performer_verifier_stash_boxes.placeholder",
+              })}
+            />
+            <Form.Text className="text-muted">
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.performer_verifier_stash_boxes.help" />
+            </Form.Text>
+          </Form.Group>
+          <div className="row">
+            <Form.Group
+              className="col-md-6"
+              controlId="analyze-scene-metadata-performer-confidence"
+            >
+              <Form.Label>
+                <FormattedMessage id="config.tasks.analyze_scene_metadata.performer_confidence.label" />
+              </Form.Label>
+              <Form.Control
+                type="number"
+                min={0.3}
+                max={1}
+                step={0.05}
+                value={analyzeSceneMetadataOptions.performerConfidenceThreshold}
+                onChange={(event) =>
+                  onSetAnalyzeSceneMetadataOptions({
+                    performerConfidenceThreshold: Number(
+                      event.currentTarget.value
+                    ),
+                  })
+                }
+              />
+            </Form.Group>
+            <Form.Group
+              className="col-md-6"
+              controlId="analyze-scene-metadata-date-confidence"
+            >
+              <Form.Label>
+                <FormattedMessage id="config.tasks.analyze_scene_metadata.date_confidence.label" />
+              </Form.Label>
+              <Form.Control
+                type="number"
+                min={0}
+                max={1}
+                step={0.05}
+                value={analyzeSceneMetadataOptions.dateConfidenceThreshold}
+                onChange={(event) =>
+                  onSetAnalyzeSceneMetadataOptions({
+                    dateConfidenceThreshold: Number(event.currentTarget.value),
+                  })
+                }
+              />
+            </Form.Group>
+          </div>
+          <Form.Check
+            id="analyze-scene-metadata-use-details"
+            checked={analyzeSceneMetadataOptions.useDetails}
+            label={intl.formatMessage({
+              id: "config.tasks.analyze_scene_metadata.use_details",
+            })}
+            onChange={() =>
+              onSetAnalyzeSceneMetadataOptions({
+                useDetails: !analyzeSceneMetadataOptions.useDetails,
+              })
+            }
+            className="mb-2"
+          />
+          <Form.Check
+            id="analyze-scene-metadata-use-local-ai-context"
+            checked={analyzeSceneMetadataOptions.useLocalAIContext}
+            label={intl.formatMessage({
+              id: "config.tasks.analyze_scene_metadata.use_local_ai_context",
+            })}
+            onChange={() =>
+              onSetAnalyzeSceneMetadataOptions({
+                useLocalAIContext:
+                  !analyzeSceneMetadataOptions.useLocalAIContext,
+              })
+            }
+            className="mb-2"
+          />
+          <Form.Check
+            id="analyze-scene-metadata-overwrite-date"
+            checked={analyzeSceneMetadataOptions.overwriteExistingDate}
+            label={intl.formatMessage({
+              id: "config.tasks.analyze_scene_metadata.overwrite_date",
+            })}
+            onChange={() =>
+              onSetAnalyzeSceneMetadataOptions({
+                overwriteExistingDate:
+                  !analyzeSceneMetadataOptions.overwriteExistingDate,
+              })
+            }
+            className="mb-2"
+          />
+          <Form.Check
+            id="analyze-scene-metadata-overwrite-title"
+            checked={analyzeSceneMetadataOptions.overwriteExistingTitle}
+            label={intl.formatMessage({
+              id: "config.tasks.analyze_scene_metadata.overwrite_title",
+            })}
+            onChange={() =>
+              onSetAnalyzeSceneMetadataOptions({
+                overwriteExistingTitle:
+                  !analyzeSceneMetadataOptions.overwriteExistingTitle,
+              })
+            }
+            className="mb-2"
+          />
           <Form.Check
             id="analyze-scene-metadata-dry-run"
-            checked={analyzeSceneMetadataDryRun}
+            checked={analyzeSceneMetadataOptions.dryRun}
             label={intl.formatMessage({ id: "config.tasks.dry_run" })}
             onChange={() =>
-              setAnalyzeSceneMetadataDryRun(!analyzeSceneMetadataDryRun)
+              onSetAnalyzeSceneMetadataOptions({
+                dryRun: !analyzeSceneMetadataOptions.dryRun,
+              })
             }
             className="mb-2"
           />
@@ -530,6 +923,7 @@ export const LibraryTasks: React.FC = () => {
             variant="secondary"
             type="submit"
             onClick={runAnalyzeSceneMetadata}
+            disabled={!analyzeSceneMetadataOptionsInitialized}
           >
             <FormattedMessage id="actions.analyze_scene_metadata" />…
           </Button>

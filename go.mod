@@ -22,6 +22,7 @@ require (
 	github.com/go-chi/cors v1.2.1
 	github.com/go-chi/httplog v0.3.1
 	github.com/go-toast/toast v0.0.0-20190211030409-01e6764cf0a4
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/golang-migrate/migrate/v4 v4.16.2
 	github.com/google/uuid v1.6.0
@@ -40,9 +41,10 @@ require (
 	github.com/knadh/koanf/providers/posflag v1.0.1
 	github.com/knadh/koanf/v2 v2.2.1
 	github.com/lucasb-eyer/go-colorful v1.2.0
-	github.com/mattn/go-sqlite3 v1.14.22
+	github.com/mattn/go-sqlite3 v1.14.42
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/natefinch/pie v0.0.0-20170715172608-9a0d72014007
+	github.com/pelletier/go-toml/v2 v2.1.0
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
 	github.com/prometheus/client_golang v1.24.1
 	github.com/remeh/sizedwaitgroup v1.0.0
@@ -52,6 +54,7 @@ require (
 	github.com/spf13/cast v1.6.0
 	github.com/spf13/pflag v1.0.6
 	github.com/stretchr/testify v1.11.1
+	github.com/sugarme/tokenizer v0.3.0
 	github.com/syncthing/notify v0.0.0-20250528144937-c7027d4f7465
 	github.com/tidwall/gjson v1.16.0
 	github.com/vearutop/statigz v1.4.0
@@ -59,7 +62,7 @@ require (
 	github.com/vektah/gqlparser/v2 v2.5.27
 	github.com/vektra/mockery/v2 v2.10.0
 	github.com/xWTF/chardet v0.0.0-20230208095535-c780f2ac244e
-	github.com/yalue/onnxruntime_go v1.19.0
+	github.com/yalue/onnxruntime_go v1.31.0
 	github.com/zencoder/go-dash/v3 v3.0.2
 	golang.org/x/crypto v0.54.0
 	golang.org/x/image v0.41.0
@@ -86,6 +89,7 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.7.0 // indirect
+	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/enetx/http v1.0.28 // indirect
 	github.com/enetx/http2 v1.0.26 // indirect
 	github.com/enetx/http3 v1.0.7 // indirect
@@ -109,6 +113,7 @@ require (
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
@@ -117,6 +122,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d // indirect
+	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/pelletier/go-toml/v2 v2.1.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
@@ -126,8 +132,10 @@ require (
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/refraction-networking/utls v1.8.3-0.20260301010127-aa6edf4b11af // indirect
+	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rs/zerolog v1.30.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
+	github.com/schollz/progressbar/v2 v2.15.0 // indirect
 	github.com/sosodev/duration v1.3.1 // indirect
 	github.com/spf13/afero v1.9.5 // indirect
 	github.com/spf13/cobra v1.7.0 // indirect
@@ -135,6 +143,7 @@ require (
 	github.com/spf13/viper v1.16.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
+	github.com/sugarme/regexpset v0.0.0-20200920021344-4d4ec8eaf93c // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/urfave/cli/v2 v2.27.6 // indirect

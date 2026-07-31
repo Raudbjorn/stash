@@ -909,6 +909,9 @@ func (mockGlobalConfig) GetScraperExcludeTagPatterns() []string {
 func (mockGlobalConfig) GetPythonPath() string {
 	return ""
 }
+func (mockGlobalConfig) GetPythonRuntimeID() string {
+	return ""
+}
 
 func (mockGlobalConfig) GetProxy() string {
 	return ""
