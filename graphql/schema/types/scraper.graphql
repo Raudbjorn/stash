@@ -15,6 +15,7 @@ enum ScrapeContentType {
   GROUP
   PERFORMER
   SCENE
+  STUDIO
 }
 
 "Scraped Content is the forming union over the different scrapers"
@@ -39,6 +40,8 @@ type Scraper {
   name: String!
   "Details for performer scraper"
   performer: ScraperSpec
+  "Details for studio scraper"
+  studio: ScraperSpec
   "Details for scene scraper"
   scene: ScraperSpec
   "Details for gallery scraper"
