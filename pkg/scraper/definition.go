@@ -37,6 +37,11 @@ type Definition struct {
 	// Configuration for querying scenes by name
 	SceneByName *ByNameDefinition `yaml:"sceneByName"`
 
+	// Configuration for querying studios by name. When set, the scraper is
+	// exposed with ScrapeContentTypeStudio and can be used as a studio
+	// metadata provider for "Analyze scene metadata".
+	StudioByName *ByNameDefinition `yaml:"studioByName"`
+
 	// Configuration for querying scenes by query fragment
 	SceneByQueryFragment *ByFragmentDefinition `yaml:"sceneByQueryFragment"`
 
@@ -81,6 +86,12 @@ func (c Definition) validate() error {
 
 	if c.PerformerByName != nil {
 		if err := c.PerformerByName.validate(); err != nil {
+			return err
+		}
+	}
+
+	if c.StudioByName != nil {
+		if err := c.StudioByName.validate(); err != nil {
 			return err
 		}
 	}
@@ -300,6 +311,14 @@ func (c Definition) spec() Scraper {
 		ret.Scene = &scene
 	}
 
+	studio := ScraperSpec{}
+	if c.StudioByName != nil {
+		studio.SupportedScrapes = append(studio.SupportedScrapes, ScrapeTypeName)
+	}
+	if len(studio.SupportedScrapes) > 0 {
+		ret.Studio = &studio
+	}
+
 	gallery := ScraperSpec{}
 	if c.GalleryByFragment != nil {
 		gallery.SupportedScrapes = append(gallery.SupportedScrapes, ScrapeTypeFragment)
@@ -352,6 +371,8 @@ func (c Definition) supports(ty ScrapeContentType) bool {
 		return c.PerformerByName != nil || c.PerformerByFragment != nil || len(c.PerformerByURL) > 0
 	case ScrapeContentTypeScene:
 		return (c.SceneByName != nil && c.SceneByQueryFragment != nil) || c.SceneByFragment != nil || len(c.SceneByURL) > 0
+	case ScrapeContentTypeStudio:
+		return c.StudioByName != nil
 	case ScrapeContentTypeGallery:
 		return c.GalleryByFragment != nil || len(c.GalleryByURL) > 0
 	case ScrapeContentTypeImage:

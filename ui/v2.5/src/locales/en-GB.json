@@ -631,8 +631,19 @@
           "label": "Performer verification Stash-box endpoints",
           "placeholder": "Select Stash-box endpoints…"
         },
+        "studio_verifier_scrapers": {
+          "help": "Selected name scrapers are used to verify newly discovered studio names. Community scrapers rarely declare a studio-by-name action, so this list is often empty.",
+          "label": "Studio verification scrapers",
+          "placeholder": "Select studio scrapers…"
+        },
+        "studio_verifier_stash_boxes": {
+          "help": "Uses exact-name studio lookups from the selected configured Stash-box APIs. Configure endpoints under Settings > Metadata providers.",
+          "label": "Studio verification Stash-box endpoints",
+          "placeholder": "Select Stash-box endpoints…"
+        },
         "use_details": "Also analyze scene details",
-        "use_local_ai_context": "Use local AI context for ambiguous performer names"
+        "use_local_ai_context": "Use local AI context for ambiguous performer names",
+        "use_local_ai_studio_provider_selection": "Use local AI to choose which studio metadata provider to query"
       },
       "anonymise_and_download": "Makes an anonymised copy of the database and downloads the resulting file.",
       "anonymise_database": "Makes a copy of the database to the backups directory, anonymising all sensitive data. This can then be provided to others for troubleshooting and debugging purposes. The original database is not modified. Anonymised database uses the filename format {filename_format}.",

@@ -53,6 +53,17 @@ query ListGroupScrapers {
   }
 }
 
+query ListStudioScrapers {
+  listScrapers(types: [STUDIO]) {
+    id
+    name
+    studio {
+      urls
+      supported_scrapes
+    }
+  }
+}
+
 query ScrapeSingleStudio(
   $source: ScraperSourceInput!
   $input: ScrapeSingleStudioInput!

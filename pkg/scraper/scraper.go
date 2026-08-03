@@ -36,6 +36,7 @@ const (
 	ScrapeContentTypeGroup     ScrapeContentType = "GROUP"
 	ScrapeContentTypePerformer ScrapeContentType = "PERFORMER"
 	ScrapeContentTypeScene     ScrapeContentType = "SCENE"
+	ScrapeContentTypeStudio    ScrapeContentType = "STUDIO"
 	ScrapeContentTypeImage     ScrapeContentType = "IMAGE"
 )
 
@@ -45,12 +46,13 @@ var AllScrapeContentType = []ScrapeContentType{
 	ScrapeContentTypeGroup,
 	ScrapeContentTypePerformer,
 	ScrapeContentTypeScene,
+	ScrapeContentTypeStudio,
 	ScrapeContentTypeImage,
 }
 
 func (e ScrapeContentType) IsValid() bool {
 	switch e {
-	case ScrapeContentTypeGallery, ScrapeContentTypeMovie, ScrapeContentTypeGroup, ScrapeContentTypePerformer, ScrapeContentTypeScene, ScrapeContentTypeImage:
+	case ScrapeContentTypeGallery, ScrapeContentTypeMovie, ScrapeContentTypeGroup, ScrapeContentTypePerformer, ScrapeContentTypeScene, ScrapeContentTypeStudio, ScrapeContentTypeImage:
 		return true
 	}
 	return false
@@ -84,6 +86,11 @@ type Scraper struct {
 	Performer *ScraperSpec `json:"performer"`
 	// Details for scene scraper
 	Scene *ScraperSpec `json:"scene"`
+	// Details for studio scraper. Studio scraping by name/fragment is opt-in
+	// for individual scraper definitions (see Definition.StudioByName); when
+	// populated, the scraper can be selected as a studio metadata provider
+	// for "Analyze scene metadata".
+	Studio *ScraperSpec `json:"studio"`
 	// Details for gallery scraper
 	Gallery *ScraperSpec `json:"gallery"`
 	// Details for image scraper
