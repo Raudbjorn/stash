@@ -351,7 +351,7 @@ func parse(filePath string, probeJSON *FFProbeJSON) (*VideoFile, error) {
 }
 
 func isRotated(s *FFProbeStream) bool {
-	rotate, _ := strconv.ParseInt(s.Tags.Rotate, 10, 64)
+	rotate, _ := strconv.ParseInt(s.Tags.Get("rotate"), 10, 64)
 	if rotate != 180 && rotate != 0 {
 		return true
 	}

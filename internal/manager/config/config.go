@@ -297,14 +297,15 @@ const (
 
 	// marker sync options
 	MarkerSync = "marker_sync"
+
+	// python options
 	PythonPath      = "python_path"
 	PythonRuntimeID = "python.runtime_id"
 	PythonIndexes   = "python.indexes"
 
-
 	// OnnxRuntimeLibPath overrides the ONNX Runtime shared library path used
-	// by the scene metadata analyzer's embedding-based name-plausibility
-	// scorer. If blank, common install locations are checked instead.
+	// by the scene metadata entity extractor. If blank, common install
+	// locations are checked instead.
 	OnnxRuntimeLibPath = "onnxruntime_lib_path"
 
 	// plugin options

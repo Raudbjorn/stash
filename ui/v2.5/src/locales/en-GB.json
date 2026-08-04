@@ -464,7 +464,7 @@
       "number_of_parallel_task_for_scan_generation_desc": "Set to 0 for auto-detection. Warning running more tasks than is required to achieve 100% CPU utilisation will decrease performance and potentially cause other issues.",
       "number_of_parallel_task_for_scan_generation_head": "Number of parallel task for scan/generation",
       "onnxruntime_lib_path": {
-        "description": "Path to the onnxruntime shared library (e.g. libonnxruntime.so). Used by the scene metadata analyzer's embedding-based name-plausibility scorer. If blank, common install locations are checked; if none is found, a dependency-free heuristic scorer is used instead.",
+        "description": "Path to the onnxruntime shared library (e.g. libonnxruntime.so). Used by the scene metadata entity extractor. If blank, common install locations are checked; if none is found, deterministic extraction remains available.",
         "heading": "ONNX Runtime library path"
       },
       "parallel_scan_head": "Parallel Scan/Generation",
