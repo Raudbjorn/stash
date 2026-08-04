@@ -296,7 +296,9 @@ const (
 	StashBoxes = "stash_boxes"
 
 	// marker sync options
-	MarkerSync      = "marker_sync"
+	MarkerSync = "marker_sync"
+
+	// python options
 	PythonPath      = "python_path"
 	PythonRuntimeID = "python.runtime_id"
 	PythonIndexes   = "python.indexes"

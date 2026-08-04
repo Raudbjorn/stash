@@ -159,6 +159,8 @@ func TestEvaluateVLMExactMetricsProgressCancellationAndReadOnly(t *testing.T) {
 		{ID: 500, SceneID: 1, PrimaryTagID: 1, Seconds: 0, EndSeconds: ptrFloat(6)},
 		{ID: 501, SceneID: 1, PrimaryTagID: 1, Seconds: 0, EndSeconds: ptrFloat(6)},
 	}
+	// Generated-marker records are scoped by scene, so this must match the
+	// fixture markers' SceneID.
 	if err := db.RecordMarkers(context.Background(), 1, []store.WrittenMarker{
 		{MarkerID: 500, SceneID: 1, Service: ProviderVLM, TagName: "Blowjob", Start: 0},
 	}); err != nil {

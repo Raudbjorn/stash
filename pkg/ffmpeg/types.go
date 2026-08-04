@@ -38,6 +38,8 @@ const (
 var allowedProbeTags = map[string]struct{}{
 	"title": {}, "comment": {}, "description": {}, "date": {}, "creation_time": {},
 	"com.apple.quicktime.creationdate": {}, "encoder": {},
+	// Performer tags are intentionally retained: the scene metadata analyzer
+	// consumes VideoFile.Tags as performer evidence.
 	"artist": {}, "album_artist": {}, "publisher": {}, "copyright": {},
 	"show": {}, "episode_id": {}, "handler_name": {}, "language": {}, "rotate": {},
 }

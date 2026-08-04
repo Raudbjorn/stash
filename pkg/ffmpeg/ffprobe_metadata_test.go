@@ -28,6 +28,7 @@ func TestParsePreservesAllowlistedFormatAndStreamTags(t *testing.T) {
 				"TITLE": "Canonical Title",
 				"comment": "Description",
 				"publisher": "Example Studio",
+				"artist": "Example Performer",
 				"creation_time": "2024-07-15T10:11:12Z",
 				"show": "Sample Movie",
 				"episode_id": "2",
@@ -55,14 +56,14 @@ func TestParsePreservesAllowlistedFormatAndStreamTags(t *testing.T) {
 	if got.Title != "Canonical Title" || got.Comment != "Description" {
 		t.Errorf("legacy fields = title %q comment %q", got.Title, got.Comment)
 	}
-	if got.FormatTags.Get("PUBLISHER") != "Example Studio" {
-		t.Errorf("format tags = %#v", got.FormatTags)
+	if got.Tags["publisher"] != "Example Studio" || got.Tags["artist"] != "Example Performer" {
+		t.Errorf("format tags = %#v", got.Tags)
 	}
-	if got.FormatTags.Get("custom-key") != "" {
-		t.Errorf("unallowlisted format tag was retained: %#v", got.FormatTags)
+	if got.Tags["custom-key"] != "" {
+		t.Errorf("unallowlisted format tag was retained: %#v", got.Tags)
 	}
-	if len(got.StreamTags) != 1 || got.StreamTags[0].Get("handler_name") != "VideoHandler" {
-		t.Errorf("stream tags = %#v", got.StreamTags)
+	if len(got.JSON.Streams) != 1 || got.JSON.Streams[0].Tags.Get("handler_name") != "VideoHandler" {
+		t.Errorf("stream tags = %#v", got.JSON.Streams)
 	}
 	if got.Width != 1080 || got.Height != 1920 {
 		t.Errorf("rotated dimensions = %dx%d, want 1080x1920", got.Width, got.Height)

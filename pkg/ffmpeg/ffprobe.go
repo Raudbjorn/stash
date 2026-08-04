@@ -106,8 +106,6 @@ type VideoFile struct {
 	Bitrate             int64
 	Size                int64
 	CreationTime        time.Time
-	FormatTags          FFProbeTags
-	StreamTags          []FFProbeTags
 
 	VideoCodec   string
 	VideoBitrate int64
@@ -281,11 +279,6 @@ func parse(filePath string, probeJSON *FFProbeJSON) (*VideoFile, error) {
 	}
 
 	result.Path = filePath
-	result.FormatTags = probeJSON.Format.Tags
-	result.StreamTags = make([]FFProbeTags, len(probeJSON.Streams))
-	for i := range probeJSON.Streams {
-		result.StreamTags[i] = probeJSON.Streams[i].Tags
-	}
 	result.Title = probeJSON.Format.Tags.Title
 
 	result.Comment = probeJSON.Format.Tags.Comment
