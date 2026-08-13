@@ -7,6 +7,8 @@ import (
 
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
+	"github.com/stashapp/stash/pkg/performer"
+	"github.com/stashapp/stash/pkg/scene/metadata"
 	"github.com/stashapp/stash/pkg/stashbox"
 )
 
@@ -70,15 +72,27 @@ func (j *analyzeSceneMetadataJob) authoritativeScenePerformerIDs(ctx context.Con
 func (j *analyzeSceneMetadataJob) matchAuthoritativePerformers(ctx context.Context, endpoint string, remote []*models.ScrapedPerformer) ([]int, bool) {
 	ids := make([]int, 0, len(remote))
 	seen := make(map[int]struct{}, len(remote))
+	var created []*models.Performer
 
-	err := j.repository.WithReadTxn(ctx, func(ctx context.Context) error {
+	err := j.repository.WithTxn(ctx, func(ctx context.Context) error {
 		for _, scraped := range remote {
 			id, found, err := j.matchAuthoritativePerformer(ctx, endpoint, scraped)
 			if err != nil {
 				return err
 			}
 			if !found {
-				return errAuthoritativePerformerNotFound
+				if j.input.DryRun || scraped == nil || scraped.Name == nil || strings.TrimSpace(*scraped.Name) == "" {
+					return errAuthoritativePerformerNotFound
+				}
+				newPerformer := scraped.ToPerformer(endpoint, nil)
+				if err := performer.ValidateCreate(ctx, *newPerformer, j.repository.Performer); err != nil {
+					return err
+				}
+				if err := j.repository.Performer.Create(ctx, &models.CreatePerformerInput{Performer: newPerformer}); err != nil {
+					return err
+				}
+				created = append(created, newPerformer)
+				id = newPerformer.ID
 			}
 			if _, duplicate := seen[id]; duplicate {
 				continue
@@ -88,7 +102,16 @@ func (j *analyzeSceneMetadataJob) matchAuthoritativePerformers(ctx context.Conte
 		}
 		return nil
 	})
-	return ids, err == nil && len(ids) > 0
+	if err != nil || len(ids) == 0 {
+		return ids, false
+	}
+	for _, p := range created {
+		j.performerRecords = append(j.performerRecords, metadata.NamedAliases{
+			ID: p.ID, Name: p.Name,
+		})
+		logger.Infof("[scene metadata] created authoritative performer %q from %s", p.Name, endpoint)
+	}
+	return ids, true
 }
 
 func (j *analyzeSceneMetadataJob) matchAuthoritativePerformer(ctx context.Context, endpoint string, scraped *models.ScrapedPerformer) (int, bool, error) {
