@@ -1,0 +1,9 @@
+mutation ConfigureAIServer($input: AIServerConfigInput!) {
+  configureAIServer(input: $input) {
+    ...AIServerConfigData
+  }
+}
+
+mutation CancelAITask($id: ID!) {
+  cancelAITask(id: $id)
+}

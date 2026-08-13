@@ -1,0 +1,52 @@
+fragment AIServerConfigData on AIServerConfig {
+  enabled
+  taggingProvider
+  taggingServerURL
+  taggingOpenAIKeySet
+  taggingModelDir
+  taggingRulesDir
+  taggingFrameInterval
+  taggingThreshold
+  taggingMaxSpanMerge
+  taggingVLMModel
+  taggingVLMLabels
+  taggingVLMGPULayers
+  taggingVLMContext
+}
+
+fragment AIServerStatusData on AIServerStatus {
+  state
+  enabled
+  ready
+  hasVLMProvider
+  backendVersion
+  schemaVersion
+  error
+  database {
+    status
+    message
+  }
+  config {
+    ...AIServerConfigData
+  }
+}
+
+fragment AITaggingStatusData on AITaggingStatus {
+  provider
+  available
+  message
+  remediation
+}
+
+fragment AITaskData on AITask {
+  id
+  actionID
+  service
+  priority
+  status
+  submittedAt
+  startedAt
+  finishedAt
+  error
+  cancelRequested
+}

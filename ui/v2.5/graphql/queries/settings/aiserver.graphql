@@ -1,0 +1,22 @@
+"Lightweight status used wherever the UI needs to know if the AI server is usable (task-default checkboxes, the per-scene analyze tab) without paying for the task queue on every poll."
+query AIServerAvailability {
+  aiServerStatus {
+    ...AIServerStatusData
+  }
+}
+
+"Full settings-panel query: status, tagging status and the task queue/history."
+query AIServerSettings {
+  aiServerStatus {
+    ...AIServerStatusData
+  }
+  aiTaggingStatus {
+    ...AITaggingStatusData
+  }
+  aiTasks {
+    ...AITaskData
+  }
+  aiTaskHistory(limit: 20) {
+    ...AITaskData
+  }
+}

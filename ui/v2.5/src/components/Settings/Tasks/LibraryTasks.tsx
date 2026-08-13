@@ -12,6 +12,7 @@ import {
   mutateSceneMetadataEntityModelInstall,
   mutateSceneMetadataEntityModelReload,
   useSceneMetadataEntityModelStatus,
+  useAIServerAvailability,
 } from "src/core/StashService";
 import { withoutTypename } from "src/utils/data";
 import { useConfigurationContext } from "src/hooks/Config";
@@ -102,6 +103,12 @@ export const LibraryTasks: React.FC = () => {
   const { ui, saveUI, loading } = useSettings();
 
   const { taskDefaults } = ui;
+
+  const { data: aiServerData } = useAIServerAvailability();
+  const aiAvailable = !!(
+    aiServerData?.aiServerStatus.enabled &&
+    aiServerData?.aiServerStatus.hasVLMProvider
+  );
 
   const [dialogOpen, setDialogOpenState] = useState({
     scan: false,
@@ -444,7 +451,17 @@ export const LibraryTasks: React.FC = () => {
 
   async function runAnalyzeSceneMetadata() {
     try {
-      await mutateMetadataAnalyzeScenes(analyzeSceneMetadataOptions);
+      // A previously-persisted true value must not silently be sent once the
+      // AI server is unavailable - the checkbox being disabled in the UI is
+      // not enough on its own to stop a stale ui.taskDefaults value.
+      await mutateMetadataAnalyzeScenes({
+        ...analyzeSceneMetadataOptions,
+        useLocalAIContext:
+          aiAvailable && analyzeSceneMetadataOptions.useLocalAIContext,
+        useLocalAIStudioProviderSelection:
+          aiAvailable &&
+          analyzeSceneMetadataOptions.useLocalAIStudioProviderSelection,
+      });
 
       Toast.success(
         intl.formatMessage(
@@ -960,6 +977,7 @@ export const LibraryTasks: React.FC = () => {
           <Form.Check
             id="analyze-scene-metadata-use-local-ai-studio-provider"
             checked={analyzeSceneMetadataOptions.useLocalAIStudioProviderSelection}
+            disabled={!aiAvailable}
             label={intl.formatMessage({
               id: "config.tasks.analyze_scene_metadata.use_local_ai_studio_provider_selection",
             })}
@@ -971,6 +989,11 @@ export const LibraryTasks: React.FC = () => {
             }
             className="mb-2"
           />
+          {!aiAvailable && (
+            <Form.Text className="text-muted">
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.use_local_ai_studio_provider_selection_unavailable_help" />
+            </Form.Text>
+          )}
           <Form.Check
             id="analyze-scene-metadata-use-details"
             checked={analyzeSceneMetadataOptions.useDetails}
@@ -987,6 +1010,7 @@ export const LibraryTasks: React.FC = () => {
           <Form.Check
             id="analyze-scene-metadata-use-local-ai-context"
             checked={analyzeSceneMetadataOptions.useLocalAIContext}
+            disabled={!aiAvailable}
             label={intl.formatMessage({
               id: "config.tasks.analyze_scene_metadata.use_local_ai_context",
             })}
@@ -998,6 +1022,11 @@ export const LibraryTasks: React.FC = () => {
             }
             className="mb-2"
           />
+          {!aiAvailable && (
+            <Form.Text className="text-muted">
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.use_local_ai_context_unavailable_help" />
+            </Form.Text>
+          )}
           <Form.Check
             id="analyze-scene-metadata-overwrite-date"
             checked={analyzeSceneMetadataOptions.overwriteExistingDate}

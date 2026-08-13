@@ -1,0 +1,5 @@
+mutation ConfigureOllama($input: OllamaConfigInput!) {
+  configureOllama(input: $input) {
+    ...OllamaConfigData
+  }
+}

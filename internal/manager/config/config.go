@@ -2176,6 +2176,15 @@ func (i *Config) GetAITaggingOpenAIKey() string {
 	return os.Getenv("OPENAI_API_KEY")
 }
 
+// GetAITaggingOpenAIKeyConfigured reports whether a key is stored in config,
+// without the OPENAI_API_KEY env fallback GetAITaggingOpenAIKey() applies.
+// Used to answer "is a key set" over the API without ever echoing an
+// env-derived credential back through a query, where it would then get
+// persisted into config.yml on the next write.
+func (i *Config) GetAITaggingOpenAIKeyConfigured() bool {
+	return i.getString(AITaggingOpenAIKey) != ""
+}
+
 // GetAITaggingModelDir returns where models and the ONNX runtime are stored.
 func (i *Config) GetAITaggingModelDir() string {
 	if p := i.getString(AITaggingModelDir); p != "" {

@@ -47,6 +47,43 @@ func (b *testBackend) Interactions() *interactions.Service {
 	}
 	return interactions.NewService(b.db)
 }
+
+// SubmitAction mirrors aiserver.Server.SubmitAction closely enough for the
+// handler tests in this package: resolve, check applicability, check for a
+// duplicate, infer priority, submit. It exists here rather than importing the
+// real implementation because this package must not import internal/aiserver
+// (that would be the dependency cycle SubmitAction's own doc comment warns
+// about).
+func (b *testBackend) SubmitAction(ctx context.Context, actionID string, actx action.ContextInput, params map[string]any, priority *string) (task.Record, error) {
+	reg, ok := b.Actions().Resolve(actionID, actx)
+	if !ok {
+		return task.Record{}, task.ErrActionNotFound
+	}
+	if !reg.Definition.IsApplicable(actx) {
+		return task.Record{}, task.ErrActionNotApplicable
+	}
+
+	tasks := b.Tasks()
+	if reg.Definition.DeduplicateSubmissions {
+		if dup, found := tasks.FindDuplicate(reg.Definition, actx, params); found {
+			return task.Record{}, &task.ErrDuplicateSubmission{Dup: dup}
+		}
+	}
+
+	inferred := "low"
+	if actx.IsDetailView {
+		inferred = "high"
+	}
+	if priority != nil {
+		if _, valid := task.ParsePriority(*priority); valid {
+			inferred = *priority
+		}
+	}
+	p, _ := task.ParsePriority(inferred)
+
+	return tasks.Submit(reg.Definition, reg.Handler, actx, params, p, task.SubmitOptions{})
+}
+
 func (b *testBackend) HealthSnapshot(context.Context) any { return map[string]any{"state": "ready"} }
 func (b *testBackend) Version() VersionInfo {
 	m := ">=0.8.0"

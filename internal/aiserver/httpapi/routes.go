@@ -22,6 +22,9 @@ type Backend interface {
 	Actions() *action.Registry
 	// Tasks is the scheduler.
 	Tasks() *task.Manager
+	// SubmitAction resolves and submits an action, applying the shared
+	// resolve/applicability/duplicate-check/priority-inference sequence.
+	SubmitAction(ctx context.Context, actionID string, actx action.ContextInput, params map[string]any, priority *string) (task.Record, error)
 	// DB is the AI database. May be nil when not ready.
 	DB() *store.DB
 	// Interactions ingests watch-tracking events. May be nil when not ready.

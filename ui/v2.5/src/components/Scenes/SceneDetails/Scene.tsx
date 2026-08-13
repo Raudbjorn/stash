@@ -77,6 +77,9 @@ const ExternalPlayerButton = lazyComponent(
 
 const QueueViewer = lazyComponent(() => import("./QueueViewer"));
 const SceneMarkersPanel = lazyComponent(() => import("./SceneMarkersPanel"));
+const SceneAITaggingPanel = lazyComponent(
+  () => import("./SceneAITaggingPanel")
+);
 const SceneFileInfoPanel = lazyComponent(() => import("./SceneFileInfoPanel"));
 const CaptionUpload = lazyComponent(() => import("./CaptionUpload"));
 const SceneDetailPanel = lazyComponent(() => import("./SceneDetailPanel"));
@@ -565,6 +568,11 @@ const ScenePage: React.FC<IProps> = PatchComponent("ScenePage", (props) => {
                 <FormattedMessage id="markers" />
               </Nav.Link>
             </Nav.Item>
+            <Nav.Item>
+              <Nav.Link eventKey="scene-ai-tagging-panel">
+                <FormattedMessage id="ai_tagging.tab_label" />
+              </Nav.Link>
+            </Nav.Item>
             {scene.groups.length > 0 ? (
               <Nav.Item>
                 <Nav.Link eventKey="scene-group-panel">
@@ -639,6 +647,12 @@ const ScenePage: React.FC<IProps> = PatchComponent("ScenePage", (props) => {
               onClickMarker={onClickMarker}
               onLoopMarker={onLoopMarker}
               isVisible={activeTabKey === "scene-markers-panel"}
+            />
+          </Tab.Pane>
+          <Tab.Pane eventKey="scene-ai-tagging-panel">
+            <SceneAITaggingPanel
+              sceneId={scene.id}
+              isVisible={activeTabKey === "scene-ai-tagging-panel"}
             />
           </Tab.Pane>
           <Tab.Pane eventKey="scene-group-panel">
