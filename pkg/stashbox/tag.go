@@ -8,6 +8,11 @@ import (
 	"github.com/stashapp/stash/pkg/stashbox/graphql"
 )
 
+// QueryTags returns one page from the stash-box tag taxonomy.
+func (c Client) QueryTags(ctx context.Context, input graphql.TagQueryInput) (*graphql.QueryTags, error) {
+	return c.client.QueryTags(ctx, input)
+}
+
 // QueryTag searches for tags by name or ID.
 // If query is a valid UUID, it searches by ID (returns single result).
 // Otherwise, it searches by name (returns multiple results).
