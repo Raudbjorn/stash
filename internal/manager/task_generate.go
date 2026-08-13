@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"time"
 
 	"github.com/remeh/sizedwaitgroup"
@@ -103,6 +104,18 @@ type totalsGenerate struct {
 	tasks int
 }
 
+func executeGenerateTask(ctx context.Context, progress *job.Progress, current Task) {
+	progress.ExecuteTask(current.GetDescription(), func() {
+		defer func() {
+			if p := recover(); p != nil {
+				logger.Errorf("panic while generating %q: %v", current.GetDescription(), p)
+				logger.Error(string(debug.Stack()))
+			}
+		}()
+		current.Start(ctx)
+	})
+}
+
 func (j *GenerateJob) Execute(ctx context.Context, progress *job.Progress) error {
 	var scenes []*models.Scene
 	var markers []*models.SceneMarker
@@ -162,7 +175,8 @@ func (j *GenerateJob) Execute(ctx context.Context, progress *job.Progress) error
 					scenes, err = qb.FindMany(ctx, sceneIDs)
 					for _, s := range scenes {
 						if err := s.LoadFiles(ctx, qb); err != nil {
-							return err
+							logger.Errorf("Error loading files for scene %d: %v", s.ID, err)
+							continue
 						}
 
 						j.queueSceneJobs(ctx, g, s, queue)
@@ -201,7 +215,8 @@ func (j *GenerateJob) Execute(ctx context.Context, progress *job.Progress) error
 						images, err = r.Image.FindMany(ctx, imageIDs)
 						for _, i := range images {
 							if err := i.LoadFiles(ctx, r.Image); err != nil {
-								return err
+								logger.Errorf("Error loading files for image %d: %v", i.ID, err)
+								continue
 							}
 
 							j.queueImageJob(g, i, queue)
@@ -215,7 +230,8 @@ func (j *GenerateJob) Execute(ctx context.Context, progress *job.Progress) error
 						}
 						for _, img := range imgs {
 							if err := img.LoadFiles(ctx, r.Image); err != nil {
-								return err
+								logger.Errorf("Error loading files for image %d: %v", img.ID, err)
+								continue
 							}
 
 							j.queueImageJob(g, img, queue)
@@ -312,11 +328,11 @@ func (j *GenerateJob) Execute(ctx context.Context, progress *job.Progress) error
 		// #1879 - need to make a copy of f - otherwise there is a race condition
 		// where f is changed when the goroutine runs
 		localTask := f
-		go progress.ExecuteTask(localTask.GetDescription(), func() {
-			localTask.Start(ctx)
-			wg.Done()
-			progress.Increment()
-		})
+		go func() {
+			defer wg.Done()
+			defer progress.Increment()
+			executeGenerateTask(ctx, progress, localTask)
+		}()
 	}
 
 	wg.Wait()
@@ -363,8 +379,8 @@ func (j *GenerateJob) queueScenesTasks(ctx context.Context, g *generate.Generato
 			}
 
 			if err := ss.LoadFiles(ctx, r.Scene); err != nil {
-				logger.Errorf("Error encountered queuing files to scan: %s", err.Error())
-				return
+				logger.Errorf("Error loading files for scene %d: %v", ss.ID, err)
+				continue
 			}
 
 			j.queueSceneJobs(ctx, g, ss, queue)
@@ -403,8 +419,8 @@ func (j *GenerateJob) queueImagesTasks(ctx context.Context, g *generate.Generato
 			}
 
 			if err := ss.LoadFiles(ctx, r.Image); err != nil {
-				logger.Errorf("Error encountered queuing files to scan: %s", err.Error())
-				return
+				logger.Errorf("Error loading files for image %d: %v", ss.ID, err)
+				continue
 			}
 
 			j.queueImageJob(g, ss, queue)

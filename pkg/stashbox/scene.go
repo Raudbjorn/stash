@@ -44,6 +44,27 @@ func (c Client) QueryScene(ctx context.Context, queryStr string) ([]*models.Scra
 	return ret, nil
 }
 
+// FindScenePerformersByID returns the performers attached to an authoritative
+// Stash-box scene without downloading scene images or unrelated metadata.
+func (c Client) FindScenePerformersByID(ctx context.Context, id string) ([]*models.ScrapedPerformer, error) {
+	result, err := c.client.FindSceneByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if result.FindScene == nil {
+		return nil, nil
+	}
+
+	ret := make([]*models.ScrapedPerformer, 0, len(result.FindScene.Performers))
+	for _, performer := range result.FindScene.Performers {
+		if performer == nil || performer.Performer == nil {
+			continue
+		}
+		ret = append(ret, performerFragmentToScrapedPerformer(*performer.Performer))
+	}
+	return ret, nil
+}
+
 // FindStashBoxScenesByFingerprints queries stash-box for a scene using the
 // scene's MD5/OSHASH checksum, or PHash.
 func (c Client) FindSceneByFingerprints(ctx context.Context, fps models.Fingerprints) ([]*models.ScrapedScene, error) {

@@ -2,8 +2,10 @@ package job
 
 import (
 	"context"
+	"runtime/debug"
 
 	"github.com/remeh/sizedwaitgroup"
+	"github.com/stashapp/stash/pkg/logger"
 )
 
 type taskExec struct {
@@ -46,6 +48,18 @@ func (tq *TaskQueue) Close() {
 	<-tq.done
 }
 
+func executeQueuedTask(ctx context.Context, progress *Progress, task taskExec) {
+	defer func() {
+		if p := recover(); p != nil {
+			logger.Errorf("panic while executing task %q: %v", task.description, p)
+			logger.Error(string(debug.Stack()))
+		}
+	}()
+	progress.ExecuteTask(task.description, func() {
+		task.fn(ctx)
+	})
+}
+
 func (tq *TaskQueue) executer(ctx context.Context) {
 	defer close(tq.done)
 	defer tq.wg.Wait()
@@ -59,9 +73,7 @@ func (tq *TaskQueue) executer(ctx context.Context) {
 		tq.wg.Add()
 		go func() {
 			defer tq.wg.Done()
-			tq.p.ExecuteTask(tt.description, func() {
-				tt.fn(ctx)
-			})
+			executeQueuedTask(ctx, tq.p, tt)
 		}()
 	}
 }

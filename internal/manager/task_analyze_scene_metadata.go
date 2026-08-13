@@ -90,12 +90,14 @@ type analyzeSceneMetadataJob struct {
 	repository                  models.Repository
 	input                       AnalyzeSceneMetadataInput
 	scraperCache                performerScraperCache
+	scenePerformerLookup        scenePerformerLookup
 	ffprobe                     *ffmpeg.FFProbe
 	performerRecords            []metadata.NamedAliases
 	studioRecords               []metadata.NamedAliases
 	groupRecords                []metadata.NamedAliases
 	performerVerifierScrapers   []*scraper.Scraper
 	studioVerifierScrapers      []*scraper.Scraper
+	useBuiltinStudioURLScraper  bool
 	configuredStashBoxes        []*models.StashBox
 	performerVerifierStashBoxes []performerStashBoxVerifier
 	studioVerifierStashBoxes    []studioStashBoxVerifier
@@ -312,6 +314,9 @@ func (j *analyzeSceneMetadataJob) processScene(ctx context.Context, sc *models.S
 			return err
 		}
 		existingPerformerIDs = append([]int(nil), sc.PerformerIDs.List()...)
+		if err := sc.LoadStashIDs(ctx, r.Scene); err != nil {
+			return err
+		}
 		if err := sc.LoadGroups(ctx, r.Scene); err != nil {
 			return err
 		}
@@ -375,45 +380,56 @@ func (j *analyzeSceneMetadataJob) processScene(ctx context.Context, sc *models.S
 		FilenameStem: filenameStem, SceneTitle: sc.Title, Details: sc.Details,
 		UseDetails: j.input.UseDetails, NFO: nfo, Container: container,
 	})
-	if len(sources) == 0 {
+	authoritativePerformerIDs, hasAuthoritativePerformers := j.authoritativeScenePerformerIDs(ctx, sc)
+	if len(sources) == 0 && !hasAuthoritativePerformers {
 		return nil
 	}
 
-	var exactSpans []metadata.Span
-	for _, source := range sources {
-		exactSpans = append(exactSpans, metadata.FindExactNamedSpans(source, j.performerRecords, metadata.EntityLabelPerformer)...)
-		exactSpans = append(exactSpans, metadata.FindExactNamedSpans(source, j.studioRecords, metadata.EntityLabelStudio)...)
-		exactSpans = append(exactSpans, metadata.FindExactNamedSpans(source, j.groupRecords, metadata.EntityLabelMovie)...)
-	}
-	analysis, err := (metadata.Analyzer{}).Analyze(ctx, metadata.Inputs{
-		Sources: sources, EntityExtractor: getSceneMetadataEntityExtractor(),
-		AdditionalSpans: exactSpans, DateSignals: dateSignals, SanityBound: sanityBound,
-	})
-	if err != nil {
-		return fmt.Errorf("analyzing typed metadata: %w", err)
-	}
-
-	var performerCandidates []string
-	for _, candidate := range analysis.PerformerCandidates {
-		if candidate.ExistingEntityID != nil || candidate.Confidence >= j.performerLookupThreshold() {
-			performerCandidates = append(performerCandidates, candidate.Value)
+	var analysis metadata.Analysis
+	if len(sources) > 0 {
+		var exactSpans []metadata.Span
+		for _, source := range sources {
+			exactSpans = append(exactSpans, metadata.FindExactNamedSpans(source, j.performerRecords, metadata.EntityLabelPerformer)...)
+			exactSpans = append(exactSpans, metadata.FindExactNamedSpans(source, j.studioRecords, metadata.EntityLabelStudio)...)
+			exactSpans = append(exactSpans, metadata.FindExactNamedSpans(source, j.groupRecords, metadata.EntityLabelMovie)...)
+		}
+		var err error
+		analysis, err = (metadata.Analyzer{}).Analyze(ctx, metadata.Inputs{
+			Sources: sources, EntityExtractor: getSceneMetadataEntityExtractor(),
+			AdditionalSpans: exactSpans, DateSignals: dateSignals, SanityBound: sanityBound,
+		})
+		if err != nil {
+			return fmt.Errorf("analyzing typed metadata: %w", err)
 		}
 	}
-	resolutions, err := j.resolvePerformerCandidates(ctx, sc.ID, performerCandidates, sources)
-	if err != nil {
-		return fmt.Errorf("resolving performer candidates: %w", err)
-	}
-	resolvedPerformerIDs := make([]int, 0, len(resolutions))
-	for _, resolution := range resolutions {
-		if resolution.Status == performerResolutionExisting || resolution.Status == performerResolutionCreated {
-			resolvedPerformerIDs = append(resolvedPerformerIDs, resolution.PerformerID)
+
+	resolvedPerformerIDs := authoritativePerformerIDs
+	if !hasAuthoritativePerformers {
+		var performerCandidates []string
+		for _, candidate := range analysis.PerformerCandidates {
+			if candidate.ExistingEntityID != nil || candidate.Confidence >= j.performerLookupThreshold() {
+				performerCandidates = append(performerCandidates, candidate.Value)
+			}
+		}
+		resolutions, err := j.resolvePerformerCandidates(ctx, sc.ID, performerCandidates, sources)
+		if err != nil {
+			return fmt.Errorf("resolving performer candidates: %w", err)
+		}
+		resolvedPerformerIDs = make([]int, 0, len(resolutions))
+		for _, resolution := range resolutions {
+			if resolution.Status == performerResolutionExisting || resolution.Status == performerResolutionCreated {
+				resolvedPerformerIDs = append(resolvedPerformerIDs, resolution.PerformerID)
+			}
 		}
 	}
 
 	partial := models.NewScenePartial()
 	sceneDirty := false
-	newPerformerIDs := mergeIDs(existingPerformerIDs, resolvedPerformerIDs)
-	if len(newPerformerIDs) != len(existingPerformerIDs) {
+	newPerformerIDs := resolvedPerformerIDs
+	if !hasAuthoritativePerformers {
+		newPerformerIDs = mergeIDs(existingPerformerIDs, resolvedPerformerIDs)
+	}
+	if !sameIDSet(newPerformerIDs, existingPerformerIDs) {
 		partial.PerformerIDs = &models.UpdateIDs{IDs: newPerformerIDs, Mode: models.RelationshipUpdateModeSet}
 		sceneDirty = true
 	}

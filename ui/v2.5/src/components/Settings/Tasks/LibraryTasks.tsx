@@ -34,6 +34,7 @@ import {
 } from "src/components/Shared/AutoTagConfirmDialog";
 import { useSettings } from "../context";
 import { SelectComponent } from "src/components/Shared/Select";
+const builtinStudioURLScraperID = "builtin-studio-url-map";
 
 interface IAnalyzeSceneMetadataTaskDefaults {
   dryRun: boolean;
@@ -205,13 +206,20 @@ export const LibraryTasks: React.FC = () => {
     [performerScrapersData]
   );
   const studioVerifierScraperOptions = useMemo(
-    () =>
-      (studioScrapersData?.listScrapers ?? [])
+    () => [
+      {
+        label: intl.formatMessage({
+          id: "config.tasks.analyze_scene_metadata.studio_url_catalog",
+        }),
+        value: builtinStudioURLScraperID,
+      },
+      ...(studioScrapersData?.listScrapers ?? [])
         .filter((s) =>
           s.studio?.supported_scrapes.includes(GQL.ScrapeType.Name)
         )
         .map((s) => ({ label: s.name, value: s.id })),
-    [studioScrapersData]
+    ],
+    [intl, studioScrapersData]
   );
   const stashBoxVerifierOptions = useMemo(
     () =>
@@ -331,7 +339,8 @@ export const LibraryTasks: React.FC = () => {
           undefined
       ) ||
       reconciledIDs.length !== requestedIDs.length ||
-      reconciledStashBoxEndpoints.length !== requestedStashBoxEndpoints.length ||
+      reconciledStashBoxEndpoints.length !==
+        requestedStashBoxEndpoints.length ||
       reconciledStudioIDs.length !== requestedStudioIDs.length ||
       reconciledStudioStashBoxEndpoints.length !==
         requestedStudioStashBoxEndpoints.length

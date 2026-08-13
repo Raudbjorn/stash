@@ -34,14 +34,19 @@ func (t *GenerateImagePhashTask) Start(ctx context.Context) {
 		if err != nil {
 			logger.Warnf("Error finding existing phash: %v", err)
 		} else if existing != nil {
-			logger.Infof("Using existing phash for %s", t.File.Path)
-			hash = existing.(int64)
-			set = true
+			existingHash, ok := existing.(int64)
+			if !ok {
+				logger.Warnf("Ignoring invalid existing phash for %s: %T", t.File.Path, existing)
+			} else {
+				logger.Infof("Using existing phash for %s", t.File.Path)
+				hash = existingHash
+				set = true
+			}
 		}
 	}
 
 	if !set {
-		generated, err := imagephash.Generate(instance.FFMpeg, t.File)
+		generated, err := imagephash.Generate(ctx, instance.FFMpeg, t.File)
 		if err != nil {
 			logger.Errorf("Error generating phash for %q: %v", t.File.Path, err)
 			logErrorOutput(err)

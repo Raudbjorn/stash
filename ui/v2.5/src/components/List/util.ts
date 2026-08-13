@@ -42,13 +42,24 @@ export function useFilterURL(
   const history = useHistory();
   const location = useLocation();
   const prevLocation = usePrevious(location);
+  // URL changes are applied asynchronously through React Router. Keep the
+  // latest requested filter separately so multiple updates in one effect
+  // flush preserve functional-setter semantics instead of all reading the
+  // last rendered filter.
+  const pendingFilter = useRef(filter);
+  useEffect(() => {
+    pendingFilter.current = filter;
+  }, [filter]);
 
   // when the filter changes, update the URL
   const updateFilter = useCallback(
     (
       value: ListFilterModel | ((prevState: ListFilterModel) => ListFilterModel)
     ) => {
-      const newFilter = isFunction(value) ? value(filter) : value;
+      const newFilter = isFunction(value)
+        ? value(pendingFilter.current)
+        : value;
+      pendingFilter.current = newFilter;
 
       if (active) {
         const newParams = newFilter.makeQueryParameters();
@@ -58,7 +69,7 @@ export function useFilterURL(
         setFilter(newFilter);
       }
     },
-    [history, active, setFilter, filter]
+    [history, active, setFilter]
   );
 
   // This hook runs on every page location change (ie navigation),
@@ -68,35 +79,39 @@ export function useFilterURL(
     // also don't apply if location is unchanged
     if (!active || locationEquals(prevLocation, location)) return;
 
-    // re-init to load default filter on empty new query params
+    // Parse the saved default directly. Calling updateFilter here first writes
+    // a stale URL and depends on a later navigation effect to set state.
     if (!location.search) {
-      if (defaultFilter) updateFilter(defaultFilter.clone());
+      if (defaultFilter && !isEqual(defaultFilter, filter)) {
+        const newFilter = defaultFilter.clone();
+        pendingFilter.current = newFilter;
+        setFilter(newFilter);
+      }
       return;
     }
 
-    // the query has changed, update filter if necessary
-    setFilter((prevFilter) => {
-      const newFilter = prevFilter.empty();
-      newFilter.configureFromQueryString(location.search);
-      if (!isEqual(newFilter, prevFilter)) {
-        // filter may have changed if random seed was set, update the URL
-        const newParams = newFilter.makeQueryParameters();
-        if (newParams !== location.search) {
-          history.replace({ ...history.location, search: newParams });
-        }
+    // Parse before scheduling the state update. Other effects in this flush
+    // may also update the filter and must see the URL-derived value.
+    const newFilter = filter.empty();
+    newFilter.configureFromQueryString(location.search);
+    pendingFilter.current = newFilter;
 
-        return newFilter;
-      } else {
-        return prevFilter;
+    if (!isEqual(newFilter, filter)) {
+      setFilter(newFilter);
+
+      // filter may have changed if random seed was set, update the URL
+      const newParams = newFilter.makeQueryParameters();
+      if (newParams !== location.search) {
+        history.replace({ ...history.location, search: newParams });
       }
-    });
+    }
   }, [
     active,
     prevLocation,
     location,
     defaultFilter,
+    filter,
     setFilter,
-    updateFilter,
     history,
   ]);
 
