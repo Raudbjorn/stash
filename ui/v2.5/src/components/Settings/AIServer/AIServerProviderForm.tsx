@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button, Form } from "react-bootstrap";
 import { FormattedMessage, useIntl } from "react-intl";
 import { BooleanSetting, Setting } from "../Inputs";
@@ -48,12 +48,20 @@ export const AIServerProviderForm: React.FC<AIServerProviderFormProps> = ({
   );
   const [openAIKey, setOpenAIKey] = useState("");
   const [saving, setSaving] = useState(false);
+  // The status query polls every 5s with fetchPolicy "no-cache", so `config`
+  // is a fresh object on every tick even when nothing changed. Re-seeding the
+  // form unconditionally on that effect would wipe out an in-progress edit
+  // before the user finishes it. Skip re-seeding while there is an unsaved
+  // edit, and only pick up fresh values again once a save has gone through.
+  const dirty = useRef(false);
 
   useEffect(() => {
+    if (dirty.current) return;
     setForm(toInput(enabled, config));
   }, [enabled, config]);
 
   function update(patch: Partial<AiServerConfigInput>) {
+    dirty.current = true;
     setForm((prev) => ({ ...prev, ...patch }));
   }
 
@@ -65,6 +73,7 @@ export const AIServerProviderForm: React.FC<AIServerProviderFormProps> = ({
         taggingOpenAIKey: openAIKey ? openAIKey : undefined,
       });
       setOpenAIKey("");
+      dirty.current = false;
       Toast.success(intl.formatMessage({ id: "config.ai_server.saved" }));
       onSaved();
     } catch (error) {
@@ -131,7 +140,9 @@ export const AIServerProviderForm: React.FC<AIServerProviderFormProps> = ({
           <Form.Control
             className="text-input"
             value={form.taggingServerURL}
-            onChange={(e) => update({ taggingServerURL: e.currentTarget.value })}
+            onChange={(e) =>
+              update({ taggingServerURL: e.currentTarget.value })
+            }
           />
         </Setting>
       )}
@@ -195,7 +206,9 @@ export const AIServerProviderForm: React.FC<AIServerProviderFormProps> = ({
               className="text-input"
               value={form.taggingVLMContext}
               onChange={(e) =>
-                update({ taggingVLMContext: Number(e.currentTarget.value) || 0 })
+                update({
+                  taggingVLMContext: Number(e.currentTarget.value) || 0,
+                })
               }
             />
           </Setting>

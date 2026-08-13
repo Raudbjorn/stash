@@ -18,9 +18,11 @@ import (
 //
 // The restart runs on a detached goroutine: Refresh drains any in-flight AI
 // task before starting again, which can take a while, and this mutation must
-// not block on it. A second configureAIServer call while a refresh is still
-// running is not de-duplicated - last write wins - which is acceptable for a
-// settings-panel save button clicked by one operator at a time.
+// not block on it. aiserver.Server.Refresh serializes concurrent refreshes
+// against each other, so an overlapping configureAIServer call queues behind
+// the one in progress rather than interleaving with it; config writes
+// themselves are unserialized, so the config actually applied is still
+// whichever mutation's c.Write() ran last.
 func (r *mutationResolver) ConfigureAIServer(ctx context.Context, input AIServerConfigInput) (*AIServerConfig, error) {
 	c := config.GetInstance()
 

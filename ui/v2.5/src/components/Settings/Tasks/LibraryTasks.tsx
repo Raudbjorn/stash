@@ -976,7 +976,9 @@ export const LibraryTasks: React.FC = () => {
           </Form.Group>
           <Form.Check
             id="analyze-scene-metadata-use-local-ai-studio-provider"
-            checked={analyzeSceneMetadataOptions.useLocalAIStudioProviderSelection}
+            checked={
+              analyzeSceneMetadataOptions.useLocalAIStudioProviderSelection
+            }
             disabled={!aiAvailable}
             label={intl.formatMessage({
               id: "config.tasks.analyze_scene_metadata.use_local_ai_studio_provider_selection",

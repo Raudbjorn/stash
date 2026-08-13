@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button } from "react-bootstrap";
 import { FormattedMessage, useIntl } from "react-intl";
 import {
@@ -15,6 +15,12 @@ interface ISceneAITaggingPanelProps {
   isVisible: boolean;
 }
 
+// How long to keep polling for a result after triggering analysis, since
+// analyzeSceneWithAI only queues the work and returns immediately. Bounded so
+// a stuck/failed task doesn't poll forever.
+const ANALYSIS_POLL_TIMEOUT_MS = 3 * 60 * 1000;
+const ANALYSIS_POLL_INTERVAL_MS = 4000;
+
 export const SceneAITaggingPanel: React.FC<ISceneAITaggingPanelProps> = ({
   sceneId,
   isVisible,
@@ -22,14 +28,37 @@ export const SceneAITaggingPanel: React.FC<ISceneAITaggingPanelProps> = ({
   const intl = useIntl();
   const Toast = useToast();
   const [analyzing, setAnalyzing] = useState(false);
+  const [awaitingResult, setAwaitingResult] = useState(false);
 
   const { data: availability } = useAIServerAvailability();
-  const aiAvailable = !!(
-    availability?.aiServerStatus.enabled &&
-    availability?.aiServerStatus.hasVLMProvider
+  // aiTaggingStatus reflects whichever provider is actually configured
+  // (native/llama_vlm/remote/moderation); hasVLMProvider only tracks the
+  // local VLM provider used by the scene-metadata analyzer's "local AI"
+  // options and would wrongly disable this button for the other providers.
+  const aiAvailable = !!availability?.aiTaggingStatus.available;
+
+  const { data, loading, refetch } = useSceneAITaggingSpans(
+    sceneId,
+    awaitingResult ? ANALYSIS_POLL_INTERVAL_MS : 0
   );
 
-  const { data, loading, refetch } = useSceneAITaggingSpans(sceneId);
+  const groupCount = data?.aiTaggingSpans.length ?? 0;
+  const previousGroupCount = useRef(groupCount);
+  useEffect(() => {
+    if (awaitingResult && groupCount > previousGroupCount.current) {
+      setAwaitingResult(false);
+    }
+    previousGroupCount.current = groupCount;
+  }, [groupCount, awaitingResult]);
+
+  useEffect(() => {
+    if (!awaitingResult) return;
+    const timeout = setTimeout(
+      () => setAwaitingResult(false),
+      ANALYSIS_POLL_TIMEOUT_MS
+    );
+    return () => clearTimeout(timeout);
+  }, [awaitingResult]);
 
   if (!isVisible) return null;
 
@@ -42,10 +71,9 @@ export const SceneAITaggingPanel: React.FC<ISceneAITaggingPanelProps> = ({
           intl.formatMessage({ id: "ai_tagging.already_in_progress" })
         );
       } else {
-        Toast.success(
-          intl.formatMessage({ id: "ai_tagging.queued" })
-        );
+        Toast.success(intl.formatMessage({ id: "ai_tagging.queued" }));
       }
+      setAwaitingResult(true);
     } catch (error) {
       Toast.error(error);
     } finally {
@@ -59,10 +87,7 @@ export const SceneAITaggingPanel: React.FC<ISceneAITaggingPanelProps> = ({
   return (
     <div className="scene-ai-tagging-panel">
       <div className="scene-ai-tagging-controls">
-        <Button
-          disabled={!aiAvailable || analyzing}
-          onClick={onAnalyze}
-        >
+        <Button disabled={!aiAvailable || analyzing} onClick={onAnalyze}>
           <FormattedMessage id="ai_tagging.analyze" />
         </Button>
         {!aiAvailable && (

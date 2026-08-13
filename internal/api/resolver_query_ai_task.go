@@ -63,6 +63,7 @@ func (r *queryResolver) AiTasks(ctx context.Context, filter *AITaskListFilter) (
 	}
 
 	f := task.ListFilter{}
+	explicitStatus := filter != nil && filter.Status != nil
 	if filter != nil {
 		if filter.Service != nil {
 			f.Service = *filter.Service
@@ -73,9 +74,18 @@ func (r *queryResolver) AiTasks(ctx context.Context, filter *AITaskListFilter) (
 	}
 
 	records := tasks.List(f)
-	ret := make([]*AITask, len(records))
-	for i, rec := range records {
-		ret[i] = toAITask(rec)
+	ret := make([]*AITask, 0, len(records))
+	for _, rec := range records {
+		// aiTasks documents itself as the queued/running work; terminal tasks
+		// also live in aiTaskHistory (SQLite), and the scheduler keeps
+		// finished records in memory for a while after completion - without
+		// this filter the same task would render twice (duplicate React
+		// keys) whenever both queries are combined, as the settings panel
+		// does. An explicit status filter still gets what it asked for.
+		if !explicitStatus && rec.Status.Terminal() {
+			continue
+		}
+		ret = append(ret, toAITask(rec))
 	}
 	return ret, nil
 }

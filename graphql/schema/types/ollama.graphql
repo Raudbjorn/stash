@@ -8,7 +8,8 @@ type OllamaConfig {
   enabled: Boolean!
   fallbackToTraditionalDict: Boolean!
   promptTemplate: String!
-  mistralApiKey: String
+  "Whether a Mistral API key is stored. Never echoes the effective key (which may fall back to $MISTRAL_API_KEY)."
+  mistralApiKeySet: Boolean!
 }
 
 """
@@ -21,6 +22,7 @@ input OllamaConfigInput {
   enabled: Boolean!
   fallbackToTraditionalDict: Boolean!
   promptTemplate: String!
+  "Only written when non-null; omit/null leaves the stored key untouched."
   mistralApiKey: String
 }
 

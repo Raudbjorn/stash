@@ -3114,10 +3114,11 @@ export const mutateAnalyzeSceneWithAI = (sceneID: string) =>
     },
   });
 
-export const useSceneAITaggingSpans = (sceneID: string) =>
+export const useSceneAITaggingSpans = (sceneID: string, pollInterval = 0) =>
   GQL.useSceneAiTaggingSpansQuery({
     variables: { sceneID },
     fetchPolicy: "no-cache",
+    pollInterval,
   });
 
 /// Ollama

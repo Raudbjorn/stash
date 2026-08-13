@@ -46,10 +46,7 @@ const TaskRow: React.FC<{ task: AiTaskDataFragment }> = ({ task }) => {
   );
 };
 
-export const AITaskTable: React.FC<AITaskTableProps> = ({
-  tasks,
-  history,
-}) => {
+export const AITaskTable: React.FC<AITaskTableProps> = ({ tasks, history }) => {
   const rows = [...tasks, ...history];
 
   if (rows.length === 0) {

@@ -1,11 +1,20 @@
-"Lightweight status used wherever the UI needs to know if the AI server is usable (task-default checkboxes, the per-scene analyze tab) without paying for the task queue on every poll."
+# Lightweight status used wherever the UI needs to know if the AI server is
+# usable (task-default checkboxes, the per-scene analyze tab) without paying
+# for the task queue on every poll. aiTaggingStatus reflects whichever
+# provider is actually configured (native/llama_vlm/remote/moderation) and is
+# the correct gate for triggering analysis; aiServerStatus.hasVLMProvider is
+# narrower - it only tracks the local VLM provider used by
+# AnalyzeSceneMetadataInput's "local AI" options - and must not be reused here.
 query AIServerAvailability {
   aiServerStatus {
     ...AIServerStatusData
   }
+  aiTaggingStatus {
+    ...AITaggingStatusData
+  }
 }
 
-"Full settings-panel query: status, tagging status and the task queue/history."
+# Full settings-panel query: status, tagging status and the task queue/history.
 query AIServerSettings {
   aiServerStatus {
     ...AIServerStatusData

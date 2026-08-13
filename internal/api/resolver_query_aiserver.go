@@ -98,8 +98,14 @@ func (r *queryResolver) AiServerStatus(ctx context.Context) (*AIServerStatus, er
 	}
 
 	return &AIServerStatus{
-		State:          aiServerStateFromHealth(health.State),
-		Enabled:        srv.Enabled(),
+		State: aiServerStateFromHealth(health.State),
+		// Enabled reflects configuration (ai_enabled), not runtime state: a
+		// server that failed to start while enabled must still report
+		// enabled=true, or a settings-panel save meant to repair the failure
+		// (e.g. after fixing the provider) would silently turn the whole
+		// server off by round-tripping this value back through
+		// configureAIServer. Ready is the separate "actually running" signal.
+		Enabled:        mgr.Config.GetAIEnabled(),
 		Ready:          srv.Ready(),
 		HasVLMProvider: taggingStatus.Provider == llamaprov.ProviderName && taggingStatus.Available,
 		BackendVersion: health.BackendVersion,

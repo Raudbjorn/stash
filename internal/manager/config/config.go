@@ -2267,6 +2267,14 @@ func (i *Config) GetMistralAPIKey() string {
 	return ret
 }
 
+// GetMistralAPIKeyConfigured reports whether a key is stored in config,
+// without the MISTRAL_API_KEY env fallback GetMistralAPIKey() applies. Used to
+// answer "is a key set" over the API without ever echoing an env-derived
+// credential back through a query, where a client could persist it verbatim.
+func (i *Config) GetMistralAPIKeyConfigured() bool {
+	return i.getString(MistralAPIKey) != ""
+}
+
 func (i *Config) getPackageSources(key string) []*models.PackageSource {
 	var sources []*models.PackageSource
 	if err := i.unmarshalKey(key, &sources); err != nil {

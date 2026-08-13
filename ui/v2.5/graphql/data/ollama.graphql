@@ -5,7 +5,7 @@ fragment OllamaConfigData on OllamaConfig {
   enabled
   fallbackToTraditionalDict
   promptTemplate
-  mistralApiKey
+  mistralApiKeySet
 }
 
 fragment OllamaStatusData on OllamaStatus {

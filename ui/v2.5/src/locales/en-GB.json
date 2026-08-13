@@ -568,6 +568,8 @@
       "enable": "Enable Ollama",
       "fallback": "Fall back to the traditional dictionary if Ollama is unavailable",
       "heading": "Ollama",
+      "mistral_key": "Mistral API key",
+      "mistral_key_description": "Used as an alternative dictionary provider. Leave blank to keep the currently stored key.",
       "model": "Model",
       "status_description": "Whether Stash can currently reach the configured Ollama instance.",
       "status_heading": "Status",

@@ -2,7 +2,10 @@ import React, { useEffect, useState } from "react";
 import { Badge, Button, Form } from "react-bootstrap";
 import { FormattedMessage, useIntl } from "react-intl";
 import { BooleanSetting, Setting } from "../Inputs";
-import { mutateConfigureOllama, useOllamaSettings } from "src/core/StashService";
+import {
+  mutateConfigureOllama,
+  useOllamaSettings,
+} from "src/core/StashService";
 import { OllamaConfigInput } from "src/core/generated-graphql";
 import { useToast } from "src/hooks/Toast";
 import { LoadingIndicator } from "src/components/Shared/LoadingIndicator";
@@ -11,7 +14,14 @@ export const OllamaSettingsCard: React.FC = () => {
   const intl = useIntl();
   const Toast = useToast();
   const { data, loading, refetch } = useOllamaSettings();
-  const [form, setForm] = useState<OllamaConfigInput | undefined>();
+  // mistralApiKey is intentionally absent from this state: the query never
+  // returns the effective key (which may fall back to $MISTRAL_API_KEY), only
+  // whether one is set, so there is nothing to seed it from. It is entered
+  // fresh in mistralApiKeyInput below and only sent when non-empty.
+  const [form, setForm] = useState<
+    Omit<OllamaConfigInput, "mistralApiKey"> | undefined
+  >();
+  const [mistralApiKeyInput, setMistralApiKeyInput] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -24,16 +34,16 @@ export const OllamaSettingsCard: React.FC = () => {
       enabled: config.enabled,
       fallbackToTraditionalDict: config.fallbackToTraditionalDict,
       promptTemplate: config.promptTemplate,
-      mistralApiKey: config.mistralApiKey,
     });
+    setMistralApiKeyInput("");
   }, [data]);
 
   if (loading && !data) return <LoadingIndicator />;
   if (!data?.ollamaStatus || !form) return null;
 
-  const { available } = data.ollamaStatus;
+  const { available, config } = data.ollamaStatus;
 
-  function update(patch: Partial<OllamaConfigInput>) {
+  function update(patch: Partial<Omit<OllamaConfigInput, "mistralApiKey">>) {
     setForm((prev) => (prev ? { ...prev, ...patch } : prev));
   }
 
@@ -41,7 +51,11 @@ export const OllamaSettingsCard: React.FC = () => {
     if (!form) return;
     setSaving(true);
     try {
-      await mutateConfigureOllama(form);
+      await mutateConfigureOllama({
+        ...form,
+        mistralApiKey: mistralApiKeyInput ? mistralApiKeyInput : undefined,
+      });
+      setMistralApiKeyInput("");
       Toast.success(intl.formatMessage({ id: "config.ai_server.saved" }));
       await refetch();
     } catch (error) {
@@ -59,7 +73,11 @@ export const OllamaSettingsCard: React.FC = () => {
       >
         <Badge variant={available ? "success" : "secondary"}>
           <FormattedMessage
-            id={available ? "config.ollama.available" : "config.ollama.unavailable"}
+            id={
+              available
+                ? "config.ollama.available"
+                : "config.ollama.unavailable"
+            }
           />
         </Badge>
       </Setting>
@@ -93,6 +111,23 @@ export const OllamaSettingsCard: React.FC = () => {
         checked={form.fallbackToTraditionalDict}
         onChange={(v) => update({ fallbackToTraditionalDict: v })}
       />
+
+      <Setting
+        headingID="config.ollama.mistral_key"
+        subHeadingID="config.ollama.mistral_key_description"
+      >
+        <Form.Control
+          type="password"
+          className="text-input"
+          placeholder={
+            config.mistralApiKeySet
+              ? intl.formatMessage({ id: "config.ai_server.openai_key_set" })
+              : ""
+          }
+          value={mistralApiKeyInput}
+          onChange={(e) => setMistralApiKeyInput(e.currentTarget.value)}
+        />
+      </Setting>
 
       <div className="ai-server-save">
         <Button disabled={saving} onClick={save}>
