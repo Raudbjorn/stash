@@ -105,7 +105,7 @@ func TestClassifyFrameSendsStrictSingleRequest(t *testing.T) {
 			t.Fatalf("messages = %+v", request.Messages)
 		}
 		parts := request.Messages[0].Content
-		if parts[0].Type != "text" || !strings.HasPrefix(parts[0].Text, classificationInstruction) || !strings.Contains(parts[0].Text, `["Alpha","beta"]`) {
+		if parts[0].Type != "text" || !strings.HasPrefix(parts[0].Text, legacyClassificationInstruction) || !strings.Contains(parts[0].Text, `["Alpha","beta"]`) {
 			t.Errorf("prompt = %q", parts[0].Text)
 		}
 		if parts[1].Type != "image_url" || parts[1].ImageURL == nil {
