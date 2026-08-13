@@ -12,14 +12,33 @@ query SystemStatus {
     ffprobePath
   }
 }
-query SceneMetadataEntityModelStatus {
-  sceneMetadataEntityModelStatus {
-    modelID
-    version
+query SceneMetadataModels {
+  sceneMetadataModels {
+    key
+    displayName
+    family
+    precision
+    size
+    license
+    licenseURL
+    installed
+    lastError
+  }
+}
+
+query SceneMetadataModelAssignments {
+  sceneMetadataModelAssignments {
+    role
+    modelKey
+  }
+}
+
+query SceneMetadataModelStatus {
+  sceneMetadataModelStatus {
+    activeKey
     state
     cachePath
     lastError
     runtimeAvailable
-    active
   }
 }

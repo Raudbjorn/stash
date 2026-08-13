@@ -84,8 +84,14 @@ models:
     model: github.com/stashapp/stash/internal/manager/config.AutoTagMetadataOptions
   SystemStatus:
     model: github.com/stashapp/stash/internal/manager.SystemStatus
-  SceneMetadataEntityModelStatus:
-    model: github.com/stashapp/stash/internal/manager.SceneMetadataEntityModelStatus
+  SceneMetadataModel:
+    model: github.com/stashapp/stash/internal/manager.SceneMetadataModel
+  SceneMetadataModelAssignment:
+    model: github.com/stashapp/stash/internal/manager.SceneMetadataModelAssignment
+  SceneMetadataModelStatus:
+    model: github.com/stashapp/stash/internal/manager.SceneMetadataModelStatus
+  SceneMetadataModelRole:
+    model: github.com/stashapp/stash/internal/manager.SceneMetadataModelRole
   SystemStatusEnum:
     model: github.com/stashapp/stash/internal/manager.SystemStatusEnum
   ImportDuplicateEnum:

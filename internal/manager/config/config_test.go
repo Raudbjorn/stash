@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/stashapp/stash/pkg/scene/metadata/entity"
 )
 
 func TestConfig_GetAllPluginConfiguration(t *testing.T) {
@@ -49,4 +51,40 @@ func TestConfigAITaggingVLMDefaultsAndOverrides(t *testing.T) {
 	assert.Equal(t, []string{"tag one", "tag two"}, i.GetAITaggingVLMLabels())
 	assert.Equal(t, 17, i.GetAITaggingVLMGPULayers())
 	assert.Equal(t, 4096, i.GetAITaggingVLMContext())
+}
+
+func TestSceneMetadataModelConfiguration(t *testing.T) {
+	i := InitializeEmpty()
+	assert.Empty(t, i.GetSceneMetadataEntityModel())
+	assert.Equal(t, map[entity.Role]string{
+		entity.RoleEntityExtraction: "gliner-small-v2.1-int8",
+	}, i.GetSceneMetadataEntityModelAssignments())
+
+	i.SetSceneMetadataEntityModel("gliner-medium-v2.1-int8")
+	assert.Equal(t, "gliner-medium-v2.1-int8", i.GetSceneMetadataEntityModel())
+
+	err := i.SetSceneMetadataEntityModelAssignments(map[entity.Role]string{
+		entity.RoleEntityExtraction: "gliner-medium-v2.1-int8",
+		entity.RolePerformerContext: "gliner-large-v2.1-int8",
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, map[entity.Role]string{
+		entity.RoleEntityExtraction: "gliner-medium-v2.1-int8",
+		entity.RolePerformerContext: "gliner-large-v2.1-int8",
+	}, i.GetSceneMetadataEntityModelAssignments())
+
+	assert.NoError(t, i.SetSceneMetadataEntityModelAssignments(map[entity.Role]string{
+		entity.RoleEntityExtraction: "",
+	}))
+	assert.Equal(t, map[entity.Role]string{
+		entity.RoleEntityExtraction: "",
+	}, i.GetSceneMetadataEntityModelAssignments())
+}
+
+func TestSceneMetadataModelConfigurationDropsUnknownKeys(t *testing.T) {
+	i := InitializeEmpty()
+	i.SetString(SceneMetadataEntityModelAssignment, `{"entity_extraction":"not-in-catalog"}`)
+	assert.Equal(t, map[entity.Role]string{
+		entity.RoleEntityExtraction: "gliner-small-v2.1-int8",
+	}, i.GetSceneMetadataEntityModelAssignments())
 }

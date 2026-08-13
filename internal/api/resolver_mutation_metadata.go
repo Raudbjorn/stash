@@ -96,13 +96,27 @@ func (r *mutationResolver) MetadataAnalyzeScenes(ctx context.Context, input mana
 	jobID := manager.GetInstance().AnalyzeSceneMetadata(ctx, input)
 	return strconv.Itoa(jobID), nil
 }
-func (r *mutationResolver) SceneMetadataEntityModelInstall(ctx context.Context) (string, error) {
-	jobID := manager.GetInstance().InstallSceneMetadataEntityModel(ctx)
+func (r *mutationResolver) SceneMetadataModelInstall(ctx context.Context, modelKey string) (string, error) {
+	jobID := manager.GetInstance().SceneMetadataModelInstall(ctx, modelKey)
 	return strconv.Itoa(jobID), nil
 }
 
-func (r *mutationResolver) SceneMetadataEntityModelReload(ctx context.Context) (bool, error) {
-	return manager.GetInstance().ReloadSceneMetadataEntityModel(), nil
+func (r *mutationResolver) SceneMetadataModelUninstall(ctx context.Context, modelKey string) (bool, error) {
+	if err := manager.GetInstance().SceneMetadataModelUninstall(modelKey); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (r *mutationResolver) SceneMetadataModelAssign(ctx context.Context, role manager.SceneMetadataModelRole, modelKey *string) (bool, error) {
+	if err := manager.GetInstance().SceneMetadataModelAssign(role, modelKey); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (r *mutationResolver) SceneMetadataModelReload(ctx context.Context) (bool, error) {
+	return manager.GetInstance().SceneMetadataModelReload(), nil
 }
 
 func (r *mutationResolver) MetadataIdentify(ctx context.Context, input identify.Options) (string, error) {

@@ -126,6 +126,13 @@ func Initialize(cfg *config.Config, l *log.Logger) (*Manager, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid configuration: %w", err)
 		}
+		if changed, err := migrateSceneMetadataEntityModelConfig(cfg); err != nil {
+			return nil, err
+		} else if changed {
+			if err := cfg.Write(); err != nil {
+				return nil, fmt.Errorf("write migrated scene metadata model configuration: %w", err)
+			}
+		}
 
 		if err := mgr.postInit(ctx); err != nil {
 			return nil, err

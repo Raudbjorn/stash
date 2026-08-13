@@ -7,6 +7,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/stashapp/stash/pkg/logger"
+	"github.com/stashapp/stash/pkg/scene/metadata/entity"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
@@ -36,7 +37,15 @@ func gqlErrorHandler(ctx context.Context, e error) *gqlerror.Error {
 		}
 	}
 
-	// we may also want to transform the error message for the response
-	// for now just return the original error
-	return graphql.DefaultErrorPresenter(ctx, e)
+	presented := graphql.DefaultErrorPresenter(ctx, e)
+	var insufficientDisk *entity.ErrInsufficientDisk
+	if errors.As(e, &insufficientDisk) {
+		if presented.Extensions == nil {
+			presented.Extensions = make(map[string]interface{})
+		}
+		presented.Extensions["code"] = "INSUFFICIENT_DISK"
+		presented.Extensions["requiredBytes"] = insufficientDisk.Required
+		presented.Extensions["availableBytes"] = insufficientDisk.Available
+	}
+	return presented
 }
