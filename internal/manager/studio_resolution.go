@@ -59,6 +59,7 @@ type studioIdentity struct {
 
 type studioStashBoxQuerier interface {
 	FindStudio(context.Context, string) (*models.ScrapedStudio, error)
+	FindStudioByURL(context.Context, string) (*models.ScrapedStudio, error)
 }
 
 type studioStashBoxVerifier struct {
@@ -99,8 +100,34 @@ func (v studioStashBoxVerifier) provider(box *models.StashBox) studioMetadataPro
 	return studioMetadataProvider{
 		ID:   v.ID,
 		Name: name,
-		Query: func(ctx context.Context, queryName string) (*models.ScrapedStudio, error) {
-			return v.client.FindStudio(ctx, queryName)
+		Query: func(ctx context.Context, candidate string) (*models.ScrapedStudio, error) {
+			var nameCandidate string
+			if variants := studioURLQueryVariants(candidate); len(variants) > 0 {
+				for _, variant := range variants {
+					studio, err := v.client.FindStudioByURL(ctx, variant)
+					if err != nil {
+						return nil, err
+					}
+					if studio != nil {
+						return studio, nil
+					}
+				}
+				nameCandidate = studioNameCandidateFromURL(candidate)
+			} else {
+				nameCandidate = candidate
+			}
+			if tpdb := newThePornDBStudioClient(box); tpdb != nil {
+				studio, err := tpdb.FindStudio(ctx, nameCandidate)
+				if err != nil {
+					logger.Warnf("[scene metadata] ThePornDB studio lookup for %q failed: %v", nameCandidate, err)
+				} else if studio != nil {
+					return studio, nil
+				}
+			}
+			if nameCandidate == "" {
+				return nil, nil
+			}
+			return v.client.FindStudio(ctx, nameCandidate)
 		},
 	}
 }
@@ -135,11 +162,11 @@ func scraperStudioProvider(s *scraper.Scraper) (studioMetadataProvider, bool) {
 
 func (j *analyzeSceneMetadataJob) resolveStudioVerifierScrapers() {
 	j.studioVerifierScrapers = nil
-	if j.scraperCache == nil {
-		return
+	j.useBuiltinStudioURLScraper = false
+	var available []*scraper.Scraper
+	if j.scraperCache != nil {
+		available = j.scraperCache.ListScrapers([]scraper.ScrapeContentType{scraper.ScrapeContentTypeStudio})
 	}
-
-	available := j.scraperCache.ListScrapers([]scraper.ScrapeContentType{scraper.ScrapeContentTypeStudio})
 	byID := make(map[string]*scraper.Scraper, len(available))
 	for _, s := range available {
 		if s != nil {
@@ -153,6 +180,10 @@ func (j *analyzeSceneMetadataJob) resolveStudioVerifierScrapers() {
 			continue
 		}
 		seen[id] = struct{}{}
+		if id == builtinStudioURLScraperID {
+			j.useBuiltinStudioURLScraper = true
+			continue
+		}
 
 		s, found := byID[id]
 		if !found {
@@ -206,7 +237,11 @@ func (j *analyzeSceneMetadataJob) resolveStudioVerifierStashBoxes() {
 }
 
 func (j *analyzeSceneMetadataJob) studioProviders() []studioMetadataProvider {
-	providers := make([]studioMetadataProvider, 0, len(j.studioVerifierStashBoxes)+len(j.studioVerifierScrapers))
+	providerCount := len(j.studioVerifierStashBoxes) + len(j.studioVerifierScrapers)
+	if j.useBuiltinStudioURLScraper {
+		providerCount++
+	}
+	providers := make([]studioMetadataProvider, 0, providerCount)
 	byID := make(map[string]*models.StashBox, len(j.configuredStashBoxes))
 	for _, box := range j.configuredStashBoxes {
 		if box != nil {
@@ -217,6 +252,9 @@ func (j *analyzeSceneMetadataJob) studioProviders() []studioMetadataProvider {
 		box := byID[strings.TrimPrefix(v.ID, "stashbox:")]
 		providers = append(providers, v.provider(box))
 	}
+	if j.useBuiltinStudioURLScraper {
+		providers = append(providers, builtinStudioURLProvider())
+	}
 	for _, s := range j.studioVerifierScrapers {
 		if p, ok := scraperStudioProvider(s); ok {
 			providers = append(providers, p)
@@ -226,7 +264,9 @@ func (j *analyzeSceneMetadataJob) studioProviders() []studioMetadataProvider {
 }
 
 func (j *analyzeSceneMetadataJob) studioPoolAvailable() bool {
-	return len(j.studioVerifierStashBoxes) > 0 || len(j.studioVerifierScrapers) > 0
+	return j.useBuiltinStudioURLScraper ||
+		len(j.studioVerifierStashBoxes) > 0 ||
+		len(j.studioVerifierScrapers) > 0
 }
 
 func deduplicateStudioCandidates(candidates []string) []string {
@@ -575,6 +615,9 @@ func (j *analyzeSceneMetadataJob) adoptScrapedStudio(ctx context.Context, candid
 func studioCandidateMatchesScraped(candidate string, scraped *models.ScrapedStudio) bool {
 	if scraped == nil {
 		return false
+	}
+	if studioCandidateURLMatches(candidate, scraped.URLs) {
+		return true
 	}
 	candidateKey := metadata.NormalizeKey(candidate)
 	if candidateKey == "" {

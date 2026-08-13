@@ -40,6 +40,8 @@ import { useSettings } from "../context";
 import { SelectComponent } from "src/components/Shared/Select";
 import { FileSize } from "src/components/Shared/FileSize";
 
+const builtinStudioURLScraperID = "builtin-studio-url-map";
+
 interface IAnalyzeSceneMetadataTaskDefaults {
   dryRun: boolean;
   performerVerifierScraperIDs: string[];
@@ -502,13 +504,20 @@ export const LibraryTasks: React.FC = () => {
     [performerScrapersData]
   );
   const studioVerifierScraperOptions = useMemo(
-    () =>
-      (studioScrapersData?.listScrapers ?? [])
+    () => [
+      {
+        label: intl.formatMessage({
+          id: "config.tasks.analyze_scene_metadata.studio_url_catalog",
+        }),
+        value: builtinStudioURLScraperID,
+      },
+      ...(studioScrapersData?.listScrapers ?? [])
         .filter((s) =>
           s.studio?.supported_scrapes.includes(GQL.ScrapeType.Name)
         )
         .map((s) => ({ label: s.name, value: s.id })),
-    [studioScrapersData]
+    ],
+    [intl, studioScrapersData]
   );
   const stashBoxVerifierOptions = useMemo(
     () =>

@@ -15,8 +15,8 @@ import (
 )
 
 // Generate computes a perceptual hash for an image file.
-func Generate(encoder *ffmpeg.FFMpeg, imageFile *models.ImageFile) (*uint64, error) {
-	img, err := loadImage(encoder, imageFile)
+func Generate(ctx context.Context, encoder *ffmpeg.FFMpeg, imageFile *models.ImageFile) (*uint64, error) {
+	img, err := loadImage(ctx, encoder, imageFile)
 	if err != nil {
 		return nil, fmt.Errorf("loading image: %w", err)
 	}
@@ -32,7 +32,7 @@ func Generate(encoder *ffmpeg.FFMpeg, imageFile *models.ImageFile) (*uint64, err
 
 // loadImage loads an image from disk and decodes it.
 // Where Go has no built-in decoder for a specific format, ffmpeg is used to convert to BMP first.
-func loadImage(encoder *ffmpeg.FFMpeg, imageFile *models.ImageFile) (image.Image, error) {
+func loadImage(ctx context.Context, encoder *ffmpeg.FFMpeg, imageFile *models.ImageFile) (image.Image, error) {
 	// try to load with Go's built-in decoders first for better performance
 	reader, err := imageFile.Open(&file.OsFS{})
 	if err != nil {
@@ -52,7 +52,7 @@ func loadImage(encoder *ffmpeg.FFMpeg, imageFile *models.ImageFile) (image.Image
 		if imageFile.Base().ZipFileID != nil {
 			return nil, fmt.Errorf("ffmpeg fallback unsupported for images in zip files")
 		}
-		return loadImageFFmpeg(encoder, imageFile.Path)
+		return loadImageFFmpeg(ctx, encoder, imageFile.Path)
 	}
 
 	if err != nil {
@@ -63,14 +63,14 @@ func loadImage(encoder *ffmpeg.FFMpeg, imageFile *models.ImageFile) (image.Image
 }
 
 // loadImageFFmpeg uses ffmpeg to convert an image to BMP and then decodes it.
-func loadImageFFmpeg(encoder *ffmpeg.FFMpeg, path string) (image.Image, error) {
+func loadImageFFmpeg(ctx context.Context, encoder *ffmpeg.FFMpeg, path string) (image.Image, error) {
 	options := transcoder.ScreenshotOptions{
 		OutputPath: "-",
 		OutputType: transcoder.ScreenshotOutputTypeBMP,
 	}
 
 	args := transcoder.ScreenshotTime(path, 0, options)
-	data, err := encoder.GenerateOutput(context.Background(), args, nil)
+	data, err := encoder.GenerateOutput(ctx, args, nil)
 	if err != nil {
 		return nil, fmt.Errorf("converting image with ffmpeg: %w", err)
 	}

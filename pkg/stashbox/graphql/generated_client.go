@@ -15,6 +15,7 @@ type StashBoxGraphQLClient interface {
 	FindPerformerByID(ctx context.Context, id string, interceptors ...clientv2.RequestInterceptor) (*FindPerformerByID, error)
 	FindSceneByID(ctx context.Context, id string, interceptors ...clientv2.RequestInterceptor) (*FindSceneByID, error)
 	FindStudio(ctx context.Context, id *string, name *string, interceptors ...clientv2.RequestInterceptor) (*FindStudio, error)
+	QueryStudios(ctx context.Context, input StudioQueryInput, interceptors ...clientv2.RequestInterceptor) (*QueryStudios, error)
 	FindTag(ctx context.Context, id *string, name *string, interceptors ...clientv2.RequestInterceptor) (*FindTag, error)
 	QueryTags(ctx context.Context, input TagQueryInput, interceptors ...clientv2.RequestInterceptor) (*QueryTags, error)
 	SubmitFingerprint(ctx context.Context, input FingerprintSubmission, interceptors ...clientv2.RequestInterceptor) (*SubmitFingerprint, error)
@@ -759,6 +760,42 @@ func (t *FindStudio_FindStudio_StudioFragment_Parent) GetName() string {
 	return t.Name
 }
 
+type QueryStudios_QueryStudios_Studios_StudioFragment_Parent struct {
+	ID   string "json:\"id\" graphql:\"id\""
+	Name string "json:\"name\" graphql:\"name\""
+}
+
+func (t *QueryStudios_QueryStudios_Studios_StudioFragment_Parent) GetID() string {
+	if t == nil {
+		t = &QueryStudios_QueryStudios_Studios_StudioFragment_Parent{}
+	}
+	return t.ID
+}
+func (t *QueryStudios_QueryStudios_Studios_StudioFragment_Parent) GetName() string {
+	if t == nil {
+		t = &QueryStudios_QueryStudios_Studios_StudioFragment_Parent{}
+	}
+	return t.Name
+}
+
+type QueryStudios_QueryStudios struct {
+	Count   int               "json:\"count\" graphql:\"count\""
+	Studios []*StudioFragment "json:\"studios\" graphql:\"studios\""
+}
+
+func (t *QueryStudios_QueryStudios) GetCount() int {
+	if t == nil {
+		t = &QueryStudios_QueryStudios{}
+	}
+	return t.Count
+}
+func (t *QueryStudios_QueryStudios) GetStudios() []*StudioFragment {
+	if t == nil {
+		t = &QueryStudios_QueryStudios{}
+	}
+	return t.Studios
+}
+
 type FindTag_FindTag_TagFragment_Category struct {
 	Description *string "json:\"description,omitempty\" graphql:\"description\""
 	ID          string  "json:\"id\" graphql:\"id\""
@@ -924,6 +961,17 @@ func (t *FindStudio) GetFindStudio() *StudioFragment {
 		t = &FindStudio{}
 	}
 	return t.FindStudio
+}
+
+type QueryStudios struct {
+	QueryStudios QueryStudios_QueryStudios "json:\"queryStudios\" graphql:\"queryStudios\""
+}
+
+func (t *QueryStudios) GetQueryStudios() *QueryStudios_QueryStudios {
+	if t == nil {
+		t = &QueryStudios{}
+	}
+	return &t.QueryStudios
 }
 
 type FindTag struct {
@@ -1632,6 +1680,58 @@ func (c *Client) FindStudio(ctx context.Context, id *string, name *string, inter
 	return &res, nil
 }
 
+const QueryStudiosDocument = `query QueryStudios ($input: StudioQueryInput!) {
+	queryStudios(input: $input) {
+		count
+		studios {
+			... StudioFragment
+		}
+	}
+}
+fragment StudioFragment on Studio {
+	name
+	id
+	aliases
+	urls {
+		... URLFragment
+	}
+	parent {
+		name
+		id
+	}
+	images {
+		... ImageFragment
+	}
+}
+fragment URLFragment on URL {
+	url
+	type
+}
+fragment ImageFragment on Image {
+	id
+	url
+	width
+	height
+}
+`
+
+func (c *Client) QueryStudios(ctx context.Context, input StudioQueryInput, interceptors ...clientv2.RequestInterceptor) (*QueryStudios, error) {
+	vars := map[string]any{
+		"input": input,
+	}
+
+	var res QueryStudios
+	if err := c.Client.Post(ctx, "QueryStudios", QueryStudiosDocument, &res, vars, interceptors...); err != nil {
+		if c.Client.ParseDataWhenErrors {
+			return &res, err
+		}
+
+		return nil, err
+	}
+
+	return &res, nil
+}
+
 const FindTagDocument = `query FindTag ($id: ID, $name: String) {
 	findTag(id: $id, name: $name) {
 		... TagFragment
@@ -1805,6 +1905,7 @@ var DocumentOperationNames = map[string]string{
 	FindPerformerByIDDocument:             "FindPerformerByID",
 	FindSceneByIDDocument:                 "FindSceneByID",
 	FindStudioDocument:                    "FindStudio",
+	QueryStudiosDocument:                  "QueryStudios",
 	FindTagDocument:                       "FindTag",
 	QueryTagsDocument:                     "QueryTags",
 	SubmitFingerprintDocument:             "SubmitFingerprint",

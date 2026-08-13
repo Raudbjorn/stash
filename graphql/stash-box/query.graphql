@@ -166,6 +166,15 @@ query FindStudio($id: ID, $name: String) {
   }
 }
 
+query QueryStudios($input: StudioQueryInput!) {
+  queryStudios(input: $input) {
+    count
+    studios {
+      ...StudioFragment
+    }
+  }
+}
+
 query FindTag($id: ID, $name: String) {
   findTag(id: $id, name: $name) {
     ...TagFragment
