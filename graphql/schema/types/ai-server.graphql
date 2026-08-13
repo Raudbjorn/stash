@@ -62,8 +62,10 @@ type AIServerStatus {
   enabled: Boolean!
   "True once the server has finished starting and is usable."
   ready: Boolean!
-  "True when a VLM-capable tagging provider (llama_vlm) is active - gates the AnalyzeSceneMetadataInput local-AI options."
+  "True when the embedded VLM-capable tagging provider (llama_vlm) is active."
   hasVLMProvider: Boolean!
+  "True when an enabled OpenAI-compatible local text-generation provider is reachable."
+  hasLocalTextProvider: Boolean!
   backendVersion: String!
   schemaVersion: String
   error: String

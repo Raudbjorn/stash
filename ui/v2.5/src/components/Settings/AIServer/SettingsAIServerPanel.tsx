@@ -25,7 +25,10 @@ export const SettingsAIServerPanel: React.FC = () => {
         headingID="config.categories.ai_server"
         subHeadingID="config.ai_server.description"
       >
-        <AIServerStatusCard status={aiServerStatus} />
+        <AIServerStatusCard
+          status={aiServerStatus}
+          hasLocalTextProvider={aiServerStatus.hasLocalTextProvider}
+        />
         <AIServerProviderForm
           enabled={aiServerStatus.enabled}
           config={aiServerStatus.config}

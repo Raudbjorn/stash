@@ -412,8 +412,8 @@ export const LibraryTasks: React.FC = () => {
 
   const { data: aiServerData } = useAIServerAvailability();
   const aiAvailable = !!(
-    aiServerData?.aiServerStatus.enabled &&
-    aiServerData?.aiServerStatus.hasVLMProvider
+    aiServerData?.aiServerStatus.hasVLMProvider ||
+    aiServerData?.aiServerStatus.hasLocalTextProvider
   );
 
   const [dialogOpen, setDialogOpenState] = useState({

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -534,6 +535,102 @@ func (s *Service) generateOpenAICompatible(ctx context.Context, prompt, model, s
 		return "", fmt.Errorf("empty response from text-generation backend")
 	}
 	return payload.Choices[0].Message.Content, nil
+}
+
+// CompleteJSON performs one strict-schema text completion against an
+// OpenAI-compatible backend such as llama-server.
+func (s *Service) CompleteJSON(ctx context.Context, systemPrompt, userPrompt, schemaName string, schema json.RawMessage, maxTokens int, target any) error {
+	if s.config.Backend != BackendOpenAICompatible {
+		return fmt.Errorf("structured completion requires an OpenAI-compatible backend")
+	}
+	if maxTokens <= 0 || maxTokens > 1024 {
+		return fmt.Errorf("max tokens must be between 1 and 1024")
+	}
+	if strings.TrimSpace(schemaName) == "" || !json.Valid(schema) {
+		return fmt.Errorf("a valid named JSON schema is required")
+	}
+	var schemaObject map[string]any
+	if err := json.Unmarshal(schema, &schemaObject); err != nil || schemaObject == nil {
+		return fmt.Errorf("a valid named JSON schema is required")
+	}
+	targetValue := reflect.ValueOf(target)
+	if target == nil || targetValue.Kind() != reflect.Pointer || targetValue.IsNil() {
+		return fmt.Errorf("completion target must be a non-nil pointer")
+	}
+	chatURL, err := url.JoinPath(s.config.BaseURL, "/v1/chat/completions")
+	if err != nil {
+		return fmt.Errorf("failed to build chat URL: %w", err)
+	}
+	requestData := struct {
+		Model              string              `json:"model"`
+		Messages           []OllamaChatMessage `json:"messages"`
+		Temperature        float64             `json:"temperature"`
+		Stream             bool                `json:"stream"`
+		MaxTokens          int                 `json:"max_tokens"`
+		ChatTemplateKwargs map[string]bool     `json:"chat_template_kwargs"`
+		ResponseFormat     struct {
+			Type       string `json:"type"`
+			JSONSchema struct {
+				Name   string          `json:"name"`
+				Strict bool            `json:"strict"`
+				Schema json.RawMessage `json:"schema"`
+			} `json:"json_schema"`
+		} `json:"response_format"`
+	}{
+		Model: s.config.Model,
+		Messages: []OllamaChatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		},
+		Temperature:        0,
+		Stream:             false,
+		MaxTokens:          maxTokens,
+		ChatTemplateKwargs: map[string]bool{"enable_thinking": false},
+	}
+	requestData.ResponseFormat.Type = "json_schema"
+	requestData.ResponseFormat.JSONSchema.Name = strings.TrimSpace(schemaName)
+	requestData.ResponseFormat.JSONSchema.Strict = true
+	requestData.ResponseFormat.JSONSchema.Schema = schema
+
+	requestBody, err := json.Marshal(requestData)
+	if err != nil {
+		return fmt.Errorf("encode structured completion request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chatURL, bytes.NewReader(requestBody))
+	if err != nil {
+		return fmt.Errorf("create structured completion request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("structured completion request: %w", err)
+	}
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
+	if err != nil {
+		return fmt.Errorf("read structured completion response: %w", err)
+	}
+	if len(responseBody) > 1<<20 {
+		return fmt.Errorf("structured completion response exceeds %d bytes", 1<<20)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("structured completion returned HTTP %d: %s", resp.StatusCode, string(responseBody))
+	}
+	var completion struct {
+		Choices []struct {
+			Message OllamaChatMessage `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(responseBody, &completion); err != nil {
+		return fmt.Errorf("decode structured completion response: %w", err)
+	}
+	if len(completion.Choices) != 1 || strings.TrimSpace(completion.Choices[0].Message.Content) == "" {
+		return fmt.Errorf("structured completion returned no textual choice")
+	}
+	if err := json.Unmarshal([]byte(completion.Choices[0].Message.Content), target); err != nil {
+		return fmt.Errorf("decode structured completion content: %w", err)
+	}
+	return nil
 }
 
 // ExplainWord explains a word in context using Mistral or the configured local backend.

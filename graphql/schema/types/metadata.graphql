@@ -217,13 +217,13 @@ input AnalyzeSceneMetadataInput {
   overwriteExistingDate: Boolean
   "Also analyze the scene's details/description text (off by default; often noisy marketing copy)."
   useDetails: Boolean
-  "Use the active local llama.cpp provider once to narrow ambiguous exact-name performer identities."
+  "Use the configured local AI provider once to narrow ambiguous exact-name performer identities."
   useLocalAIContext: Boolean
   "Studio scraper IDs allowed to verify newly-discovered studio names. Empty means none."
   studioVerifierScraperIDs: [ID!]
   "Configured Stash-box endpoints allowed to verify newly-discovered studio names. Empty means none."
   studioVerifierStashBoxEndpoints: [String!]
-  "Use the active local llama.cpp provider to decide which configured studio metadata provider should be queried for a scene, based on the source strings (filename, title, NFO, container metadata)."
+  "Use the configured local AI provider to decide which studio metadata provider should be queried for a scene, based on the source strings (filename, title, NFO, container metadata)."
   useLocalAIStudioProviderSelection: Boolean
   "Allow replacing a user-authored title. By default only empty or filename-derived titles are changed."
   overwriteExistingTitle: Boolean

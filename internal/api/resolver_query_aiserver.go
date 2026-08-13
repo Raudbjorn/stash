@@ -7,6 +7,7 @@ import (
 	"github.com/stashapp/stash/internal/aiserver"
 	"github.com/stashapp/stash/internal/manager"
 	"github.com/stashapp/stash/pkg/aitag/llamaprov"
+	"github.com/stashapp/stash/pkg/ollama"
 )
 
 func aiServerStateFromHealth(s aiserver.State) AIServerState {
@@ -88,6 +89,10 @@ func (r *queryResolver) AiServerStatus(ctx context.Context) (*AIServerStatus, er
 
 	health := srv.Health(ctx)
 	taggingStatus := srv.TaggingStatus()
+	textService := r.getOllamaService()
+	textConfig := textService.GetConfig()
+	hasLocalTextProvider := textConfig.Backend == ollama.BackendOpenAICompatible &&
+		textService.IsAvailable(ctx)
 
 	var schemaVersion, errMsg *string
 	if health.SchemaVersion != "" {
@@ -105,12 +110,13 @@ func (r *queryResolver) AiServerStatus(ctx context.Context) (*AIServerStatus, er
 		// (e.g. after fixing the provider) would silently turn the whole
 		// server off by round-tripping this value back through
 		// configureAIServer. Ready is the separate "actually running" signal.
-		Enabled:        mgr.Config.GetAIEnabled(),
-		Ready:          srv.Ready(),
-		HasVLMProvider: taggingStatus.Provider == llamaprov.ProviderName && taggingStatus.Available,
-		BackendVersion: health.BackendVersion,
-		SchemaVersion:  schemaVersion,
-		Error:          errMsg,
+		Enabled:              mgr.Config.GetAIEnabled(),
+		Ready:                srv.Ready(),
+		HasVLMProvider:       taggingStatus.Provider == llamaprov.ProviderName && taggingStatus.Available,
+		HasLocalTextProvider: hasLocalTextProvider,
+		BackendVersion:       health.BackendVersion,
+		SchemaVersion:        schemaVersion,
+		Error:                errMsg,
 		Database: &AIServerHealthComponent{
 			Status:  string(health.Database.Status),
 			Message: health.Database.Message,

@@ -10,6 +10,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/stashapp/stash/internal/aiserver"
+	"github.com/stashapp/stash/internal/manager/config"
+	"github.com/stashapp/stash/pkg/ollama"
 	"github.com/stashapp/stash/pkg/scene/metadata"
 )
 
@@ -57,20 +59,24 @@ var performerContextSchema = json.RawMessage(`{
   "additionalProperties": false
 }`)
 
-func sceneMetadataCompleter(server *aiserver.Server) structuredTextCompleter {
-	if server == nil {
+func sceneMetadataCompleter(server *aiserver.Server, cfg *config.Config) structuredTextCompleter {
+	if server != nil {
+		if tagging := server.Tagging(); tagging != nil {
+			if completer, ok := tagging.Provider().(structuredTextCompleter); ok {
+				return completer
+			}
+		}
+	}
+	if cfg == nil || !cfg.GetOllamaEnabled() || cfg.GetOllamaBackend() != string(ollama.BackendOpenAICompatible) || cfg.GetOllamaBaseURL() == "" {
 		return nil
 	}
-	tagging := server.Tagging()
-	if tagging == nil {
-		return nil
-	}
-	provider := tagging.Provider()
-	if provider == nil {
-		return nil
-	}
-	completer, _ := provider.(structuredTextCompleter)
-	return completer
+	textConfig := ollama.DefaultConfig()
+	textConfig.Backend = ollama.BackendOpenAICompatible
+	textConfig.BaseURL = cfg.GetOllamaBaseURL()
+	textConfig.Model = cfg.GetOllamaModel()
+	textConfig.Timeout = cfg.GetOllamaTimeout()
+	textConfig.Enabled = true
+	return ollama.NewService(textConfig)
 }
 
 func (j *analyzeSceneMetadataJob) extractPerformerContext(ctx context.Context, candidates []string, sources []metadata.Source) ([]performerContextEvidence, error) {

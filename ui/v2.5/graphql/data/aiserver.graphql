@@ -19,6 +19,7 @@ fragment AIServerStatusData on AIServerStatus {
   enabled
   ready
   hasVLMProvider
+  hasLocalTextProvider
   backendVersion
   schemaVersion
   error

@@ -84,3 +84,52 @@ func TestOpenAICompatibleBackend(t *testing.T) {
 		t.Fatalf("AI source = %q, want llama.cpp", entry.AISource)
 	}
 }
+
+func TestOpenAICompatibleStructuredCompletion(t *testing.T) {
+	var request struct {
+		MaxTokens          int             `json:"max_tokens"`
+		ChatTemplateKwargs map[string]bool `json:"chat_template_kwargs"`
+		ResponseFormat     struct {
+			Type       string `json:"type"`
+			JSONSchema struct {
+				Name   string          `json:"name"`
+				Strict bool            `json:"strict"`
+				Schema json.RawMessage `json:"schema"`
+			} `json:"json_schema"`
+		} `json:"response_format"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"{\"name\":\"Alice\"}"}}]}`))
+	}))
+	defer server.Close()
+
+	service := NewService(&OllamaConfig{
+		Backend: BackendOpenAICompatible,
+		BaseURL: server.URL,
+		Model:   "huihui-qwen3-8b",
+		Timeout: 5000,
+		Enabled: true,
+	})
+	schema := json.RawMessage(`{"type":"object","properties":{"name":{"type":"string"}},"required":["name"],"additionalProperties":false}`)
+	var target struct {
+		Name string `json:"name"`
+	}
+	if err := service.CompleteJSON(context.Background(), "system", "user", "identity", schema, 64, &target); err != nil {
+		t.Fatal(err)
+	}
+	if target.Name != "Alice" {
+		t.Fatalf("target = %+v", target)
+	}
+	if request.MaxTokens != 64 || request.ResponseFormat.Type != "json_schema" ||
+		request.ResponseFormat.JSONSchema.Name != "identity" || !request.ResponseFormat.JSONSchema.Strict ||
+		!reflect.DeepEqual(request.ResponseFormat.JSONSchema.Schema, schema) {
+		t.Fatalf("structured request = %+v", request)
+	}
+	if !reflect.DeepEqual(request.ChatTemplateKwargs, map[string]bool{"enable_thinking": false}) {
+		t.Fatalf("chat template kwargs = %v", request.ChatTemplateKwargs)
+	}
+}

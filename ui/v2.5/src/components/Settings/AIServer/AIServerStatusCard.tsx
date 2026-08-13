@@ -9,6 +9,7 @@ import {
 
 interface AIServerStatusCardProps {
   status: AiServerStatusDataFragment;
+  hasLocalTextProvider: boolean;
 }
 
 function stateVariant(state: AiServerState) {
@@ -26,6 +27,7 @@ function stateVariant(state: AiServerState) {
 
 export const AIServerStatusCard: React.FC<AIServerStatusCardProps> = ({
   status,
+  hasLocalTextProvider,
 }) => {
   return (
     <Setting
@@ -50,7 +52,7 @@ export const AIServerStatusCard: React.FC<AIServerStatusCardProps> = ({
           {status.database.message}
         </div>
         {status.error && <div className="text-danger">{status.error}</div>}
-        {status.enabled && !status.hasVLMProvider && (
+        {status.enabled && !status.hasVLMProvider && !hasLocalTextProvider && (
           <div className="text-muted">
             <FormattedMessage id="config.ai_server.no_vlm_provider" />
           </div>

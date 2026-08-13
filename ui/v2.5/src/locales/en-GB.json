@@ -306,7 +306,7 @@
       "enable": "Enable AI server",
       "enable_description": "Starts the embedded AI server. Disabled by default; no files are created and analysis cannot run until this is on.",
       "no_tasks": "No AI tasks yet.",
-      "no_vlm_provider": "No vision-language model provider is configured, so \"use local AI\" options elsewhere in Stash will have no effect.",
+      "no_vlm_provider": "No local vision-language or OpenAI-compatible text provider is configured, so \"use local AI\" options elsewhere in Stash will have no effect.",
       "openai_key": "OpenAI API key",
       "openai_key_description": "Used by the OpenAI moderation provider. Leave blank to keep the currently stored key.",
       "openai_key_set": "A key is already stored",
@@ -730,9 +730,9 @@
         },
         "use_details": "Also analyze scene details",
         "use_local_ai_context": "Use local AI context for ambiguous performer names",
-        "use_local_ai_context_unavailable_help": "Requires the AI server to be enabled with a local vision-language model provider configured. See Settings > AI Server.",
+        "use_local_ai_context_unavailable_help": "Requires either an available local vision-language provider or an enabled llama.cpp / OpenAI-compatible text-generation server. See Settings > AI Server.",
         "use_local_ai_studio_provider_selection": "Use local AI to choose which studio metadata provider to query",
-        "use_local_ai_studio_provider_selection_unavailable_help": "Requires the AI server to be enabled with a local vision-language model provider configured. See Settings > AI Server."
+        "use_local_ai_studio_provider_selection_unavailable_help": "Requires either an available local vision-language provider or an enabled llama.cpp / OpenAI-compatible text-generation server. See Settings > AI Server."
       },
       "anonymise_and_download": "Makes an anonymised copy of the database and downloads the resulting file.",
       "anonymise_database": "Makes a copy of the database to the backups directory, anonymising all sensitive data. This can then be provided to others for troubleshooting and debugging purposes. The original database is not modified. Anonymised database uses the filename format {filename_format}.",
