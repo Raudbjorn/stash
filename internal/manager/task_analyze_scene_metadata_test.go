@@ -113,6 +113,22 @@ func createTestPerformer(t testing.TB, r models.Repository, name, disambiguation
 	return performer.ID
 }
 
+func createTestPerformerWithStashID(t testing.TB, r models.Repository, name, endpoint, stashID string) int {
+	t.Helper()
+	performer := models.NewPerformer()
+	performer.Name = name
+	performer.StashIDs = models.NewRelatedStashIDs([]models.StashID{{
+		Endpoint: endpoint,
+		StashID:  stashID,
+	}})
+	if err := r.WithTxn(context.Background(), func(ctx context.Context) error {
+		return r.Performer.Create(ctx, &models.CreatePerformerInput{Performer: &performer})
+	}); err != nil {
+		t.Fatalf("creating performer %q: %v", name, err)
+	}
+	return performer.ID
+}
+
 func createTestScene(t testing.TB, r models.Repository, title string) *models.Scene {
 	t.Helper()
 	scene := models.NewScene()
@@ -468,6 +484,58 @@ func TestAnalyzeSceneMetadataStaleSnapshot(t *testing.T) {
 	}
 	if got := scenePerformerIDs(t, r, scene.ID); !reflect.DeepEqual(got, []int{id}) {
 		t.Fatalf("scene performer IDs = %v, want [%d]", got, id)
+	}
+}
+
+func TestAnalyzeSceneMetadataReplacesPerformersFromAuthoritativeSceneID(t *testing.T) {
+	r := newTestRepository(t)
+	const endpoint = "https://stashdb.org/graphql"
+	christinaID := createTestPerformerWithStashID(t, r, "Christina Sage", endpoint, "christina")
+	isaID := createTestPerformerWithStashID(t, r, "Isa Bella", endpoint, "isa")
+	wrongID := createTestPerformer(t, r, "Bella Rose", "", "", nil, nil)
+
+	scene := models.NewScene()
+	scene.Title = "#132 ’s Naughty Surprise [360p]"
+	scene.Details = "Isa Bella comes home with her bestie Christina Sage."
+	scene.PerformerIDs = models.NewRelatedIDs([]int{wrongID, christinaID, isaID})
+	scene.StashIDs = models.NewRelatedStashIDs([]models.StashID{{
+		Endpoint: endpoint,
+		StashID:  "35fbe26a-fce9-4a16-a30c-62889d22ee73",
+	}})
+	if err := r.WithTxn(context.Background(), func(ctx context.Context) error {
+		return r.Scene.Create(ctx, &scene, nil)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	job := &analyzeSceneMetadataJob{
+		repository: r,
+		input:      AnalyzeSceneMetadataInput{UseDetails: true},
+		configuredStashBoxes: []*models.StashBox{{
+			Endpoint: endpoint,
+		}},
+		scenePerformerLookup: func(_ context.Context, _ models.StashBox, sceneID string) ([]*models.ScrapedPerformer, error) {
+			if sceneID != "35fbe26a-fce9-4a16-a30c-62889d22ee73" {
+				t.Fatalf("scene lookup ID = %q", sceneID)
+			}
+			return []*models.ScrapedPerformer{
+				scrapedPerformer("Christina Sage", func(p *models.ScrapedPerformer) {
+					p.RemoteSiteID = stringPointer("christina")
+				}),
+				scrapedPerformer("Isa Bella", func(p *models.ScrapedPerformer) {
+					p.RemoteSiteID = stringPointer("isa")
+				}),
+			}, nil
+		},
+	}
+
+	if err := job.processScene(context.Background(), &scene); err != nil {
+		t.Fatal(err)
+	}
+	got := scenePerformerIDs(t, r, scene.ID)
+	want := []int{christinaID, isaID}
+	if !sameIDSet(got, want) {
+		t.Fatalf("scene performer IDs = %v, want %v", got, want)
 	}
 }
 

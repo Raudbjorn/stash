@@ -39,10 +39,12 @@ func acmeProductions() *models.ScrapedStudio {
 }
 
 type recordingStashBoxStudioQuerier struct {
-	mu        sync.Mutex
-	calls     []string
-	responses []*models.ScrapedStudio
-	err       error
+	mu           sync.Mutex
+	calls        []string
+	urlCalls     []string
+	responses    []*models.ScrapedStudio
+	urlResponses map[string]*models.ScrapedStudio
+	err          error
 }
 
 func (q *recordingStashBoxStudioQuerier) FindStudio(_ context.Context, name string) (*models.ScrapedStudio, error) {
@@ -56,6 +58,16 @@ func (q *recordingStashBoxStudioQuerier) FindStudio(_ context.Context, name stri
 		return nil, nil
 	}
 	return q.responses[0], nil
+}
+
+func (q *recordingStashBoxStudioQuerier) FindStudioByURL(_ context.Context, rawURL string) (*models.ScrapedStudio, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.urlCalls = append(q.urlCalls, rawURL)
+	if q.err != nil {
+		return nil, q.err
+	}
+	return q.urlResponses[rawURL], nil
 }
 
 // fakeStudioCompleter implements structuredTextCompleter for the
@@ -187,6 +199,141 @@ func TestResolveStudioVerifierScrapersPreservesRequestedOrder(t *testing.T) {
 	want := []string{"second", "hybrid", "first"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("resolved scraper IDs = %#v, want %#v", got, want)
+	}
+}
+
+func TestResolveStudioVerifierScrapersIncludesBuiltinCatalogWithoutCache(t *testing.T) {
+	job := &analyzeSceneMetadataJob{
+		input: AnalyzeSceneMetadataInput{
+			StudioVerifierScraperIDs: []string{builtinStudioURLScraperID},
+		},
+	}
+
+	job.resolveStudioVerifierScrapers()
+
+	if !job.useBuiltinStudioURLScraper {
+		t.Fatal("built-in studio URL catalog was not enabled")
+	}
+	providers := job.studioProviders()
+	if len(providers) != 1 || providers[0].ID != builtinStudioURLScraperID {
+		t.Fatalf("providers = %#v", providers)
+	}
+}
+
+func TestBuiltinStudioURLCatalogNormalizesURLAndName(t *testing.T) {
+	tests := []string{
+		"https://www.DesperateAmateurs.com/tour3/updates/example-scene/",
+		"desperateamateurs.com/tour3/updates/",
+		"DesperateAmateurs",
+	}
+	for _, candidate := range tests {
+		got, found := lookupBuiltinStudioURL(candidate)
+		if !found {
+			t.Errorf("lookupBuiltinStudioURL(%q) did not find a studio", candidate)
+			continue
+		}
+		if got.Name != "DesperateAmateurs" || got.Host != "desperateamateurs.com" {
+			t.Errorf("lookupBuiltinStudioURL(%q) = %+v", candidate, got)
+		}
+	}
+}
+
+func TestStudioCandidateMatchesScrapedURL(t *testing.T) {
+	scraped := &models.ScrapedStudio{
+		Name: "DesperateAmateurs",
+		URLs: []string{"https://desperateamateurs.com"},
+	}
+	if !studioCandidateMatchesScraped(
+		"https://members.desperateamateurs.com/tour3/updates/132",
+		scraped,
+	) {
+		t.Fatal("studio URL candidate did not match the scraped studio domain")
+	}
+}
+
+func TestStudioURLQueryVariantsPreserveExactPathBeforeFallbacks(t *testing.T) {
+	got := studioURLQueryVariants("http://www.bride4k.com/en?ref=foo#gallery")
+	want := []string{
+		"https://www.bride4k.com/en/",
+		"https://www.bride4k.com/en",
+		"https://bride4k.com/en/",
+		"https://bride4k.com/en",
+		"https://www.bride4k.com/",
+		"https://www.bride4k.com",
+		"https://bride4k.com/",
+		"https://bride4k.com",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("studioURLQueryVariants() = %#v, want %#v", got, want)
+	}
+}
+
+func TestStudioStashBoxProviderUsesExactURLMatch(t *testing.T) {
+	const storedURL = "https://bride4k.com/en/"
+	querier := &recordingStashBoxStudioQuerier{
+		urlResponses: map[string]*models.ScrapedStudio{
+			storedURL: {
+				Name: "Bride4K",
+				URLs: []string{storedURL},
+			},
+		},
+	}
+	provider := (studioStashBoxVerifier{ID: "stashbox:test", client: querier}).provider(nil)
+	got, err := provider.Query(context.Background(), storedURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.Name != "Bride4K" {
+		t.Fatalf("provider result = %#v", got)
+	}
+	if len(querier.calls) != 0 {
+		t.Fatalf("name queries = %#v, want none", querier.calls)
+	}
+	if !reflect.DeepEqual(querier.urlCalls, []string{storedURL}) {
+		t.Fatalf("URL queries = %#v, want [%q]", querier.urlCalls, storedURL)
+	}
+}
+
+func TestStudioStashBoxProviderFallsBackFromScenePathToSiteRoot(t *testing.T) {
+	const storedURL = "https://desperateamateurs.com/"
+	querier := &recordingStashBoxStudioQuerier{
+		urlResponses: map[string]*models.ScrapedStudio{
+			storedURL: {
+				Name: "Desperate Amateurs",
+				URLs: []string{storedURL},
+			},
+		},
+	}
+	provider := (studioStashBoxVerifier{ID: "stashbox:test", client: querier}).provider(nil)
+	got, err := provider.Query(context.Background(), "https://www.desperateamateurs.com/tour3/updates/132#gallery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.Name != "Desperate Amateurs" {
+		t.Fatalf("provider result = %#v", got)
+	}
+	if len(querier.urlCalls) == 0 || querier.urlCalls[len(querier.urlCalls)-1] != storedURL {
+		t.Fatalf("last URL query = %#v, want %q", querier.urlCalls, storedURL)
+	}
+}
+
+func TestStudioStashBoxProviderFallsBackToDomainName(t *testing.T) {
+	querier := &recordingStashBoxStudioQuerier{
+		responses: []*models.ScrapedStudio{{
+			Name: "Bride 4K",
+			URLs: []string{"https://bride4k.com/en/"},
+		}},
+	}
+	provider := (studioStashBoxVerifier{ID: "stashbox:test", client: querier}).provider(nil)
+	got, err := provider.Query(context.Background(), "https://bride4k.com/missing/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.Name != "Bride 4K" {
+		t.Fatalf("provider result = %#v", got)
+	}
+	if !reflect.DeepEqual(querier.calls, []string{"bride4k"}) {
+		t.Fatalf("name queries = %#v, want [bride4k]", querier.calls)
 	}
 }
 

@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -73,7 +74,7 @@ func printImagePhash(ff *ffmpeg.FFMpeg, inputfile string, quiet *bool) error {
 		BaseFile: &models.BaseFile{Path: inputfile},
 	}
 
-	phash, err := imagephash.Generate(ff, imgFile)
+	phash, err := imagephash.Generate(context.Background(), ff, imgFile)
 	if err != nil {
 		return err
 	}

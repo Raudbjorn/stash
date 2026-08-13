@@ -698,10 +698,11 @@
           "placeholder": "Select Stash-box endpoints…"
         },
         "studio_verifier_scrapers": {
-          "help": "Selected name scrapers are used to verify newly discovered studio names. Community scrapers rarely declare a studio-by-name action, so this list is often empty.",
+          "help": "The built-in URL catalog identifies studios from known community-scraper domains. Additional name scrapers can verify newly discovered studio names.",
           "label": "Studio verification scrapers",
           "placeholder": "Select studio scrapers…"
         },
+        "studio_url_catalog": "Built-in studio URL catalog",
         "studio_verifier_stash_boxes": {
           "help": "Uses exact-name studio lookups from the selected configured Stash-box APIs. Configure endpoints under Settings > Metadata providers.",
           "label": "Studio verification Stash-box endpoints",
