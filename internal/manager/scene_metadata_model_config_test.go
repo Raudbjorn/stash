@@ -3,9 +3,11 @@ package manager
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stashapp/stash/internal/manager/config"
 	"github.com/stashapp/stash/pkg/scene/metadata/entity"
@@ -79,4 +81,100 @@ func TestAssignmentUninstalledModelRejected(t *testing.T) {
 	)
 	require.Error(t, err)
 	assert.Equal(t, previous, cfg.GetSceneMetadataEntityModelAssignments())
+}
+
+// installFakeSceneMetadataBundle repins a catalog entry to a single tiny
+// artifact and writes it, so entity.Status reports the model ready without
+// downloading hundreds of megabytes.
+func installFakeSceneMetadataBundle(t *testing.T, cachePath string, catalogIndex int) string {
+	t.Helper()
+	key := entity.Catalog[catalogIndex].Key
+	contents := []byte("pinned model " + key)
+	digest := sha256.Sum256(contents)
+	original := entity.Catalog[catalogIndex]
+	entity.Catalog[catalogIndex].Artifacts = []entity.Artifact{{
+		RemotePath: "onnx/model_int8.onnx",
+		LocalPath:  "model.onnx",
+		Size:       int64(len(contents)),
+		SHA256:     hex.EncodeToString(digest[:]),
+	}}
+	t.Cleanup(func() { entity.Catalog[catalogIndex] = original })
+
+	bundlePath := entity.BundlePath(cachePath, key)
+	require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "model.onnx"), contents, 0o600))
+	require.Equal(t, entity.ModelReady, entity.Status(cachePath, key).State)
+	return key
+}
+
+func TestAssignmentFailedActivationPreservesWorkingModel(t *testing.T) {
+	cfg, sessions := setupFakeSceneMetadataSessions(t)
+	cfg.SetConfigFile(filepath.Join(t.TempDir(), "config.yml"))
+	cachePath := cfg.GetCachePath()
+	working := installFakeSceneMetadataBundle(t, cachePath, 0)
+	replacement := installFakeSceneMetadataBundle(t, cachePath, 1)
+
+	manager := &Manager{Config: cfg}
+	require.NoError(t, manager.SceneMetadataModelAssign(
+		SceneMetadataModelRoleEntityExtraction,
+		&working,
+	))
+	require.True(t, sceneMetadataEntityExtractorActive(working))
+
+	// The replacement bundle passes checksum validation but cannot open an
+	// ONNX session, which is how an out-of-memory activation presents.
+	loader := loadSceneMetadataEntityExtractor
+	loadSceneMetadataEntityExtractor = func(libraryPath, bundlePath string, threshold float64) (sceneMetadataExtractorSession, error) {
+		if filepath.Base(bundlePath) == replacement {
+			return nil, errors.New("cannot allocate ONNX session")
+		}
+		return loader(libraryPath, bundlePath, threshold)
+	}
+
+	err := manager.SceneMetadataModelAssign(
+		SceneMetadataModelRoleEntityExtraction,
+		&replacement,
+	)
+
+	require.Error(t, err)
+	assert.Equal(t, working,
+		cfg.GetSceneMetadataEntityModelAssignments()[entity.RoleEntityExtraction],
+		"a failed activation must not persist the new assignment")
+	assert.True(t, sceneMetadataEntityExtractorActive(working),
+		"a failed activation must not unload the working model")
+	assert.False(t, sessions[working].isClosed())
+}
+
+func TestAssignmentHoldsModelLockAcrossReadinessCheck(t *testing.T) {
+	cfg, _ := setupFakeSceneMetadataSessions(t)
+	cfg.SetConfigFile(filepath.Join(t.TempDir(), "config.yml"))
+	cachePath := cfg.GetCachePath()
+	working := installFakeSceneMetadataBundle(t, cachePath, 0)
+	target := installFakeSceneMetadataBundle(t, cachePath, 1)
+	manager := &Manager{Config: cfg}
+
+	// Stand in for a concurrent uninstall: hold the target's install lock, then
+	// remove its bundle before releasing.
+	release := lockSceneMetadataModelKeys(target)
+	assigned := make(chan error, 1)
+	go func() {
+		assigned <- manager.SceneMetadataModelAssign(
+			SceneMetadataModelRoleEntityExtraction,
+			&target,
+		)
+	}()
+
+	select {
+	case err := <-assigned:
+		t.Fatalf("assignment checked readiness outside the model lock: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	require.NoError(t, os.RemoveAll(entity.BundlePath(cachePath, target)))
+	release()
+
+	require.Error(t, <-assigned)
+	assert.Equal(t, working,
+		cfg.GetSceneMetadataEntityModelAssignments()[entity.RoleEntityExtraction],
+		"a model uninstalled during assignment must not become active")
 }

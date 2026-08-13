@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 
 	"github.com/stashapp/stash/pkg/job"
@@ -194,60 +195,95 @@ func (s *Manager) SceneMetadataModelUninstall(modelKey string) error {
 	return nil
 }
 
+// lockSceneMetadataModelKeys takes the install lock for every distinct key in
+// a deterministic order, so two assignments that touch the same pair of models
+// from opposite directions cannot deadlock.
+func lockSceneMetadataModelKeys(keys ...string) func() {
+	distinct := make([]string, 0, len(keys))
+	seen := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		if key == "" {
+			continue
+		}
+		if _, duplicate := seen[key]; duplicate {
+			continue
+		}
+		seen[key] = struct{}{}
+		distinct = append(distinct, key)
+	}
+	sort.Strings(distinct)
+
+	unlocks := make([]func(), 0, len(distinct))
+	for _, key := range distinct {
+		unlocks = append(unlocks, sceneMetadataEntityInstallMu.lock(key))
+	}
+	return func() {
+		for index := len(unlocks) - 1; index >= 0; index-- {
+			unlocks[index]()
+		}
+	}
+}
+
 func (s *Manager) SceneMetadataModelAssign(role SceneMetadataModelRole, modelKey *string) error {
 	entityRole := role.entityRole()
 	if entityRole == "" {
 		return fmt.Errorf("unknown scene metadata model role %q", role)
 	}
+	var requested string
+	if modelKey != nil {
+		requested = *modelKey
+	}
+	if requested != "" {
+		if _, ok := entity.FindModel(requested); !ok {
+			return fmt.Errorf("unknown scene metadata model key %q", requested)
+		}
+	}
+
 	previous := s.Config.GetSceneMetadataEntityModelAssignments()
-	if modelKey != nil && *modelKey != "" {
-		if _, ok := entity.FindModel(*modelKey); !ok {
-			return fmt.Errorf("unknown scene metadata model key %q", *modelKey)
-		}
-		if entity.Status(s.Config.GetCachePath(), *modelKey).State != entity.ModelReady {
-			return fmt.Errorf("scene metadata model %q is not installed", *modelKey)
-		}
+	// Hold the install lock for both the outgoing and the incoming model across
+	// the whole transaction. A concurrent uninstall must not be able to remove
+	// the bundle between the readiness check and the assignment being written.
+	unlock := lockSceneMetadataModelKeys(previous[entityRole], requested)
+	defer unlock()
+
+	if requested != "" &&
+		entity.Status(s.Config.GetCachePath(), requested).State != entity.ModelReady {
+		return fmt.Errorf("scene metadata model %q is not installed", requested)
 	}
-	lockKey := previous[entityRole]
-	if modelKey != nil && *modelKey != "" {
-		lockKey = *modelKey
-	}
-	if lockKey != "" {
-		unlock := sceneMetadataEntityInstallMu.lock(lockKey)
-		defer unlock()
+
+	// Activate the replacement before anything is committed and before the
+	// outgoing session is released. A bundle can pass checksum validation and
+	// still fail to open an ONNX session, and the working model has to survive
+	// that.
+	if entityRole == entity.RoleEntityExtraction && requested != "" {
+		if err := reloadSceneMetadataEntityExtractor(requested); err != nil {
+			return fmt.Errorf("activate scene metadata model %q: %w", requested, err)
+		}
 	}
 
 	assignments := make(map[entity.Role]string, len(previous))
 	for assignedRole, assignedKey := range previous {
 		assignments[assignedRole] = assignedKey
 	}
-	if modelKey == nil || *modelKey == "" {
-		assignments[entityRole] = ""
-	} else {
-		assignments[entityRole] = *modelKey
-	}
+	assignments[entityRole] = requested
 	if err := s.Config.SetSceneMetadataEntityModelAssignments(assignments); err != nil {
+		syncSceneMetadataEntitySessions(previous)
 		return err
 	}
 	previousSelected := s.Config.GetSceneMetadataEntityModel()
 	if entityRole == entity.RoleEntityExtraction {
-		if modelKey == nil {
-			s.Config.SetSceneMetadataEntityModel("")
-		} else {
-			s.Config.SetSceneMetadataEntityModel(*modelKey)
-		}
+		s.Config.SetSceneMetadataEntityModel(requested)
 	}
 	if err := s.Config.Write(); err != nil {
 		_ = s.Config.SetSceneMetadataEntityModelAssignments(previous)
 		s.Config.SetSceneMetadataEntityModel(previousSelected)
+		syncSceneMetadataEntitySessions(previous)
 		return fmt.Errorf("write scene metadata model assignment: %w", err)
 	}
 
+	// The replacement is live and the assignment is durable; only now is the
+	// outgoing session safe to close.
 	syncSceneMetadataEntitySessions(assignments)
-	if entityRole == entity.RoleEntityExtraction && modelKey != nil &&
-		entity.Status(s.Config.GetCachePath(), *modelKey).State == entity.ModelReady {
-		_ = reloadSceneMetadataEntityExtractor(*modelKey)
-	}
 	return nil
 }
 
