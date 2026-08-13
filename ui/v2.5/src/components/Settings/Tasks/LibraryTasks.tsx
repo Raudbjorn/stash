@@ -123,8 +123,7 @@ const SceneMetadataModelsPanel: React.FC = () => {
   } = useSceneMetadataModelStatus();
 
   const models = modelsData?.sceneMetadataModels ?? [];
-  const assignments =
-    assignmentsData?.sceneMetadataModelAssignments ?? [];
+  const assignments = assignmentsData?.sceneMetadataModelAssignments ?? [];
   const status = statusData?.sceneMetadataModelStatus;
   const assignedKeys = new Set(
     assignments.flatMap((assignment) =>
@@ -137,11 +136,13 @@ const SceneMetadataModelsPanel: React.FC = () => {
   }> = [
     {
       role: GQL.SceneMetadataModelRole.EntityExtraction,
-      label: "config.tasks.analyze_scene_metadata.model.assign_entity_extraction",
+      label:
+        "config.tasks.analyze_scene_metadata.model.assign_entity_extraction",
     },
     {
       role: GQL.SceneMetadataModelRole.PerformerContext,
-      label: "config.tasks.analyze_scene_metadata.model.assign_performer_context",
+      label:
+        "config.tasks.analyze_scene_metadata.model.assign_performer_context",
     },
     {
       role: GQL.SceneMetadataModelRole.StudioProviderSelection,
@@ -187,10 +188,7 @@ const SceneMetadataModelsPanel: React.FC = () => {
     }
   }
 
-  async function assign(
-    role: GQL.SceneMetadataModelRole,
-    modelKey: string
-  ) {
+  async function assign(role: GQL.SceneMetadataModelRole, modelKey: string) {
     setBusyKey(role);
     try {
       await mutateSceneMetadataModelAssign(role, modelKey || null);
@@ -322,7 +320,9 @@ const SceneMetadataModelsPanel: React.FC = () => {
                     variant="secondary"
                     size="sm"
                     type="button"
-                    disabled={busyKey !== undefined || !status?.runtimeAvailable}
+                    disabled={
+                      busyKey !== undefined || !status?.runtimeAvailable
+                    }
                     onClick={() => install(model.key)}
                   >
                     <FormattedMessage
@@ -350,6 +350,9 @@ const SceneMetadataModelsPanel: React.FC = () => {
       <div>
         {roleRows.map(({ role, label }) => {
           const assignment = assignments.find((item) => item.role === role);
+          const assignableModels = models.filter(
+            (model) => model.installed || model.key === assignment?.modelKey
+          );
           return (
             <Form.Group controlId={`scene-metadata-model-${role}`} key={role}>
               <Form.Label>
@@ -367,15 +370,29 @@ const SceneMetadataModelsPanel: React.FC = () => {
                     id: "config.tasks.analyze_scene_metadata.model.unset",
                   })}
                 </option>
-                {models.map((model) => (
-                  <option value={model.key} key={model.key}>
-                    {model.displayName}
+                {assignableModels.map((model) => (
+                  <option
+                    value={model.key}
+                    key={model.key}
+                    disabled={!model.installed}
+                  >
+                    {model.installed
+                      ? model.displayName
+                      : intl.formatMessage(
+                          {
+                            id: "config.tasks.analyze_scene_metadata.model.not_installed_option",
+                          },
+                          { model: model.displayName }
+                        )}
                   </option>
                 ))}
               </Form.Control>
             </Form.Group>
           );
         })}
+        <div className="text-muted small">
+          <FormattedMessage id="config.tasks.analyze_scene_metadata.model.assign_requires_install_hint" />
+        </div>
         <div className="text-muted small">
           <FormattedMessage id="config.tasks.analyze_scene_metadata.model.reserved_role_hint" />
         </div>
@@ -611,7 +628,8 @@ export const LibraryTasks: React.FC = () => {
           undefined
       ) ||
       reconciledIDs.length !== requestedIDs.length ||
-      reconciledStashBoxEndpoints.length !== requestedStashBoxEndpoints.length ||
+      reconciledStashBoxEndpoints.length !==
+        requestedStashBoxEndpoints.length ||
       reconciledStudioIDs.length !== requestedStudioIDs.length ||
       reconciledStudioStashBoxEndpoints.length !==
         requestedStudioStashBoxEndpoints.length
@@ -995,7 +1013,6 @@ export const LibraryTasks: React.FC = () => {
           heading={<FormattedMessage id="actions.analyze_scene_metadata" />}
           subHeadingID="config.tasks.analyze_scene_metadata.description"
         >
-
           <Form.Group controlId="analyze-scene-metadata-verifier-scrapers">
             <Form.Label>
               <FormattedMessage id="config.tasks.analyze_scene_metadata.performer_verifier_scrapers.label" />

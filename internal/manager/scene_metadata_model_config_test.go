@@ -52,15 +52,31 @@ func TestMigrateSceneMetadataEntityModelConfigLeavesUnknownBundleUnset(t *testin
 	assert.Empty(t, cfg.GetSceneMetadataEntityModel())
 }
 
-func TestAssignmentUnknownKeyDropped(t *testing.T) {
+func TestAssignmentUnknownKeyRejected(t *testing.T) {
 	cfg := config.InitializeEmpty()
 	previous := cfg.GetSceneMetadataEntityModelAssignments()
 	manager := &Manager{Config: cfg}
 	unknown := "not-in-catalog"
 
-	require.NoError(t, manager.SceneMetadataModelAssign(
+	err := manager.SceneMetadataModelAssign(
 		SceneMetadataModelRoleEntityExtraction,
 		&unknown,
-	))
+	)
+	require.Error(t, err)
+	assert.Equal(t, previous, cfg.GetSceneMetadataEntityModelAssignments())
+}
+
+func TestAssignmentUninstalledModelRejected(t *testing.T) {
+	cfg := config.InitializeEmpty()
+	cfg.SetString(config.Cache, t.TempDir())
+	previous := cfg.GetSceneMetadataEntityModelAssignments()
+	manager := &Manager{Config: cfg}
+	uninstalled := "gliner-small-v2.1-int8"
+
+	err := manager.SceneMetadataModelAssign(
+		SceneMetadataModelRoleEntityExtraction,
+		&uninstalled,
+	)
+	require.Error(t, err)
 	assert.Equal(t, previous, cfg.GetSceneMetadataEntityModelAssignments())
 }

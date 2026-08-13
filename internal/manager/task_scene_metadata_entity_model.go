@@ -202,7 +202,10 @@ func (s *Manager) SceneMetadataModelAssign(role SceneMetadataModelRole, modelKey
 	previous := s.Config.GetSceneMetadataEntityModelAssignments()
 	if modelKey != nil && *modelKey != "" {
 		if _, ok := entity.FindModel(*modelKey); !ok {
-			return nil
+			return fmt.Errorf("unknown scene metadata model key %q", *modelKey)
+		}
+		if entity.Status(s.Config.GetCachePath(), *modelKey).State != entity.ModelReady {
+			return fmt.Errorf("scene metadata model %q is not installed", *modelKey)
 		}
 	}
 	lockKey := previous[entityRole]
