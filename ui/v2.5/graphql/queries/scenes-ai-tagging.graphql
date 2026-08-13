@@ -1,0 +1,5 @@
+query SceneAITaggingSpans($sceneID: ID!) {
+  aiTaggingSpans(sceneID: $sceneID) {
+    ...AITaggingSpanGroupData
+  }
+}

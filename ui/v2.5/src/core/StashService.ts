@@ -3056,6 +3056,89 @@ export const mutateRefreshPythonPackageCatalog = (index?: string) =>
     variables: { index },
   });
 
+/// AI server
+
+// Lightweight status hook - used wherever the UI only needs to know if the AI
+// server is usable (task-default checkboxes, the per-scene analyze tab).
+export const useAIServerAvailability = () =>
+  GQL.useAiServerAvailabilityQuery({
+    fetchPolicy: "no-cache",
+    pollInterval: 5000,
+  });
+
+// Full settings-panel query: status, tagging status and the task queue/history.
+export const useAIServerSettings = () =>
+  GQL.useAiServerSettingsQuery({
+    fetchPolicy: "no-cache",
+    pollInterval: 5000,
+  });
+
+export const aiServerMutationImpactedQueries = [
+  GQL.AiServerAvailabilityDocument,
+  GQL.AiServerSettingsDocument,
+];
+
+export const mutateConfigureAIServer = (input: GQL.AiServerConfigInput) =>
+  client.mutate<
+    GQL.ConfigureAiServerMutation,
+    GQL.ConfigureAiServerMutationVariables
+  >({
+    mutation: GQL.ConfigureAiServerDocument,
+    variables: { input },
+    update(cache, result) {
+      if (!result.data?.configureAIServer) return;
+      evictQueries(cache, aiServerMutationImpactedQueries);
+    },
+  });
+
+export const mutateCancelAITask = (id: string) =>
+  client.mutate<GQL.CancelAiTaskMutation, GQL.CancelAiTaskMutationVariables>({
+    mutation: GQL.CancelAiTaskDocument,
+    variables: { id },
+    update(cache, result) {
+      if (!result.data?.cancelAITask) return;
+      evictQueries(cache, aiServerMutationImpactedQueries);
+    },
+  });
+
+export const mutateAnalyzeSceneWithAI = (sceneID: string) =>
+  client.mutate<
+    GQL.AnalyzeSceneWithAiMutation,
+    GQL.AnalyzeSceneWithAiMutationVariables
+  >({
+    mutation: GQL.AnalyzeSceneWithAiDocument,
+    variables: { sceneID },
+    update(cache, result) {
+      if (!result.data?.analyzeSceneWithAI) return;
+      evictQueries(cache, aiServerMutationImpactedQueries);
+    },
+  });
+
+export const useSceneAITaggingSpans = (sceneID: string, pollInterval = 0) =>
+  GQL.useSceneAiTaggingSpansQuery({
+    variables: { sceneID },
+    fetchPolicy: "no-cache",
+    pollInterval,
+  });
+
+/// Ollama
+
+export const useOllamaSettings = () =>
+  GQL.useOllamaSettingsQuery({ fetchPolicy: "no-cache" });
+
+export const mutateConfigureOllama = (input: GQL.OllamaConfigInput) =>
+  client.mutate<
+    GQL.ConfigureOllamaMutation,
+    GQL.ConfigureOllamaMutationVariables
+  >({
+    mutation: GQL.ConfigureOllamaDocument,
+    variables: { input },
+    update(cache, result) {
+      if (!result.data?.configureOllama) return;
+      evictQueries(cache, [GQL.OllamaSettingsDocument]);
+    },
+  });
+
 /// Tasks
 
 export const mutateMetadataScan = (input: GQL.ScanMetadataInput) =>

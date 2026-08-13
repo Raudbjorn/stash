@@ -1,0 +1,7 @@
+mutation AnalyzeSceneWithAI($sceneID: ID!) {
+  analyzeSceneWithAI(sceneID: $sceneID) {
+    taskID
+    status
+    alreadyInProgress
+  }
+}

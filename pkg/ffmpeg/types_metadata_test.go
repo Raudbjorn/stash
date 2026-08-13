@@ -15,7 +15,7 @@ func TestFFProbeTagsAllowlistAndCaseFolding(t *testing.T) {
 		"TITLE":"Container Title","Comment":"Container Comment","DESCRIPTION":"Description",
 		"DATE":"2024-05-17","creation_time":"2024-05-17T10:30:00Z",
 		"com.apple.quicktime.creationdate":"2024-05-17T10:30:00+0000",
-		"ENCODER":"Lavf","artist":"must not persist"
+		"ENCODER":"Lavf","artist":"Example Artist"
 	}}}`), &probe)
 	require.NoError(t, err)
 	assert.Equal(t, "Container Title", probe.Format.Tags.Title)
@@ -25,7 +25,7 @@ func TestFFProbeTagsAllowlistAndCaseFolding(t *testing.T) {
 	assert.Equal(t, map[string]string{
 		"title": "Container Title", "comment": "Container Comment", "description": "Description",
 		"date": "2024-05-17", "creation_time": "2024-05-17T10:30:00Z",
-		"com.apple.quicktime.creationdate": "2024-05-17T10:30:00+0000", "encoder": "Lavf",
+		"com.apple.quicktime.creationdate": "2024-05-17T10:30:00+0000", "encoder": "Lavf", "artist": "Example Artist",
 	}, probe.Format.Tags.Allowed)
 }
 

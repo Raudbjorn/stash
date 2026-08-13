@@ -18,6 +18,7 @@ import { SettingsContext, useSettings } from "./context";
 import { SettingsLibraryPanel } from "./SettingsLibraryPanel";
 import { SettingsSecurityPanel } from "./SettingsSecurityPanel";
 import { SettingsPythonPanel } from "./Python/SettingsPythonPanel";
+import { SettingsAIServerPanel } from "./AIServer/SettingsAIServerPanel";
 import Changelog from "../Changelog/Changelog";
 import { TroubleshootingModeButton } from "../TroubleshootingMode/TroubleshootingModeButton";
 import { useTroubleshootingMode } from "../TroubleshootingMode/useTroubleshootingMode";
@@ -31,6 +32,7 @@ const validTabs = [
   "services",
   "system",
   "python",
+  "ai-server",
   "plugins",
   "logs",
   "tools",
@@ -110,6 +112,13 @@ const SettingTabs: React.FC<{ tab: TabKey }> = ({ tab }) => {
               <LinkContainer to="/settings?tab=python">
                 <Nav.Link eventKey="python">
                   <FormattedMessage id="config.categories.python" />
+                </Nav.Link>
+              </LinkContainer>
+            </Nav.Item>
+            <Nav.Item>
+              <LinkContainer to="/settings?tab=ai-server">
+                <Nav.Link eventKey="ai-server">
+                  <FormattedMessage id="config.categories.ai_server" />
                 </Nav.Link>
               </LinkContainer>
             </Nav.Item>
@@ -197,6 +206,9 @@ const SettingTabs: React.FC<{ tab: TabKey }> = ({ tab }) => {
             </Tab.Pane>
             <Tab.Pane eventKey="python" unmountOnExit>
               <SettingsPythonPanel />
+            </Tab.Pane>
+            <Tab.Pane eventKey="ai-server" unmountOnExit>
+              <SettingsAIServerPanel />
             </Tab.Pane>
             <Tab.Pane eventKey="plugins" unmountOnExit>
               <SettingsPluginsPanel />

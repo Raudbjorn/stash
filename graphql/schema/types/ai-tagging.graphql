@@ -1,0 +1,29 @@
+type AITaggingStatus {
+  "The configured provider, or empty when none is configured."
+  provider: String!
+  "Whether analysis can run right now."
+  available: Boolean!
+  message: String
+  "What to do to make it available, when it is not (e.g. \"configure a VLM model in Settings -> AI Server\")."
+  remediation: String
+}
+
+type AITaggingSpan {
+  start: Float!
+  end: Float!
+  confidence: Float
+  tagID: ID
+}
+
+type AITaggingSpanGroup {
+  category: String!
+  label: String!
+  spans: [AITaggingSpan!]!
+}
+
+"Result of triggering per-scene analysis. Mirrors the REST layer's 409/already-in-progress case as a typed field rather than a GraphQL error, so a duplicate click is a normal, renderable result."
+type AnalyzeSceneWithAIResult {
+  taskID: ID!
+  status: String!
+  alreadyInProgress: Boolean!
+}

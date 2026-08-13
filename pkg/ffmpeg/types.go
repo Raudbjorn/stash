@@ -38,14 +38,24 @@ const (
 var allowedProbeTags = map[string]struct{}{
 	"title": {}, "comment": {}, "description": {}, "date": {}, "creation_time": {},
 	"com.apple.quicktime.creationdate": {}, "encoder": {},
+	// Performer tags are intentionally retained: the scene metadata analyzer
+	// consumes VideoFile.Tags as performer evidence.
+	"artist": {}, "album_artist": {}, "publisher": {}, "copyright": {},
+	"show": {}, "episode_id": {}, "handler_name": {}, "language": {}, "rotate": {},
 }
 
+// FFProbeTags preserves bounded, allowlisted format and stream metadata.
 type FFProbeTags struct {
 	CreationTime modeljson.JSONTime
 	Title        string
 	Comment      string
 	Encoder      string
 	Allowed      map[string]string
+}
+
+// Get returns an allowlisted tag value using a case-insensitive key.
+func (t FFProbeTags) Get(key string) string {
+	return t.Allowed[strings.ToLower(strings.TrimSpace(key))]
 }
 
 func (t *FFProbeTags) UnmarshalJSON(data []byte) error {
@@ -116,38 +126,33 @@ type FFProbeStream struct {
 		TimedThumbnails int `json:"timed_thumbnails"`
 		VisualImpaired  int `json:"visual_impaired"`
 	} `json:"disposition"`
-	Duration          string `json:"duration"`
-	DurationTs        int64  `json:"duration_ts"`
-	HasBFrames        int    `json:"has_b_frames,omitempty"`
-	Height            int    `json:"height,omitempty"`
-	Index             int    `json:"index"`
-	IsAvc             string `json:"is_avc,omitempty"`
-	Level             int    `json:"level,omitempty"`
-	NalLengthSize     string `json:"nal_length_size,omitempty"`
-	NbFrames          string `json:"nb_frames"`
-	NbReadFrames      string `json:"nb_read_frames"`
-	PixFmt            string `json:"pix_fmt,omitempty"`
-	Profile           string `json:"profile"`
-	RFrameRate        string `json:"r_frame_rate"`
-	Refs              int    `json:"refs,omitempty"`
-	SampleAspectRatio string `json:"sample_aspect_ratio,omitempty"`
-	StartPts          int64  `json:"start_pts"`
-	StartTime         string `json:"start_time"`
-	Tags              struct {
-		CreationTime modeljson.JSONTime `json:"creation_time"`
-		HandlerName  string             `json:"handler_name"`
-		Language     string             `json:"language"`
-		Rotate       string             `json:"rotate"`
-	} `json:"tags"`
-	TimeBase      string `json:"time_base"`
-	Width         int    `json:"width,omitempty"`
-	BitsPerSample int    `json:"bits_per_sample,omitempty"`
-	ChannelLayout string `json:"channel_layout,omitempty"`
-	Channels      int    `json:"channels,omitempty"`
-	MaxBitRate    string `json:"max_bit_rate,omitempty"`
-	SampleFmt     string `json:"sample_fmt,omitempty"`
-	SampleRate    string `json:"sample_rate,omitempty"`
-	SideDataList  []struct {
+	Duration          string      `json:"duration"`
+	DurationTs        int64       `json:"duration_ts"`
+	HasBFrames        int         `json:"has_b_frames,omitempty"`
+	Height            int         `json:"height,omitempty"`
+	Index             int         `json:"index"`
+	IsAvc             string      `json:"is_avc,omitempty"`
+	Level             int         `json:"level,omitempty"`
+	NalLengthSize     string      `json:"nal_length_size,omitempty"`
+	NbFrames          string      `json:"nb_frames"`
+	NbReadFrames      string      `json:"nb_read_frames"`
+	PixFmt            string      `json:"pix_fmt,omitempty"`
+	Profile           string      `json:"profile"`
+	RFrameRate        string      `json:"r_frame_rate"`
+	Refs              int         `json:"refs,omitempty"`
+	SampleAspectRatio string      `json:"sample_aspect_ratio,omitempty"`
+	StartPts          int64       `json:"start_pts"`
+	StartTime         string      `json:"start_time"`
+	Tags              FFProbeTags `json:"tags"`
+	TimeBase          string      `json:"time_base"`
+	Width             int         `json:"width,omitempty"`
+	BitsPerSample     int         `json:"bits_per_sample,omitempty"`
+	ChannelLayout     string      `json:"channel_layout,omitempty"`
+	Channels          int         `json:"channels,omitempty"`
+	MaxBitRate        string      `json:"max_bit_rate,omitempty"`
+	SampleFmt         string      `json:"sample_fmt,omitempty"`
+	SampleRate        string      `json:"sample_rate,omitempty"`
+	SideDataList      []struct {
 		Rotation int `json:"rotation"`
 	} `json:"side_data_list"`
 }

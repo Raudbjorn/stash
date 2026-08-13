@@ -40,10 +40,10 @@ type Scraper {
   name: String!
   "Details for performer scraper"
   performer: ScraperSpec
-  "Details for scene scraper"
-  scene: ScraperSpec
   "Details for studio scraper"
   studio: ScraperSpec
+  "Details for scene scraper"
+  scene: ScraperSpec
   "Details for gallery scraper"
   gallery: ScraperSpec
   "Details for image scraper"

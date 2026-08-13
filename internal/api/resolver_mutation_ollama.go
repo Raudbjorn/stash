@@ -35,7 +35,7 @@ func (r *mutationResolver) ConfigureOllama(ctx context.Context, input OllamaConf
 		Enabled:                   cfg.Enabled,
 		FallbackToTraditionalDict: cfg.FallbackToTraditionalDict,
 		PromptTemplate:            cfg.PromptTemplate,
-		MistralAPIKey:             &cfg.MistralAPIKey,
+		MistralAPIKeySet:          c.GetMistralAPIKeyConfigured(),
 	}, nil
 }
 

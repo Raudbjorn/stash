@@ -2,13 +2,16 @@ package api
 
 import (
 	"context"
+
+	"github.com/stashapp/stash/internal/manager/config"
 )
 
 // OllamaStatus returns the current Ollama configuration and status
 func (r *queryResolver) OllamaStatus(ctx context.Context) (*OllamaStatus, error) {
 	ollamaService := r.getOllamaService()
 
-	config := ollamaService.GetConfig()
+	mistralAPIKeySet := config.GetInstance().GetMistralAPIKeyConfigured()
+	ollamaCfg := ollamaService.GetConfig()
 	available := ollamaService.IsAvailable(ctx)
 
 	var models []string
@@ -24,13 +27,13 @@ func (r *queryResolver) OllamaStatus(ctx context.Context) (*OllamaStatus, error)
 	return &OllamaStatus{
 		Available: available,
 		Config: &OllamaConfig{
-			BaseURL:                   config.BaseURL,
-			Model:                     config.Model,
-			Timeout:                   config.Timeout,
-			Enabled:                   config.Enabled,
-			FallbackToTraditionalDict: config.FallbackToTraditionalDict,
-			PromptTemplate:            config.PromptTemplate,
-			MistralAPIKey:             &config.MistralAPIKey,
+			BaseURL:                   ollamaCfg.BaseURL,
+			Model:                     ollamaCfg.Model,
+			Timeout:                   ollamaCfg.Timeout,
+			Enabled:                   ollamaCfg.Enabled,
+			FallbackToTraditionalDict: ollamaCfg.FallbackToTraditionalDict,
+			PromptTemplate:            ollamaCfg.PromptTemplate,
+			MistralAPIKeySet:          mistralAPIKeySet,
 		},
 		Models:  models,
 		Version: version,

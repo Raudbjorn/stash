@@ -311,6 +311,18 @@ type Query {
     limit: Int = 50
   ): [PythonPackageSearchResult!]!
 
+  # AI server
+  "Status, health and configuration of the embedded AI server. Always resolvable, even when the server is disabled."
+  aiServerStatus: AIServerStatus!
+  "Whether AI tagging can run right now, and why not when it cannot."
+  aiTaggingStatus: AITaggingStatus!
+  "Detected tag spans for a scene, grouped by category/label. Empty when the AI server is not running or nothing has been analysed yet."
+  aiTaggingSpans(sceneID: ID!): [AITaggingSpanGroup!]!
+  "The AI server's own task queue (queued/running work), polled rather than subscribed to since the scheduler is rebuilt on every configureAIServer change."
+  aiTasks(filter: AITaskListFilter): [AITask!]!
+  "Recently finished AI server tasks."
+  aiTaskHistory(limit: Int): [AITask!]!
+
   # Scheduled scans
   "Returns all configured scan schedules"
   scanSchedules: [ScanSchedule!]!
@@ -703,6 +715,14 @@ type Mutation {
   uninstallPythonPackages(names: [String!]!): ID!
   configurePythonIndexes(indexes: [PythonIndexInput!]!): [PythonIndex!]!
   refreshPythonPackageCatalog(index: String): ID!
+
+  # AI server
+  "Enable/disable the embedded AI server and configure its tagging provider. Restarts the subsystem so the change takes effect without a restart of Stash."
+  configureAIServer(input: AIServerConfigInput!): AIServerConfig!
+  "Trigger AI tagging analysis for a single scene. Returns immediately with a task id to poll via aiTasks/aiTask."
+  analyzeSceneWithAI(sceneID: ID!): AnalyzeSceneWithAIResult!
+  "Cancel a queued or running AI server task. Returns false if it was not found or already finished."
+  cancelAITask(id: ID!): Boolean!
 }
 
 type Subscription {
