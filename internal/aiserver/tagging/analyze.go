@@ -263,6 +263,7 @@ func (s *Service) AnalyzeScene(ctx context.Context, req AnalyzeRequest, sink ait
 		Duration: result.Duration,
 		Spans:    aitag.CountSpans(result.Spans),
 	}
+	out.Frames = metricInt(result.Metrics["frames"])
 
 	runID, err := s.storeRun(ctx, provider.Name(), req.SceneID, req.Options, result)
 	if err != nil {
@@ -426,11 +427,18 @@ func (s *Service) storeRun(ctx context.Context, service string, sceneID int, opt
 			Type:          nonEmpty(m.Type),
 			Categories:    m.Categories,
 			FrameInterval: &interval,
+			Extra:         m.Extra,
 		})
 	}
 
 	frameInterval := result.FrameInterval
 	duration := result.Duration
+	metrics := make(map[string]any, len(result.Metrics)+2)
+	for key, value := range result.Metrics {
+		metrics[key] = value
+	}
+	metrics["frames_sampled"] = metricInt(result.Metrics["frames"])
+	metrics["taxonomy_entries"] = s.TaxonomyStatus().Entries
 
 	return s.db.StoreSceneRun(ctx, store.SceneRunInput{
 		Service: service,
@@ -440,6 +448,7 @@ func (s *Service) storeRun(ctx context.Context, service string, sceneID int, opt
 			"threshold":      opts.Threshold,
 			"vr_video":       opts.VR,
 			"duration":       duration,
+			"metrics":        metrics,
 		},
 		Timespans:        timespans,
 		FrameInterval:    &frameInterval,
@@ -448,6 +457,21 @@ func (s *Service) storeRun(ctx context.Context, service string, sceneID int, opt
 		Models:           models,
 		ResolveReference: s.tagResolver(ctx),
 	})
+}
+
+func metricInt(value any) int {
+	switch value := value.(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	case float32:
+		return int(value)
+	default:
+		return 0
+	}
 }
 
 // tagResolver maps a provider label to a Stash tag id for the aggregates.
