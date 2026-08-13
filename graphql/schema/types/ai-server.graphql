@@ -1,0 +1,72 @@
+"AI tagging inference backend."
+enum AITaggingProvider {
+  NATIVE
+  SKIER_AITAGGING
+  OPENAI_MODERATION
+  LLAMA_VLM
+}
+
+"Lifecycle state of the embedded AI server."
+enum AIServerState {
+  "ai_enabled is false. This is the default."
+  DISABLED
+  "Enabled but not currently running (e.g. it was just disabled, or Stash is starting up)."
+  STOPPED
+  "Running and usable."
+  READY
+  "Startup failed; see AIServerStatus.error."
+  FAILED
+}
+
+type AIServerConfig {
+  enabled: Boolean!
+  taggingProvider: AITaggingProvider
+  taggingServerURL: String!
+  "Whether an OpenAI API key is stored. Never echoes the effective key (which may fall back to $OPENAI_API_KEY)."
+  taggingOpenAIKeySet: Boolean!
+  taggingModelDir: String!
+  taggingRulesDir: String!
+  taggingFrameInterval: Float!
+  taggingThreshold: Float!
+  taggingMaxSpanMerge: Float!
+  taggingVLMModel: String!
+  taggingVLMLabels: [String!]!
+  taggingVLMGPULayers: Int!
+  taggingVLMContext: Int!
+}
+
+input AIServerConfigInput {
+  enabled: Boolean!
+  taggingProvider: AITaggingProvider
+  taggingServerURL: String!
+  "Only written when non-null; omit/null leaves the stored key untouched."
+  taggingOpenAIKey: String
+  taggingModelDir: String!
+  taggingRulesDir: String!
+  taggingFrameInterval: Float!
+  taggingThreshold: Float!
+  taggingMaxSpanMerge: Float!
+  taggingVLMModel: String!
+  taggingVLMLabels: [String!]!
+  taggingVLMGPULayers: Int!
+  taggingVLMContext: Int!
+}
+
+type AIServerHealthComponent {
+  status: String!
+  message: String!
+}
+
+type AIServerStatus {
+  state: AIServerState!
+  enabled: Boolean!
+  "True once the server has finished starting and is usable."
+  ready: Boolean!
+  "True when a VLM-capable tagging provider (llama_vlm) is active - gates the AnalyzeSceneMetadataInput local-AI options."
+  hasVLMProvider: Boolean!
+  backendVersion: String!
+  schemaVersion: String
+  error: String
+  database: AIServerHealthComponent!
+  config: AIServerConfig!
+}

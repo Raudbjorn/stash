@@ -1,0 +1,18 @@
+fragment OllamaConfigData on OllamaConfig {
+  baseUrl
+  model
+  timeout
+  enabled
+  fallbackToTraditionalDict
+  promptTemplate
+  mistralApiKeySet
+}
+
+fragment OllamaStatusData on OllamaStatus {
+  available
+  config {
+    ...OllamaConfigData
+  }
+  models
+  version
+}

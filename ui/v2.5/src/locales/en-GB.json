@@ -197,6 +197,17 @@
   "birth_year": "Birth Year",
   "birthdate": "Birthdate",
   "bitrate": "Bit Rate",
+  "ai_tagging": {
+    "already_in_progress": "Analysis is already running for this scene.",
+    "analyze": "Analyze with AI",
+    "confidence": "Confidence",
+    "empty": "No AI tags detected yet.",
+    "label": "Label",
+    "queued": "AI analysis queued.",
+    "tab_label": "AI Tagging",
+    "time": "Time",
+    "unavailable_help": "Requires the AI server to be enabled with a tagging provider configured. See Settings > AI Server."
+  },
   "blobs_storage_type": {
     "database": "Database",
     "filesystem": "Filesystem"
@@ -289,11 +300,52 @@
       "version": "Version"
     },
     "advanced_mode": "Advanced mode",
+    "ai_server": {
+      "database": "Database",
+      "description": "Enable and configure Stash's embedded AI server: scene tagging analysis and its task queue.",
+      "enable": "Enable AI server",
+      "enable_description": "Starts the embedded AI server. Disabled by default; no files are created and analysis cannot run until this is on.",
+      "no_tasks": "No AI tasks yet.",
+      "no_vlm_provider": "No vision-language model provider is configured, so \"use local AI\" options elsewhere in Stash will have no effect.",
+      "openai_key": "OpenAI API key",
+      "openai_key_description": "Used by the OpenAI moderation provider. Leave blank to keep the currently stored key.",
+      "openai_key_set": "A key is already stored",
+      "provider": "Tagging provider",
+      "provider_description": "Which backend analyses scenes when AI tagging is triggered.",
+      "provider_llama_vlm": "Local vision-language model (llama.cpp)",
+      "provider_moderation": "OpenAI moderation endpoint",
+      "provider_native": "Native (local ONNX classifier)",
+      "provider_none": "None",
+      "provider_remote": "Remote AI tagging server",
+      "saved": "AI server settings saved",
+      "server_url": "Server URL",
+      "server_url_description": "Address of the remote AI tagging server.",
+      "state": {
+        "disabled": "Disabled",
+        "failed": "Failed",
+        "ready": "Ready",
+        "stopped": "Stopped"
+      },
+      "status_description": "Current state of the embedded AI server.",
+      "status_heading": "Status",
+      "task_action": "Action",
+      "task_service": "Service",
+      "task_status": "Status",
+      "tasks_description": "Queued, running and recently finished AI server tasks.",
+      "tasks_heading": "Task queue",
+      "vlm_context": "Context window override",
+      "vlm_context_description": "Zero keeps the selected model's default context size.",
+      "vlm_gpu_layers": "GPU offload layers",
+      "vlm_gpu_layers_description": "Zero runs on CPU only.",
+      "vlm_model": "Model",
+      "vlm_model_description": "The checksum-pinned vision-language model pair to use."
+    },
     "application_paths": {
       "heading": "Application Paths"
     },
     "categories": {
       "about": "About",
+      "ai_server": "AI Server",
       "changelog": "Changelog",
       "interface": "Interface",
       "logs": "Logs",
@@ -509,6 +561,20 @@
     "logs": {
       "log_level": "Log level"
     },
+    "ollama": {
+      "available": "Available",
+      "base_url": "Base URL",
+      "description": "Optional local Ollama instance used as a dictionary/word-explanation provider.",
+      "enable": "Enable Ollama",
+      "fallback": "Fall back to the traditional dictionary if Ollama is unavailable",
+      "heading": "Ollama",
+      "mistral_key": "Mistral API key",
+      "mistral_key_description": "Used as an alternative dictionary provider. Leave blank to keep the currently stored key.",
+      "model": "Model",
+      "status_description": "Whether Stash can currently reach the configured Ollama instance.",
+      "status_heading": "Status",
+      "unavailable": "Unavailable"
+    },
     "python": {
       "actions": "Actions",
       "add_index": "Add index",
@@ -643,7 +709,9 @@
         },
         "use_details": "Also analyze scene details",
         "use_local_ai_context": "Use local AI context for ambiguous performer names",
-        "use_local_ai_studio_provider_selection": "Use local AI to choose which studio metadata provider to query"
+        "use_local_ai_context_unavailable_help": "Requires the AI server to be enabled with a local vision-language model provider configured. See Settings > AI Server.",
+        "use_local_ai_studio_provider_selection": "Use local AI to choose which studio metadata provider to query",
+        "use_local_ai_studio_provider_selection_unavailable_help": "Requires the AI server to be enabled with a local vision-language model provider configured. See Settings > AI Server."
       },
       "anonymise_and_download": "Makes an anonymised copy of the database and downloads the resulting file.",
       "anonymise_database": "Makes a copy of the database to the backups directory, anonymising all sensitive data. This can then be provided to others for troubleshooting and debugging purposes. The original database is not modified. Anonymised database uses the filename format {filename_format}.",

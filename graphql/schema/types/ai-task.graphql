@@ -1,0 +1,34 @@
+"The AI server's own task queue. Separate from Stash's regular Job queue (jobsSubscribe) - a distinct scheduler for AI-server work such as tagging analysis."
+enum AITaskStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+  STREAMING
+}
+
+enum AITaskPriority {
+  HIGH
+  NORMAL
+  LOW
+}
+
+type AITask {
+  id: ID!
+  actionID: String!
+  service: String!
+  priority: AITaskPriority!
+  status: AITaskStatus!
+  "Epoch seconds."
+  submittedAt: Float!
+  startedAt: Float
+  finishedAt: Float
+  error: String
+  cancelRequested: Boolean!
+}
+
+input AITaskListFilter {
+  service: String
+  status: AITaskStatus
+}

@@ -113,6 +113,16 @@ type Server struct {
 	db           *store.DB
 	tasks        *task.Manager
 	interactions *interactions.Service
+
+	// refreshMu serializes Refresh so two concurrent configuration changes
+	// cannot interleave a stop/start cycle. Shutdown and Start each acquire mu
+	// separately rather than holding it for the whole call, so without this,
+	// two overlapping Refresh calls could run as
+	// Shutdown/Shutdown/Start/Start - the second Start would then find the
+	// first one's state already StateReady and return early, leaving the
+	// subsystem built from whichever config lost the race, registrations
+	// possibly withdrawn by the wrong Shutdown, and no error surfaced.
+	refreshMu sync.Mutex
 }
 
 // New builds a server. It performs no I/O: the database is opened by Start,
@@ -551,7 +561,17 @@ func (s *Server) Close() {
 // Refresh reacts to a configuration change: it stops the server and starts it
 // again if still enabled. This is what makes toggling ai_enabled or changing
 // ai_database_path take effect without restarting Stash.
+//
+// Serialized against other Refresh calls - see refreshMu - so two overlapping
+// configuration changes run one full stop/start cycle at a time rather than
+// interleaving.
 func (s *Server) Refresh(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	s.refreshMu.Lock()
+	defer s.refreshMu.Unlock()
+
 	s.Shutdown()
 	return s.Start(ctx)
 }

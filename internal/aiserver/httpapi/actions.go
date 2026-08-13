@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/stashapp/stash/internal/aiserver/action"
@@ -46,34 +47,29 @@ func (s *Server) handleActionSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reg, ok := s.backend.Actions().Resolve(req.ActionID, req.Context)
-	if !ok {
-		writeError(w, http.StatusNotFound, "Action not found")
-		return
-	}
-	if !reg.Definition.IsApplicable(req.Context) {
-		writeError(w, http.StatusBadRequest, "Action not applicable to provided context")
-		return
-	}
-
-	tasks := s.backend.Tasks()
-
-	if reg.Definition.DeduplicateSubmissions {
-		if dup, found := tasks.FindDuplicate(reg.Definition, req.Context, req.Params); found {
+	rec, err := s.backend.SubmitAction(r.Context(), req.ActionID, req.Context, req.Params, req.Priority)
+	if err != nil {
+		var dup *task.ErrDuplicateSubmission
+		switch {
+		case errors.As(err, &dup):
 			// A structured detail object, parsed field-by-field by the
 			// frontend to show "already running" instead of an error.
 			writeError(w, http.StatusConflict, map[string]any{
 				"code":    "ACTION_ALREADY_IN_PROGRESS",
-				"task_id": dup.ID,
-				"status":  string(dup.Status),
-				"message": "Action '" + reg.Definition.Label + "' is already processing for this selection.",
+				"task_id": dup.Dup.ID,
+				"status":  string(dup.Dup.Status),
+				"message": "Action is already processing for this selection.",
 			})
-			return
+		case errors.Is(err, task.ErrActionNotFound):
+			writeError(w, http.StatusNotFound, "Action not found")
+		case errors.Is(err, task.ErrActionNotApplicable):
+			writeError(w, http.StatusBadRequest, "Action not applicable to provided context")
+		default:
+			writeError(w, http.StatusInternalServerError, err.Error())
 		}
+		return
 	}
 
-	// Detail views are interactive and jump the queue; bulk library actions
-	// are background work. An explicit priority overrides the inference.
 	inferred := "low"
 	if req.Context.IsDetailView {
 		inferred = "high"
@@ -82,13 +78,6 @@ func (s *Server) handleActionSubmit(w http.ResponseWriter, r *http.Request) {
 		if _, valid := task.ParsePriority(*req.Priority); valid {
 			inferred = *req.Priority
 		}
-	}
-	priority, _ := task.ParsePriority(inferred)
-
-	rec, err := tasks.Submit(reg.Definition, reg.Handler, req.Context, req.Params, priority, task.SubmitOptions{})
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
 	}
 
 	writeJSON(w, http.StatusOK, submitActionResponse{

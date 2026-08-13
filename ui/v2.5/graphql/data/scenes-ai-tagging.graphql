@@ -1,0 +1,10 @@
+fragment AITaggingSpanGroupData on AITaggingSpanGroup {
+  category
+  label
+  spans {
+    start
+    end
+    confidence
+    tagID
+  }
+}
