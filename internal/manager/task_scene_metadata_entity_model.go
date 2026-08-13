@@ -181,6 +181,10 @@ func (s *Manager) SceneMetadataModelUninstall(modelKey string) error {
 	if _, ok := entity.FindModel(modelKey); !ok {
 		return fmt.Errorf("unknown scene metadata model key %q", modelKey)
 	}
+	// The swap lock keeps the "is it assigned" check and the removal in the same
+	// transaction as any concurrent assignment.
+	sceneMetadataEntitySwapMu.Lock()
+	defer sceneMetadataEntitySwapMu.Unlock()
 	unlock := sceneMetadataEntityInstallMu.lock(modelKey)
 	defer unlock()
 	for role, assignedKey := range s.Config.GetSceneMetadataEntityModelAssignments() {
@@ -239,6 +243,14 @@ func (s *Manager) SceneMetadataModelAssign(role SceneMetadataModelRole, modelKey
 		}
 	}
 
+	// Serialise the entire read-modify-write against every other assignment and
+	// against session pruning. The per-model install locks below only cover
+	// operations that share a model key, so two roles with disjoint keys would
+	// otherwise both read this map and the later write would revert the other
+	// role.
+	sceneMetadataEntitySwapMu.Lock()
+	defer sceneMetadataEntitySwapMu.Unlock()
+
 	previous := s.Config.GetSceneMetadataEntityModelAssignments()
 	// Hold the install lock for both the outgoing and the incoming model across
 	// the whole transaction. A concurrent uninstall must not be able to remove
@@ -251,14 +263,18 @@ func (s *Manager) SceneMetadataModelAssign(role SceneMetadataModelRole, modelKey
 		return fmt.Errorf("scene metadata model %q is not installed", requested)
 	}
 
-	// Activate the replacement before anything is committed and before the
+	// Prove the replacement works before anything is committed and before the
 	// outgoing session is released. A bundle can pass checksum validation and
 	// still fail to open an ONNX session, and the working model has to survive
-	// that.
+	// that. The session stays private until the commit succeeds so nothing can
+	// prune it mid-transaction.
+	var replacement sceneMetadataExtractorSession
 	if entityRole == entity.RoleEntityExtraction && requested != "" {
-		if err := reloadSceneMetadataEntityExtractor(requested); err != nil {
+		session, err := openSceneMetadataEntitySession(requested)
+		if err != nil {
 			return fmt.Errorf("activate scene metadata model %q: %w", requested, err)
 		}
+		replacement = session
 	}
 
 	assignments := make(map[entity.Role]string, len(previous))
@@ -267,7 +283,7 @@ func (s *Manager) SceneMetadataModelAssign(role SceneMetadataModelRole, modelKey
 	}
 	assignments[entityRole] = requested
 	if err := s.Config.SetSceneMetadataEntityModelAssignments(assignments); err != nil {
-		syncSceneMetadataEntitySessions(previous)
+		closeSceneMetadataEntitySession(replacement)
 		return err
 	}
 	previousSelected := s.Config.GetSceneMetadataEntityModel()
@@ -277,23 +293,30 @@ func (s *Manager) SceneMetadataModelAssign(role SceneMetadataModelRole, modelKey
 	if err := s.Config.Write(); err != nil {
 		_ = s.Config.SetSceneMetadataEntityModelAssignments(previous)
 		s.Config.SetSceneMetadataEntityModel(previousSelected)
-		syncSceneMetadataEntitySessions(previous)
+		closeSceneMetadataEntitySession(replacement)
 		return fmt.Errorf("write scene metadata model assignment: %w", err)
 	}
 
-	// The replacement is live and the assignment is durable; only now is the
-	// outgoing session safe to close.
-	syncSceneMetadataEntitySessions(assignments)
+	// The assignment is durable. Publish the replacement, then release whatever
+	// the new assignment no longer references.
+	if replacement != nil {
+		publishSceneMetadataEntitySession(requested, replacement)
+	}
+	pruneSceneMetadataEntitySessions(assignments)
 	return nil
 }
 
 func (s *Manager) SceneMetadataModelReload() bool {
-	activeKey := s.Config.GetSceneMetadataEntityModelAssignments()[entity.RoleEntityExtraction]
+	sceneMetadataEntitySwapMu.Lock()
+	defer sceneMetadataEntitySwapMu.Unlock()
+
+	assignments := s.Config.GetSceneMetadataEntityModelAssignments()
+	activeKey := assignments[entity.RoleEntityExtraction]
 	if activeKey == "" {
 		return false
 	}
-	syncSceneMetadataEntitySessions(s.Config.GetSceneMetadataEntityModelAssignments())
-	_ = reloadSceneMetadataEntityExtractor(activeKey)
+	pruneSceneMetadataEntitySessions(assignments)
+	_ = doReloadSceneMetadataEntityExtractor(activeKey)
 	return sceneMetadataEntityExtractorActive(activeKey)
 }
 

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -143,6 +145,116 @@ func TestAssignmentFailedActivationPreservesWorkingModel(t *testing.T) {
 	assert.True(t, sceneMetadataEntityExtractorActive(working),
 		"a failed activation must not unload the working model")
 	assert.False(t, sessions[working].isClosed())
+}
+
+// useConcurrencySafeSceneMetadataLoader replaces the shared fake loader with
+// one that does not write to an unsynchronised map, so concurrent lazy loads
+// are safe to exercise.
+func useConcurrencySafeSceneMetadataLoader(t *testing.T) {
+	t.Helper()
+	var mu sync.Mutex
+	sessions := make(map[string]*fakeSceneMetadataSession)
+	loadSceneMetadataEntityExtractor = func(_, bundlePath string, _ float64) (sceneMetadataExtractorSession, error) {
+		key := filepath.Base(bundlePath)
+		mu.Lock()
+		defer mu.Unlock()
+		session := &fakeSceneMetadataSession{key: key}
+		sessions[key] = session
+		return session, nil
+	}
+}
+
+func TestAssignmentRemainsActiveUnderConcurrentLookups(t *testing.T) {
+	cfg, _ := setupFakeSceneMetadataSessions(t)
+	useConcurrencySafeSceneMetadataLoader(t)
+	cfg.SetConfigFile(filepath.Join(t.TempDir(), "config.yml"))
+	cachePath := cfg.GetCachePath()
+	working := installFakeSceneMetadataBundle(t, cachePath, 0)
+	replacement := installFakeSceneMetadataBundle(t, cachePath, 1)
+	manager := &Manager{Config: cfg}
+
+	require.NoError(t, manager.SceneMetadataModelAssign(
+		SceneMetadataModelRoleEntityExtraction,
+		&working,
+	))
+
+	// Extractor lookups prune sessions against the assignments they observe. A
+	// lookup that overlaps the switch must not be able to close the session the
+	// assignment just installed. The window is the config commit itself, so
+	// pad the config to make each write slow and take many swings at it.
+	cfg.SetString(config.ScraperUserAgent, strings.Repeat("x", 128<<10))
+
+	stop := make(chan struct{})
+	var lookups sync.WaitGroup
+	for range 4 {
+		lookups.Add(1)
+		go func() {
+			defer lookups.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				_ = getSceneMetadataEntityExtractor()
+			}
+		}()
+	}
+	defer func() {
+		close(stop)
+		lookups.Wait()
+	}()
+
+	for round := range 10 {
+		for _, target := range []string{replacement, working} {
+			require.NoError(t, manager.SceneMetadataModelAssign(
+				SceneMetadataModelRoleEntityExtraction,
+				&target,
+			), "round %d", round)
+			require.Equal(t, target,
+				cfg.GetSceneMetadataEntityModelAssignments()[entity.RoleEntityExtraction],
+				"round %d", round)
+			require.True(t, sceneMetadataEntityExtractorActive(target),
+				"round %d: a successful assignment must leave the configured model active", round)
+		}
+	}
+}
+
+func TestConcurrentRoleAssignmentsDoNotClobber(t *testing.T) {
+	cfg, _ := setupFakeSceneMetadataSessions(t)
+	useConcurrencySafeSceneMetadataLoader(t)
+	cfg.SetConfigFile(filepath.Join(t.TempDir(), "config.yml"))
+	cachePath := cfg.GetCachePath()
+	installFakeSceneMetadataBundle(t, cachePath, 0)
+	entityModel := installFakeSceneMetadataBundle(t, cachePath, 1)
+	contextModel := installFakeSceneMetadataBundle(t, cachePath, 2)
+	manager := &Manager{Config: cfg}
+
+	// Disjoint roles with disjoint model keys share no per-model lock, so only
+	// a global transaction keeps the two read-modify-write cycles from
+	// reverting each other.
+	var assignments sync.WaitGroup
+	var entityErr, contextErr error
+	assignments.Add(2)
+	go func() {
+		defer assignments.Done()
+		entityErr = manager.SceneMetadataModelAssign(
+			SceneMetadataModelRoleEntityExtraction, &entityModel)
+	}()
+	go func() {
+		defer assignments.Done()
+		contextErr = manager.SceneMetadataModelAssign(
+			SceneMetadataModelRolePerformerContext, &contextModel)
+	}()
+	assignments.Wait()
+
+	require.NoError(t, entityErr)
+	require.NoError(t, contextErr)
+	final := cfg.GetSceneMetadataEntityModelAssignments()
+	assert.Equal(t, entityModel, final[entity.RoleEntityExtraction],
+		"the performer-context assignment must not revert the entity role")
+	assert.Equal(t, contextModel, final[entity.RolePerformerContext],
+		"the entity assignment must not revert the performer-context role")
 }
 
 func TestAssignmentHoldsModelLockAcrossReadinessCheck(t *testing.T) {

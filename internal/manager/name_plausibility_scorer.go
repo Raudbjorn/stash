@@ -47,6 +47,19 @@ var loadSceneMetadataEntityExtractor = func(libraryPath, bundlePath string, thre
 }
 
 var (
+	// sceneMetadataEntitySwapMu serialises the whole assignment
+	// read-modify-write transaction with the session pruning that follows it.
+	// Per-model install locks cannot do this on their own: two assignments to
+	// different roles with disjoint model keys would otherwise read the same
+	// assignment map and the later write would revert the earlier role, and a
+	// prune running from a stale snapshot could close a session another
+	// assignment had just published.
+	//
+	// Lock order is sceneMetadataEntitySwapMu -> sceneMetadataEntityInstallMu
+	// -> sceneMetadataEntityReloadMu -> sceneMetadataEntityMu. The install job
+	// deliberately stays outside the swap lock so a long download cannot block
+	// assignments; it only ever reloads a key that is already assigned.
+	sceneMetadataEntitySwapMu   sync.Mutex
 	sceneMetadataEntityReloadMu keyedMutexes
 
 	sceneMetadataEntityMu            sync.RWMutex
@@ -85,7 +98,10 @@ func currentSceneMetadataModelAssignments() map[entity.Role]string {
 	return instance.Config.GetSceneMetadataEntityModelAssignments()
 }
 
-func syncSceneMetadataEntitySessions(assignments map[entity.Role]string) {
+// pruneSceneMetadataEntitySessions closes every session that no longer backs an
+// assigned role. Callers must hold sceneMetadataEntitySwapMu, so a prune can
+// never run from a stale snapshot alongside a half-finished assignment.
+func pruneSceneMetadataEntitySessions(assignments map[entity.Role]string) {
 	counts := make(map[string]int, len(assignments))
 	for _, key := range assignments {
 		if key != "" {
@@ -128,8 +144,14 @@ func unloadSceneMetadataEntityExtractor(modelKey string) {
 }
 
 func getSceneMetadataEntityExtractorForRole(role entity.Role) metadata.EntityExtractor {
+	// Resolving the assignment, pruning, and any lazy load all happen under the
+	// swap lock, so a lookup can never prune a session that an in-flight
+	// assignment has already published.
+	sceneMetadataEntitySwapMu.Lock()
+	defer sceneMetadataEntitySwapMu.Unlock()
+
 	assignments := currentSceneMetadataModelAssignments()
-	syncSceneMetadataEntitySessions(assignments)
+	pruneSceneMetadataEntitySessions(assignments)
 	modelKey := assignments[role]
 	if modelKey == "" {
 		return nil
@@ -179,49 +201,74 @@ func reloadSceneMetadataEntityExtractor(modelKey string) error {
 	return err
 }
 
-// doReloadSceneMetadataEntityExtractor validates a replacement before the
-// pointer swap. The shared entity runtime keeps one ref-counted ONNX
-// environment, so the old session remains usable until all in-flight calls
-// finish and Close runs after the swap.
-func doReloadSceneMetadataEntityExtractor(modelKey string) error {
-	libPath, ok := findOnnxRuntimeLibrary()
-	if !ok {
-		err := fmt.Errorf("onnxruntime shared library not found")
+// openSceneMetadataEntitySession loads a bundle without publishing it, so an
+// assignment can prove a replacement works before committing to it. An
+// unpublished session is invisible to pruning and cannot be closed by anyone
+// else; the caller owns it until it is published or closed.
+func openSceneMetadataEntitySession(modelKey string) (sceneMetadataExtractorSession, error) {
+	recordFailure := func(err error) error {
 		sceneMetadataEntityMu.Lock()
 		sceneMetadataEntityLastError[modelKey] = err.Error()
 		sceneMetadataEntityMu.Unlock()
-		logger.Infof("[scene metadata] %v; deterministic analysis remains available", err)
-		return err
-	}
-	if instance == nil || instance.Config == nil {
-		err := fmt.Errorf("configuration unavailable")
-		sceneMetadataEntityMu.Lock()
-		sceneMetadataEntityLastError[modelKey] = err.Error()
-		sceneMetadataEntityMu.Unlock()
-		logger.Infof("[scene metadata] %v; deterministic analysis remains available", err)
-		return err
-	}
-	bundlePath := entity.BundlePath(instance.Config.GetCachePath(), modelKey)
-	replacement, err := loadSceneMetadataEntityExtractor(libPath, bundlePath, entity.DefaultThreshold)
-	if err != nil {
-		sceneMetadataEntityMu.Lock()
-		sceneMetadataEntityLastError[modelKey] = err.Error()
-		sceneMetadataEntityMu.Unlock()
-		logger.Infof("[scene metadata] GLiNER %s unavailable: %v; preserving the current session", modelKey, err)
 		return err
 	}
 
+	libPath, ok := findOnnxRuntimeLibrary()
+	if !ok {
+		err := recordFailure(fmt.Errorf("onnxruntime shared library not found"))
+		logger.Infof("[scene metadata] %v; deterministic analysis remains available", err)
+		return nil, err
+	}
+	if instance == nil || instance.Config == nil {
+		err := recordFailure(fmt.Errorf("configuration unavailable"))
+		logger.Infof("[scene metadata] %v; deterministic analysis remains available", err)
+		return nil, err
+	}
+	bundlePath := entity.BundlePath(instance.Config.GetCachePath(), modelKey)
+	session, err := loadSceneMetadataEntityExtractor(libPath, bundlePath, entity.DefaultThreshold)
+	if err != nil {
+		err = recordFailure(err)
+		logger.Infof("[scene metadata] GLiNER %s unavailable: %v; preserving the current session", modelKey, err)
+		return nil, err
+	}
+	return session, nil
+}
+
+// publishSceneMetadataEntitySession installs an already-opened session and
+// closes whatever it replaces. The shared entity runtime keeps one ref-counted
+// ONNX environment, so the old session remains usable until all in-flight
+// calls finish and Close runs after the swap.
+func publishSceneMetadataEntitySession(modelKey string, session sceneMetadataExtractorSession) {
 	sceneMetadataEntityMu.Lock()
 	old := sceneMetadataEntityExtractor[modelKey]
-	sceneMetadataEntityExtractor[modelKey] = replacement
+	sceneMetadataEntityExtractor[modelKey] = session
+	sceneMetadataEntityLoaded[modelKey] = true
 	delete(sceneMetadataEntityLastError, modelKey)
 	sceneMetadataEntityMu.Unlock()
-	if old != nil {
+	if old != nil && old != session {
 		if err := old.Close(); err != nil {
 			logger.Warnf("[scene metadata] closing previous GLiNER session: %v", err)
 		}
 	}
 	logger.Infof("[scene metadata] using local %s entity model", modelKey)
+}
+
+// closeSceneMetadataEntitySession discards an opened but unpublished session.
+func closeSceneMetadataEntitySession(session sceneMetadataExtractorSession) {
+	if session == nil {
+		return
+	}
+	if err := session.Close(); err != nil {
+		logger.Warnf("[scene metadata] closing unpublished GLiNER session: %v", err)
+	}
+}
+
+func doReloadSceneMetadataEntityExtractor(modelKey string) error {
+	session, err := openSceneMetadataEntitySession(modelKey)
+	if err != nil {
+		return err
+	}
+	publishSceneMetadataEntitySession(modelKey, session)
 	return nil
 }
 

@@ -49,6 +49,16 @@ func resetSceneMetadataEntityState(t *testing.T) {
 	closeSceneMetadataEntityExtractor()
 }
 
+// syncSceneMetadataEntitySessionsForTest reconciles sessions with the currently
+// configured assignments the same way production callers do: under the swap
+// lock, from the authoritative config rather than a caller-supplied snapshot.
+func syncSceneMetadataEntitySessionsForTest(t *testing.T) {
+	t.Helper()
+	sceneMetadataEntitySwapMu.Lock()
+	defer sceneMetadataEntitySwapMu.Unlock()
+	pruneSceneMetadataEntitySessions(currentSceneMetadataModelAssignments())
+}
+
 func TestReloadSceneMetadataEntityExtractorWithoutRuntime(t *testing.T) {
 	originalPaths := onnxRuntimeLibraryPaths
 	onnxRuntimeLibraryPaths = []string{"/does/not/exist"}
@@ -145,13 +155,16 @@ func TestReloadSceneMetadataEntityExtractorPerKey(t *testing.T) {
 		require.NoError(t, os.MkdirAll(entity.BundlePath(cfg.GetCachePath(), key), 0o755))
 	}
 
-	syncSceneMetadataEntitySessions(assignments)
+	syncSceneMetadataEntitySessionsForTest(t)
 	require.NoError(t, reloadSceneMetadataEntityExtractor(keyA))
 	require.NoError(t, reloadSceneMetadataEntityExtractor(keyB))
 	assert.True(t, sceneMetadataEntityExtractorActive(keyA))
 	assert.True(t, sceneMetadataEntityExtractorActive(keyB))
 
-	syncSceneMetadataEntitySessions(map[entity.Role]string{entity.RoleEntityExtraction: keyB})
+	require.NoError(t, cfg.SetSceneMetadataEntityModelAssignments(
+		map[entity.Role]string{entity.RoleEntityExtraction: keyB},
+	))
+	syncSceneMetadataEntitySessionsForTest(t)
 	assert.True(t, sessions[keyA].isClosed())
 	assert.False(t, sessions[keyB].isClosed())
 	assert.False(t, sceneMetadataEntityExtractorActive(keyA))
