@@ -45,6 +45,13 @@ func (r *mutationResolver) ConfigureAIServer(ctx context.Context, input AIServer
 	c.SetInterface(config.AITaggingVLMLabels, input.TaggingVLMLabels)
 	c.SetInt(config.AITaggingVLMGPULayers, input.TaggingVLMGPULayers)
 	c.SetInt(config.AITaggingVLMContext, input.TaggingVLMContext)
+	c.SetString(config.AITaggingAnalyzeMode, input.TaggingAnalyzeMode)
+	c.SetString(config.AITaggingTaxonomyEndpoint, input.TaggingTaxonomyEndpoint)
+	if input.TaggingTaxonomyAPIKey != nil {
+		c.SetString(config.AITaggingTaxonomyAPIKey, *input.TaggingTaxonomyAPIKey)
+	}
+	c.SetInterface(config.AITaggingTaxonomyCategories, input.TaggingTaxonomyCategories)
+	c.SetInt(config.AITaggingTaxonomyMaxCandidates, input.TaggingTaxonomyMaxCandidates)
 
 	if err := c.Write(); err != nil {
 		return nil, err

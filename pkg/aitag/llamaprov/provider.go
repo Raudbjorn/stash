@@ -25,17 +25,18 @@ const legacyClassificationInstruction = "Classify only what is visibly present i
 
 // Config contains only portable provider dependencies and selected metadata.
 type Config struct {
-	Client          *http.Client
-	BaseURL         string
-	Pair            assets.Pair
-	Labels          []string
-	Category        string
-	FFmpegPath      string
-	DefaultInterval float64
-	MaxMergeSeconds float64
-	Available       func() error
-	WaitReady       func(context.Context) error
-	CloseHost       func()
+	Client           *http.Client
+	BaseURL          string
+	Pair             assets.Pair
+	Labels           []string
+	AllowEmptyLabels bool
+	Category         string
+	FFmpegPath       string
+	DefaultInterval  float64
+	MaxMergeSeconds  float64
+	Available        func() error
+	WaitReady        func(context.Context) error
+	CloseHost        func()
 }
 
 type template struct {
@@ -66,9 +67,15 @@ func New(cfg Config) (*Provider, error) {
 	if cfg.Client == nil {
 		return nil, fmt.Errorf("llama VLM HTTP client is required")
 	}
-	labels, err := normalizeLabels(cfg.Labels)
-	if err != nil {
-		return nil, err
+	var labels []string
+	var err error
+	if len(cfg.Labels) == 0 && cfg.AllowEmptyLabels {
+		labels = []string{}
+	} else {
+		labels, err = normalizeLabels(cfg.Labels)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if cfg.Pair.Name == "" {
 		return nil, fmt.Errorf("llama VLM model metadata is required")

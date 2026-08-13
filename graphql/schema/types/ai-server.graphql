@@ -33,6 +33,11 @@ type AIServerConfig {
   taggingVLMLabels: [String!]!
   taggingVLMGPULayers: Int!
   taggingVLMContext: Int!
+  taggingAnalyzeMode: String!
+  taggingTaxonomyEndpoint: String!
+  taggingTaxonomyAPIKeySet: Boolean!
+  taggingTaxonomyCategories: [String!]!
+  taggingTaxonomyMaxCandidates: Int!
 }
 
 input AIServerConfigInput {
@@ -50,6 +55,12 @@ input AIServerConfigInput {
   taggingVLMLabels: [String!]!
   taggingVLMGPULayers: Int!
   taggingVLMContext: Int!
+  taggingAnalyzeMode: String!
+  taggingTaxonomyEndpoint: String!
+  "Only written when non-null; omit/null leaves the stored key untouched."
+  taggingTaxonomyAPIKey: String
+  taggingTaxonomyCategories: [String!]!
+  taggingTaxonomyMaxCandidates: Int!
 }
 
 type AIServerHealthComponent {

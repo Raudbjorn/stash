@@ -279,6 +279,16 @@ const (
 	// AITaggingVLMContext overrides the selected pair's context window. Zero
 	// keeps the pair's checksum-pinned default.
 	AITaggingVLMContext = "ai_tagging_vlm_context"
+	// AITaggingAnalyzeMode selects taxonomy-grounded or legacy VLM analysis.
+	AITaggingAnalyzeMode = "ai_tagging_analyze_mode"
+	// AITaggingTaxonomyEndpoint is the StashDB GraphQL taxonomy source.
+	AITaggingTaxonomyEndpoint = "ai_tagging_taxonomy_endpoint"
+	// AITaggingTaxonomyAPIKey optionally authenticates taxonomy requests.
+	AITaggingTaxonomyAPIKey = "ai_tagging_taxonomy_api_key"
+	// AITaggingTaxonomyCategories limits candidate tags by StashDB category.
+	AITaggingTaxonomyCategories = "ai_tagging_taxonomy_categories"
+	// AITaggingTaxonomyMaxCandidates caps each frame's verification set.
+	AITaggingTaxonomyMaxCandidates = "ai_tagging_taxonomy_max_candidates"
 	// MistralAPIKey is the Mistral AI API key used as an alternative dictionary
 	// provider. Empty by default; the MISTRAL_API_KEY environment variable is
 	// honored as a fallback.
@@ -2342,6 +2352,30 @@ func (i *Config) GetAITaggingVLMGPULayers() int {
 // GetAITaggingVLMContext returns the configured context override, or zero.
 func (i *Config) GetAITaggingVLMContext() int {
 	return i.getInt(AITaggingVLMContext)
+}
+
+// GetAITaggingAnalyzeMode returns taxonomy unless explicitly set to legacy.
+func (i *Config) GetAITaggingAnalyzeMode() string {
+	if i.getString(AITaggingAnalyzeMode) == "legacy" {
+		return "legacy"
+	}
+	return "taxonomy"
+}
+
+func (i *Config) GetAITaggingTaxonomyEndpoint() string {
+	return i.getString(AITaggingTaxonomyEndpoint)
+}
+
+func (i *Config) GetAITaggingTaxonomyAPIKey() string {
+	return i.getString(AITaggingTaxonomyAPIKey)
+}
+
+func (i *Config) GetAITaggingTaxonomyCategories() []string {
+	return i.getStringSlice(AITaggingTaxonomyCategories)
+}
+
+func (i *Config) GetAITaggingTaxonomyMaxCandidates() int {
+	return i.getInt(AITaggingTaxonomyMaxCandidates)
 }
 
 // GetMistralAPIKey returns the Mistral AI API key, honoring the MISTRAL_API_KEY

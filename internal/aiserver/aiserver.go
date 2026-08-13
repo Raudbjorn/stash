@@ -371,19 +371,24 @@ func (s *Server) Start(ctx context.Context) error {
 	// disables analysis and leaves the scheduler, the interactions pipeline and
 	// the recommenders running.
 	provider, rules, taggingStatus := tagging.Build(ctx, tagging.Settings{
-		Provider:            s.deps.Config.GetAITaggingProvider(),
-		ServerURL:           s.deps.Config.GetAITaggingServerURL(),
-		OpenAIKey:           s.deps.Config.GetAITaggingOpenAIKey(),
-		ModelDir:            s.deps.Config.GetAITaggingModelDir(),
-		RulesDir:            s.deps.Config.GetAITaggingRulesDir(),
-		VLMModel:            s.deps.Config.GetAITaggingVLMModel(),
-		VLMLabels:           s.deps.Config.GetAITaggingVLMLabels(),
-		VLMGPULayers:        s.deps.Config.GetAITaggingVLMGPULayers(),
-		VLMContext:          s.deps.Config.GetAITaggingVLMContext(),
-		FFmpegPath:          s.deps.Config.GetFFMpegPath(),
-		FrameInterval:       s.deps.Config.GetAITaggingFrameInterval(),
-		Threshold:           s.deps.Config.GetAITaggingThreshold(),
-		MaxSpanMergeSeconds: s.deps.Config.GetAITaggingMaxSpanMerge(),
+		Provider:              s.deps.Config.GetAITaggingProvider(),
+		ServerURL:             s.deps.Config.GetAITaggingServerURL(),
+		OpenAIKey:             s.deps.Config.GetAITaggingOpenAIKey(),
+		ModelDir:              s.deps.Config.GetAITaggingModelDir(),
+		RulesDir:              s.deps.Config.GetAITaggingRulesDir(),
+		VLMModel:              s.deps.Config.GetAITaggingVLMModel(),
+		VLMLabels:             s.deps.Config.GetAITaggingVLMLabels(),
+		VLMGPULayers:          s.deps.Config.GetAITaggingVLMGPULayers(),
+		VLMContext:            s.deps.Config.GetAITaggingVLMContext(),
+		AnalyzeMode:           s.deps.Config.GetAITaggingAnalyzeMode(),
+		TaxonomyEndpoint:      s.deps.Config.GetAITaggingTaxonomyEndpoint(),
+		TaxonomyAPIKey:        s.deps.Config.GetAITaggingTaxonomyAPIKey(),
+		TaxonomyCategories:    s.deps.Config.GetAITaggingTaxonomyCategories(),
+		TaxonomyMaxCandidates: s.deps.Config.GetAITaggingTaxonomyMaxCandidates(),
+		FFmpegPath:            s.deps.Config.GetFFMpegPath(),
+		FrameInterval:         s.deps.Config.GetAITaggingFrameInterval(),
+		Threshold:             s.deps.Config.GetAITaggingThreshold(),
+		MaxSpanMergeSeconds:   s.deps.Config.GetAITaggingMaxSpanMerge(),
 	})
 	s.taggingStatus = taggingStatus
 	s.tagging = tagging.NewService(s.deps.Repo, db, tagging.Config{

@@ -80,7 +80,7 @@ func TestBuildVLMRejectsInvalidConfigurationWithRemediation(t *testing.T) {
 	}{
 		{
 			name:        "empty labels",
-			settings:    Settings{VLMLabels: nil},
+			settings:    Settings{AnalyzeMode: "legacy", VLMLabels: nil},
 			message:     "ai_tagging_vlm_labels",
 			remediation: "ai_tagging_vlm_labels",
 		},

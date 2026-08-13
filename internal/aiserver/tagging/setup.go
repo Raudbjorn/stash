@@ -15,6 +15,7 @@ import (
 	"github.com/stashapp/stash/pkg/aitag/llamaprov"
 	"github.com/stashapp/stash/pkg/aitag/moderation"
 	"github.com/stashapp/stash/pkg/aitag/native"
+	"github.com/stashapp/stash/pkg/aitag/taxonomy"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/onnx"
 )
@@ -56,7 +57,12 @@ type Settings struct {
 	// VLMGPULayers enables explicit llama.cpp GPU offload when positive.
 	VLMGPULayers int
 	// VLMContext overrides the pair's default context window when positive.
-	VLMContext int
+	VLMContext            int
+	AnalyzeMode           string
+	TaxonomyEndpoint      string
+	TaxonomyAPIKey        string
+	TaxonomyCategories    []string
+	TaxonomyMaxCandidates int
 
 	FFmpegPath          string
 	FrameInterval       float64
@@ -354,10 +360,12 @@ func buildVLM(ctx context.Context, settings Settings, status *Status) (aitag.Pro
 		return nil, false
 	}
 
-	if err := llamaprov.ValidateLabels(settings.VLMLabels); err != nil {
-		status.Message = err.Error()
-		status.Remediation = "Set ai_tagging_vlm_labels to a non-empty list of unique action labels."
-		return nil, false
+	if settings.AnalyzeMode == "legacy" {
+		if err := llamaprov.ValidateLabels(settings.VLMLabels); err != nil {
+			status.Message = err.Error()
+			status.Remediation = "Set ai_tagging_vlm_labels to a non-empty list of unique action labels."
+			return nil, false
+		}
 	}
 
 	artifacts, err := resolveVLMArtifacts(settings)
@@ -398,17 +406,18 @@ func buildVLM(ctx context.Context, settings Settings, status *Status) (aitag.Pro
 		supervisor.Stop(stopCtx)
 	}
 	provider, err := llamaprov.New(llamaprov.Config{
-		Client:          supervisor.Client(),
-		BaseURL:         "http://llama",
-		Pair:            artifacts.pair,
-		Labels:          settings.VLMLabels,
-		Category:        "actions",
-		FFmpegPath:      settings.FFmpegPath,
-		DefaultInterval: llamaprov.DefaultFrameInterval,
-		MaxMergeSeconds: settings.MaxSpanMergeSeconds,
-		Available:       supervisor.Available,
-		WaitReady:       supervisor.WaitReady,
-		CloseHost:       stopHost,
+		Client:           supervisor.Client(),
+		BaseURL:          "http://llama",
+		Pair:             artifacts.pair,
+		Labels:           settings.VLMLabels,
+		AllowEmptyLabels: settings.AnalyzeMode != "legacy",
+		Category:         "actions",
+		FFmpegPath:       settings.FFmpegPath,
+		DefaultInterval:  llamaprov.DefaultFrameInterval,
+		MaxMergeSeconds:  settings.MaxSpanMergeSeconds,
+		Available:        supervisor.Available,
+		WaitReady:        supervisor.WaitReady,
+		CloseHost:        stopHost,
 	})
 	if err != nil {
 		stopHost()
@@ -426,8 +435,26 @@ func buildVLM(ctx context.Context, settings Settings, status *Status) (aitag.Pro
 		return available, hostStatus.Message, remediation
 	}
 	supervisor.Start()
-	*status = status.Current(provider)
-	return provider, true
+	var active aitag.Provider = provider
+	if settings.AnalyzeMode != "legacy" {
+		cache := &taxonomy.Cache{Path: filepath.Join(settings.ModelDir, "taxonomy-cache.json")}
+		if err := cache.Load(cache.Path); err != nil {
+			logger.Warnf("could not load AI tagging taxonomy cache: %v", err)
+		}
+		active = &llamaprov.TaxonomyAnalyzer{
+			Provider: provider,
+			Client: &taxonomy.Client{
+				Cache:    cache,
+				Endpoint: settings.TaxonomyEndpoint,
+				APIKey:   settings.TaxonomyAPIKey,
+			},
+			Categories:    settings.TaxonomyCategories,
+			MaxCandidates: settings.TaxonomyMaxCandidates,
+			MaxPerFrame:   settings.TaxonomyMaxCandidates,
+		}
+	}
+	*status = status.Current(active)
+	return active, true
 }
 
 // AttachHead loads a trained head into a native provider.

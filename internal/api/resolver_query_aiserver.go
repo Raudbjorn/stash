@@ -35,19 +35,24 @@ func buildAIServerConfig(c *manager.Manager) *AIServerConfig {
 	}
 
 	return &AIServerConfig{
-		Enabled:              cfg.GetAIEnabled(),
-		TaggingProvider:      provider,
-		TaggingServerURL:     cfg.GetAITaggingServerURL(),
-		TaggingOpenAIKeySet:  cfg.GetAITaggingOpenAIKeyConfigured(),
-		TaggingModelDir:      cfg.GetAITaggingModelDir(),
-		TaggingRulesDir:      cfg.GetAITaggingRulesDir(),
-		TaggingFrameInterval: cfg.GetAITaggingFrameInterval(),
-		TaggingThreshold:     cfg.GetAITaggingThreshold(),
-		TaggingMaxSpanMerge:  cfg.GetAITaggingMaxSpanMerge(),
-		TaggingVLMModel:      cfg.GetAITaggingVLMModel(),
-		TaggingVLMLabels:     cfg.GetAITaggingVLMLabels(),
-		TaggingVLMGPULayers:  cfg.GetAITaggingVLMGPULayers(),
-		TaggingVLMContext:    cfg.GetAITaggingVLMContext(),
+		Enabled:                      cfg.GetAIEnabled(),
+		TaggingProvider:              provider,
+		TaggingServerURL:             cfg.GetAITaggingServerURL(),
+		TaggingOpenAIKeySet:          cfg.GetAITaggingOpenAIKeyConfigured(),
+		TaggingModelDir:              cfg.GetAITaggingModelDir(),
+		TaggingRulesDir:              cfg.GetAITaggingRulesDir(),
+		TaggingFrameInterval:         cfg.GetAITaggingFrameInterval(),
+		TaggingThreshold:             cfg.GetAITaggingThreshold(),
+		TaggingMaxSpanMerge:          cfg.GetAITaggingMaxSpanMerge(),
+		TaggingVLMModel:              cfg.GetAITaggingVLMModel(),
+		TaggingVLMLabels:             cfg.GetAITaggingVLMLabels(),
+		TaggingVLMGPULayers:          cfg.GetAITaggingVLMGPULayers(),
+		TaggingVLMContext:            cfg.GetAITaggingVLMContext(),
+		TaggingAnalyzeMode:           cfg.GetAITaggingAnalyzeMode(),
+		TaggingTaxonomyEndpoint:      cfg.GetAITaggingTaxonomyEndpoint(),
+		TaggingTaxonomyAPIKeySet:     cfg.GetAITaggingTaxonomyAPIKey() != "",
+		TaggingTaxonomyCategories:    cfg.GetAITaggingTaxonomyCategories(),
+		TaggingTaxonomyMaxCandidates: cfg.GetAITaggingTaxonomyMaxCandidates(),
 	}
 }
 
