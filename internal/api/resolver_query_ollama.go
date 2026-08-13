@@ -28,6 +28,7 @@ func (r *queryResolver) OllamaStatus(ctx context.Context) (*OllamaStatus, error)
 		Available: available,
 		Config: &OllamaConfig{
 			BaseURL:                   ollamaCfg.BaseURL,
+			Backend:                   ollamaBackendFromConfig(ollamaCfg.Backend),
 			Model:                     ollamaCfg.Model,
 			Timeout:                   ollamaCfg.Timeout,
 			Enabled:                   ollamaCfg.Enabled,

@@ -207,11 +207,14 @@ const (
 	DubbingVoice        = "dubbing_voice"
 	dubbingVoiceDefault = "nix"
 
-	// Ollama dictionary / word-explanation service (opt-in, disabled by
-	// default). OllamaBaseURL is empty by default; when unset (or disabled)
-	// no requests are made.
+	// Text-generation service used for dictionary / word explanation requests.
+	// The historical Ollama names are retained in the persisted config and
+	// GraphQL API, while OllamaBackend selects either Ollama's native protocol
+	// or an OpenAI-compatible server such as llama-server.
 	OllamaEnabled                   = "ollama_enabled"
 	ollamaEnabledDefault            = false
+	OllamaBackend                   = "ollama_backend"
+	ollamaBackendDefault            = "ollama"
 	OllamaBaseURL                   = "ollama_base_url"
 	OllamaModel                     = "ollama_model"
 	ollamaModelDefault              = "huihui_ai/qwen3-abliterated:8b-v2"
@@ -2167,6 +2170,16 @@ func (i *Config) GetOllamaEnabled() bool {
 // service is unconfigured; no host is auto-detected or assumed.
 func (i *Config) GetOllamaBaseURL() string {
 	return strings.TrimRight(i.getString(OllamaBaseURL), "/")
+}
+
+// GetOllamaBackend returns the configured text-generation protocol.
+func (i *Config) GetOllamaBackend() string {
+	switch ret := i.getString(OllamaBackend); ret {
+	case "openai_compatible":
+		return ret
+	default:
+		return ollamaBackendDefault
+	}
 }
 
 // GetOllamaModel returns the configured Ollama model name.

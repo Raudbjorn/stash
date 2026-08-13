@@ -6,7 +6,7 @@ import {
   mutateConfigureOllama,
   useOllamaSettings,
 } from "src/core/StashService";
-import { OllamaConfigInput } from "src/core/generated-graphql";
+import { OllamaBackend, OllamaConfigInput } from "src/core/generated-graphql";
 import { useToast } from "src/hooks/Toast";
 import { LoadingIndicator } from "src/components/Shared/LoadingIndicator";
 
@@ -29,6 +29,7 @@ export const OllamaSettingsCard: React.FC = () => {
     const { config } = data.ollamaStatus;
     setForm({
       baseUrl: config.baseUrl,
+      backend: config.backend,
       model: config.model,
       timeout: config.timeout,
       enabled: config.enabled,
@@ -89,7 +90,33 @@ export const OllamaSettingsCard: React.FC = () => {
         onChange={(v) => update({ enabled: v })}
       />
 
-      <Setting headingID="config.ollama.base_url">
+      <Setting
+        headingID="config.ollama.backend"
+        subHeadingID="config.ollama.backend_description"
+      >
+        <Form.Control
+          as="select"
+          className="input-control"
+          value={form.backend}
+          onChange={(e) =>
+            update({ backend: e.currentTarget.value as OllamaBackend })
+          }
+        >
+          <option value={OllamaBackend.Ollama}>
+            {intl.formatMessage({ id: "config.ollama.backend_ollama" })}
+          </option>
+          <option value={OllamaBackend.OpenaiCompatible}>
+            {intl.formatMessage({
+              id: "config.ollama.backend_openai_compatible",
+            })}
+          </option>
+        </Form.Control>
+      </Setting>
+
+      <Setting
+        headingID="config.ollama.base_url"
+        subHeadingID="config.ollama.base_url_description"
+      >
         <Form.Control
           className="text-input"
           value={form.baseUrl}

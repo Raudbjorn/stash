@@ -1,8 +1,15 @@
+"Text-generation protocol used by the dictionary service."
+enum OllamaBackend {
+  OLLAMA
+  OPENAI_COMPATIBLE
+}
+
 """
 Ollama Configuration
 """
 type OllamaConfig {
   baseUrl: String!
+  backend: OllamaBackend!
   model: String!
   timeout: Int!
   enabled: Boolean!
@@ -17,6 +24,7 @@ Ollama Configuration Input
 """
 input OllamaConfigInput {
   baseUrl: String!
+  backend: OllamaBackend!
   model: String!
   timeout: Int!
   enabled: Boolean!
