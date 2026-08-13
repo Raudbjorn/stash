@@ -66,6 +66,27 @@ func (r *mutationResolver) ConfigureAIServer(ctx context.Context, input AIServer
 	return buildAIServerConfig(mgr), nil
 }
 
+func (r *mutationResolver) RefreshAITaggingTaxonomy(ctx context.Context) (*AIServerTaxonomyRefresh, error) {
+	mgr := manager.GetInstance()
+	service := mgr.AIServer.Tagging()
+	if service == nil {
+		return nil, errors.New("AI tagging service is not running")
+	}
+	status, err := service.RefreshTaxonomy(
+		ctx,
+		mgr.Config.GetAITaggingTaxonomyEndpoint(),
+		mgr.Config.GetAITaggingTaxonomyAPIKey(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &AIServerTaxonomyRefresh{
+		Endpoint:    status.Endpoint,
+		Entries:     status.Entries,
+		RefreshedAt: status.RefreshedAt,
+	}, nil
+}
+
 func (r *mutationResolver) AnalyzeSceneWithAi(ctx context.Context, sceneID string) (*AnalyzeSceneWithAIResult, error) {
 	mgr := manager.GetInstance()
 

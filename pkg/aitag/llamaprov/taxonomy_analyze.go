@@ -170,15 +170,11 @@ func (a *TaxonomyAnalyzer) Analyze(ctx context.Context, videoPath string, opts a
 	spans := aitag.CollapseFrames(detected, interval, a.Provider.maxMerge)
 	aitag.SortSpans(spans)
 	model := a.Provider.modelInfo(interval)
-	endpoint := a.Client.Endpoint
+	cacheStatus := a.Client.Status()
+	endpoint := cacheStatus.Endpoint
 	refreshedAt := ""
-	if a.Client.Cache != nil {
-		if a.Client.Cache.Endpoint != "" {
-			endpoint = a.Client.Cache.Endpoint
-		}
-		if !a.Client.Cache.UpdatedAt.IsZero() {
-			refreshedAt = a.Client.Cache.UpdatedAt.UTC().Format(time.RFC3339)
-		}
+	if !cacheStatus.UpdatedAt.IsZero() {
+		refreshedAt = cacheStatus.UpdatedAt.UTC().Format(time.RFC3339)
 	}
 	model.Extra = map[string]any{
 		"provider":              ProviderName,

@@ -9,6 +9,8 @@ import (
 
 	"github.com/stashapp/stash/internal/aiserver/store"
 	"github.com/stashapp/stash/pkg/aitag"
+	"github.com/stashapp/stash/pkg/aitag/llamaprov"
+	"github.com/stashapp/stash/pkg/aitag/taxonomy"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
 	"github.com/stashapp/stash/pkg/txn"
@@ -86,6 +88,53 @@ func NewService(repo models.Repository, db *store.DB, cfg Config) *Service {
 		mergeSecs:       merge,
 		defaultInterval: interval,
 		ffmpegPath:      ffmpegPath,
+	}
+}
+
+// TaxonomyStatus describes the active taxonomy snapshot.
+type TaxonomyStatus struct {
+	Endpoint             string
+	Entries              int
+	RefreshedAt          time.Time
+	CandidatesByCategory []string
+}
+
+// RefreshTaxonomy forces a complete fetch without restarting the AI server.
+func (s *Service) RefreshTaxonomy(ctx context.Context, endpoint, apiKey string) (TaxonomyStatus, error) {
+	s.mu.RLock()
+	analyzer, ok := s.provider.(*llamaprov.TaxonomyAnalyzer)
+	s.mu.RUnlock()
+	if !ok || analyzer.Client == nil {
+		return TaxonomyStatus{}, errors.New("taxonomy analysis is not active")
+	}
+	cache, err := analyzer.Client.Refresh(ctx, endpoint, apiKey)
+	if err != nil {
+		return TaxonomyStatus{}, err
+	}
+	return taxonomyStatus(analyzer, cache), nil
+}
+
+// TaxonomyStatus returns the active cache without triggering network access.
+func (s *Service) TaxonomyStatus() TaxonomyStatus {
+	s.mu.RLock()
+	analyzer, ok := s.provider.(*llamaprov.TaxonomyAnalyzer)
+	s.mu.RUnlock()
+	if !ok || analyzer.Client == nil {
+		return TaxonomyStatus{}
+	}
+	return taxonomyStatus(analyzer, analyzer.Client.Status())
+}
+
+func taxonomyStatus(analyzer *llamaprov.TaxonomyAnalyzer, cache taxonomy.Cache) TaxonomyStatus {
+	categories := append([]string(nil), analyzer.Categories...)
+	if len(categories) == 0 {
+		categories = llamaprov.DefaultTaxonomyCategories()
+	}
+	return TaxonomyStatus{
+		Endpoint:             cache.Endpoint,
+		Entries:              len(cache.Entries),
+		RefreshedAt:          cache.UpdatedAt,
+		CandidatesByCategory: categories,
 	}
 }
 

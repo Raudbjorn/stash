@@ -150,6 +150,20 @@ func (r *queryResolver) AiTaggingStatus(ctx context.Context) (*AITaggingStatus, 
 	}, nil
 }
 
+func (r *queryResolver) AiServerTaxonomy(ctx context.Context) (*AIServerTaxonomyStatus, error) {
+	service := manager.GetInstance().AIServer.Tagging()
+	if service == nil {
+		return &AIServerTaxonomyStatus{CandidatesByCategory: []string{}}, nil
+	}
+	status := service.TaxonomyStatus()
+	return &AIServerTaxonomyStatus{
+		Endpoint:             status.Endpoint,
+		Entries:              status.Entries,
+		RefreshedAt:          status.RefreshedAt,
+		CandidatesByCategory: status.CandidatesByCategory,
+	}, nil
+}
+
 func (r *queryResolver) AiTaggingSpans(ctx context.Context, sceneID string) ([]*AITaggingSpanGroup, error) {
 	mgr := manager.GetInstance()
 	db := mgr.AIServer.DB()

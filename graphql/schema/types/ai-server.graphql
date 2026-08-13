@@ -63,6 +63,19 @@ input AIServerConfigInput {
   taggingTaxonomyMaxCandidates: Int!
 }
 
+type AIServerTaxonomyRefresh {
+  endpoint: String!
+  entries: Int!
+  refreshedAt: Time!
+}
+
+type AIServerTaxonomyStatus {
+  endpoint: String!
+  entries: Int!
+  refreshedAt: Time!
+  candidatesByCategory: [String!]!
+}
+
 type AIServerHealthComponent {
   status: String!
   message: String!

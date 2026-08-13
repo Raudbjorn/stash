@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/stashapp/stash/pkg/scraper"
@@ -14,6 +15,7 @@ import (
 // Client provides freshness, category selection, and label resolution over a
 // taxonomy cache.
 type Client struct {
+	mu                 sync.Mutex
 	Cache              *Cache
 	Endpoint           string
 	APIKey             string
@@ -24,6 +26,11 @@ type Client struct {
 // CandidatesByCategory returns the requested categories, deduplicated by
 // StashDB ID. Category names are matched case-insensitively.
 func (c *Client) CandidatesByCategory(ctx context.Context, categories []string) (map[string][]Entry, error) {
+	if c == nil {
+		return nil, fmt.Errorf("taxonomy client is required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if err := c.ensure(ctx); err != nil {
 		return nil, err
 	}
@@ -59,6 +66,11 @@ func (c *Client) CandidatesByCategory(ctx context.Context, categories []string) 
 
 // Resolve maps a canonical name or alias to its authoritative taxonomy entry.
 func (c *Client) Resolve(ctx context.Context, label string) (Entry, bool) {
+	if c == nil {
+		return Entry{}, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if err := c.ensure(ctx); err != nil {
 		return Entry{}, false
 	}
@@ -80,6 +92,50 @@ func (c *Client) Resolve(ctx context.Context, label string) (Entry, bool) {
 		}
 	}
 	return Entry{}, false
+}
+
+// Refresh forces an authoritative fetch and atomically replaces the active
+// cache after the complete taxonomy has been persisted.
+func (c *Client) Refresh(ctx context.Context, endpoint, apiKey string) (Cache, error) {
+	if c == nil {
+		return Cache{}, fmt.Errorf("taxonomy client is required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.Cache == nil {
+		return Cache{}, fmt.Errorf("taxonomy cache is required")
+	}
+	next := &Cache{Path: c.Cache.Path}
+	if err := next.Fetch(ctx, endpoint, apiKey); err != nil {
+		return Cache{}, err
+	}
+	c.Cache = next
+	c.Endpoint = endpoint
+	c.APIKey = apiKey
+	return cloneCache(next), nil
+}
+
+// Status returns an immutable snapshot suitable for diagnostics.
+func (c *Client) Status() Cache {
+	if c == nil {
+		return Cache{Entries: map[string]Entry{}}
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.Cache == nil {
+		return Cache{Endpoint: c.Endpoint, Entries: map[string]Entry{}}
+	}
+	return cloneCache(c.Cache)
+}
+
+func cloneCache(cache *Cache) Cache {
+	out := *cache
+	out.Entries = make(map[string]Entry, len(cache.Entries))
+	for id, entry := range cache.Entries {
+		entry.Aliases = append([]string(nil), entry.Aliases...)
+		out.Entries[id] = entry
+	}
+	return out
 }
 
 func (c *Client) ensure(ctx context.Context) error {
