@@ -121,7 +121,7 @@ func (s *Service) handler() action.Handler {
 				// One scene failing does not abandon the rest of a selection:
 				// a single unreadable file should not lose an hour of work on
 				// the other forty-nine.
-				results = append(results, &AnalyzeResult{SceneID: sceneID, Provider: "error"})
+				results = append(results, &AnalyzeResult{SceneID: sceneID, Provider: "error", Error: err.Error()})
 				continue
 			}
 			results = append(results, result)
@@ -140,9 +140,11 @@ func summarise(results []*AnalyzeResult) map[string]any {
 		removed int
 		failed  int
 	)
+	failedScenes := make([]int, 0)
 	for _, result := range results {
-		if result.Provider == "error" {
+		if result.Error != "" || result.Provider == "error" {
 			failed++
+			failedScenes = append(failedScenes, result.SceneID)
 			continue
 		}
 		spans += result.Spans
@@ -163,6 +165,8 @@ func summarise(results []*AnalyzeResult) map[string]any {
 		"message":         message,
 		"scenes":          len(results),
 		"failed":          failed,
+		"failed_scenes":   failedScenes,
+		"results":         results,
 		"spans":           spans,
 		"markers":         markers,
 		"markers_created": created,

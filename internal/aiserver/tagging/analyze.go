@@ -215,6 +215,8 @@ type AnalyzeResult struct {
 	Spans    int              `json:"spans"`
 	Markers  int              `json:"markers"`
 	Elapsed  float64          `json:"elapsed_seconds"`
+	Error    string           `json:"error,omitempty"`
+	Frames   int              `json:"frames"`
 	Write    *WritebackResult `json:"writeback,omitempty"`
 }
 
