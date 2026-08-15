@@ -258,25 +258,18 @@ func flattenCandidates(byCategory map[string][]taxonomy.Entry) []taxonomy.Entry 
 }
 
 type descriptionIndex struct {
-	words  map[string]struct{}
-	phrase string
+	words map[string]struct{}
 }
 
 func descriptionTerms(description string) descriptionIndex {
 	parts := descriptionSplitRE.Split(strings.ToLower(description), -1)
 	index := descriptionIndex{words: make(map[string]struct{}, len(parts))}
-	phraseParts := make([]string, 0, len(parts))
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		phraseParts = append(phraseParts, part)
 		if len(part) >= 3 {
 			index.words[part] = struct{}{}
 		}
 	}
-	index.phrase = strings.Join(phraseParts, " ")
 	return index
 }
 
@@ -294,20 +287,15 @@ func entryMatchesDescription(entry taxonomy.Entry, index descriptionIndex) bool 
 
 func nameMatchesDescription(name string, index descriptionIndex) bool {
 	parts := descriptionSplitRE.Split(strings.ToLower(name), -1)
-	nameTerms := make([]string, 0, len(parts))
 	for _, part := range parts {
-		if len(part) >= 3 {
-			nameTerms = append(nameTerms, part)
+		if len(part) < 3 {
+			continue
+		}
+		if _, ok := index.words[part]; ok {
+			return true
 		}
 	}
-	if len(nameTerms) == 0 {
-		return false
-	}
-	if len(nameTerms) == 1 {
-		_, ok := index.words[nameTerms[0]]
-		return ok
-	}
-	return strings.Contains(" "+index.phrase+" ", " "+strings.Join(nameTerms, " ")+" ")
+	return false
 }
 
 var _ aitag.Provider = (*TaxonomyAnalyzer)(nil)

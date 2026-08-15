@@ -105,6 +105,23 @@ func TestTaxonomyAnalyzerFallsBackToMinimumCandidates(t *testing.T) {
 	}
 }
 
+func TestDescriptionTokenSelectsMultiwordTaxonomyName(t *testing.T) {
+	analyzer := TaxonomyAnalyzer{MaxCandidates: 8, MaxPerFrame: 8}
+	pool := []taxonomy.Entry{
+		{StashID: "generic", Canonical: "Dildo", Category: "Accessories"},
+		{StashID: "play", Canonical: "Dildo Play", Category: "Acts"},
+		{StashID: "other", Canonical: "Couch", Category: "Surfaces"},
+	}
+	got := analyzer.selectCandidates("A woman is holding a dildo.", pool)
+	names := make([]string, len(got))
+	for i := range got {
+		names[i] = got[i].Canonical
+	}
+	if !reflect.DeepEqual(names, []string{"Dildo", "Dildo Play"}) {
+		t.Fatalf("candidates = %q", names)
+	}
+}
+
 func newTaxonomyTestAnalyzer(t *testing.T, server *httptest.Server, ffmpeg string, entries map[string]taxonomy.Entry, categories []string, maxCandidates int) *TaxonomyAnalyzer {
 	t.Helper()
 	provider, err := New(Config{
