@@ -202,11 +202,25 @@ func (a *TaxonomyAnalyzer) Analyze(ctx context.Context, videoPath string, opts a
 
 func (a *TaxonomyAnalyzer) selectCandidates(description string, pool []taxonomy.Entry) []taxonomy.Entry {
 	terms := descriptionTerms(description)
-	matched := make([]taxonomy.Entry, 0)
+	type scoredCandidate struct {
+		entry taxonomy.Entry
+		score int
+	}
+	scored := make([]scoredCandidate, 0)
 	for _, entry := range pool {
-		if entryMatchesDescription(entry, terms) {
-			matched = append(matched, entry)
+		if score := entryDescriptionScore(entry, terms); score > 0 {
+			scored = append(scored, scoredCandidate{entry: entry, score: score})
 		}
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].score == scored[j].score {
+			return scored[i].entry.Canonical < scored[j].entry.Canonical
+		}
+		return scored[i].score > scored[j].score
+	})
+	matched := make([]taxonomy.Entry, len(scored))
+	for i := range scored {
+		matched[i] = scored[i].entry
 	}
 	minCandidates := a.MinCandidates
 	if minCandidates <= 0 {
@@ -273,29 +287,34 @@ func descriptionTerms(description string) descriptionIndex {
 	return index
 }
 
-func entryMatchesDescription(entry taxonomy.Entry, index descriptionIndex) bool {
-	if nameMatchesDescription(entry.Canonical, index) {
-		return true
-	}
+func entryDescriptionScore(entry taxonomy.Entry, index descriptionIndex) int {
+	score := nameDescriptionScore(entry.Canonical, index)
 	for _, alias := range entry.Aliases {
-		if nameMatchesDescription(alias, index) {
-			return true
-		}
+		score = max(score, nameDescriptionScore(alias, index))
 	}
-	return false
+	return score
 }
 
-func nameMatchesDescription(name string, index descriptionIndex) bool {
+func nameDescriptionScore(name string, index descriptionIndex) int {
 	parts := descriptionSplitRE.Split(strings.ToLower(name), -1)
+	terms := 0
+	matches := 0
 	for _, part := range parts {
 		if len(part) < 3 {
 			continue
 		}
+		terms++
 		if _, ok := index.words[part]; ok {
-			return true
+			matches++
 		}
 	}
-	return false
+	if matches == 0 {
+		return 0
+	}
+	if matches == terms {
+		return 1000 + 100/terms
+	}
+	return matches * 100 / terms
 }
 
 var _ aitag.Provider = (*TaxonomyAnalyzer)(nil)
