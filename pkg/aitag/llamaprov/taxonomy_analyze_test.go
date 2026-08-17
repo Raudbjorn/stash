@@ -3,6 +3,7 @@ package llamaprov
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
@@ -112,13 +113,223 @@ func TestDescriptionTokenSelectsMultiwordTaxonomyName(t *testing.T) {
 		{StashID: "play", Canonical: "Dildo Play", Category: "Acts"},
 		{StashID: "other", Canonical: "Couch", Category: "Surfaces"},
 	}
-	got := analyzer.selectCandidates("A woman is holding a dildo.", pool)
+	index := &taxonomy.BM25{}
+	index.Rebuild(pool)
+	got := analyzer.selectCandidates("A woman is holding a dildo.", pool, index)
 	names := make([]string, len(got))
 	for i := range got {
 		names[i] = got[i].Canonical
 	}
-	if !reflect.DeepEqual(names, []string{"Dildo", "Dildo Play"}) {
+	if !reflect.DeepEqual(names, []string{"Dildo", "Dildo Play", "Couch"}) {
 		t.Fatalf("candidates = %q", names)
+	}
+}
+
+func TestCandidateFusionRanksDildoEntriesInLargeTaxonomy(t *testing.T) {
+	pool := []taxonomy.Entry{
+		{StashID: "dildo", Canonical: "Dildo", Category: "Accessories"},
+		{StashID: "footjob", Canonical: "Dildo Footjob", Aliases: []string{"dildo woman"}, Category: "Acts"},
+		{StashID: "couch", Canonical: "Couch", Category: "Surfaces"},
+	}
+	for i := range 197 {
+		pool = append(pool, taxonomy.Entry{
+			StashID:   fmt.Sprintf("generic-%03d", i),
+			Canonical: fmt.Sprintf("Generic Placeholder %03d", i),
+			Category:  "Themes",
+		})
+	}
+	index := &taxonomy.BM25{}
+	index.Rebuild(pool)
+	analyzer := TaxonomyAnalyzer{MaxCandidates: 32, MaxPerFrame: 5}
+	got := analyzer.selectCandidates("dildo woman", pool, index)
+	names := candidateNames(got)
+	if !containsString(names, "Dildo") || !containsString(names, "Dildo Footjob") {
+		t.Fatalf("top five candidates = %q", names)
+	}
+}
+
+func TestCandidateFusionKeepsExactAliasFirst(t *testing.T) {
+	pool := []taxonomy.Entry{
+		{StashID: "blowjob", Canonical: "Blowjob", Aliases: []string{"oral sex"}, Category: "Acts"},
+		{StashID: "bdsm", Canonical: "BDSM", Category: "Themes"},
+		{StashID: "couch", Canonical: "Couch", Category: "Surfaces"},
+	}
+	index := &taxonomy.BM25{}
+	index.Rebuild(pool)
+	analyzer := TaxonomyAnalyzer{MinCandidates: 1, MaxCandidates: 8, MaxPerFrame: 5}
+	names := candidateNames(analyzer.selectCandidates("Blowjob", pool, index))
+	if len(names) == 0 || names[0] != "Blowjob" {
+		t.Fatalf("candidates = %q, want Blowjob first", names)
+	}
+	if containsString(names, "BDSM") {
+		t.Fatalf("unmatched BDSM leaked into candidates: %q", names)
+	}
+}
+
+func TestCandidateFusionBackfillsEmptyCaption(t *testing.T) {
+	pool := []taxonomy.Entry{
+		{StashID: "a", Canonical: "Alpha"},
+		{StashID: "b", Canonical: "Beta"},
+		{StashID: "c", Canonical: "Gamma"},
+		{StashID: "d", Canonical: "Delta"},
+	}
+	index := &taxonomy.BM25{}
+	index.Rebuild(pool)
+	analyzer := TaxonomyAnalyzer{MinCandidates: 3, MaxCandidates: 8}
+	names := candidateNames(analyzer.selectCandidates("", pool, index))
+	if want := []string{"Alpha", "Beta", "Gamma"}; !reflect.DeepEqual(names, want) {
+		t.Fatalf("fallback = %q, want %q", names, want)
+	}
+}
+
+func candidateNames(entries []taxonomy.Entry) []string {
+	ret := make([]string, len(entries))
+	for i := range entries {
+		ret[i] = entries[i].Canonical
+	}
+	return ret
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestSummarizeSupportsCountsFramesAndSpans(t *testing.T) {
+	end := 6.0
+	supports := summarizeSupports(aitag.SpansByCategory{
+		"actions": {
+			"Blowjob": {
+				{Start: 0, End: &end},
+				{Start: 12},
+			},
+			"Cowgirl": {{Start: 4}},
+		},
+	}, 2, map[string]string{"Blowjob": "blowjob-id"})
+
+	want := []LabelSupport{
+		{Tag: "Blowjob", StashID: "blowjob-id", Frames: 5, SpanCount: 2, FirstAt: 0, LastAt: 12},
+		{Tag: "Cowgirl", Frames: 1, SpanCount: 1, FirstAt: 4, LastAt: 4},
+	}
+	if !reflect.DeepEqual(supports, want) {
+		t.Fatalf("supports = %#v, want %#v", supports, want)
+	}
+}
+
+func TestSupportGateStrictAndShadow(t *testing.T) {
+	spans := supportGateFixture()
+	supports := summarizeSupports(spans, 2, nil)
+
+	strict, kept, dropped := applySupportGate(spans, supports, AcceptStrict, 2, 0, 6, nil)
+	if got := aitag.CountSpans(strict); got != 4 {
+		t.Fatalf("strict spans = %d, want four supported Blowjob spans", got)
+	}
+	if len(kept) != 1 || kept[0].Tag != "Blowjob" || kept[0].Frames != 8 || kept[0].SpanCount != 4 {
+		t.Fatalf("strict kept supports = %#v", kept)
+	}
+	if len(dropped) != 2 {
+		t.Fatalf("strict dropped supports = %#v", dropped)
+	}
+
+	shadow, shadowKept, shadowDropped := applySupportGate(spans, supports, AcceptShadow, 2, 0, 6, nil)
+	if got := aitag.CountSpans(shadow); got != 6 {
+		t.Fatalf("shadow spans = %d, want all six", got)
+	}
+	if len(shadowKept) != 1 || len(shadowDropped) != 2 {
+		t.Fatalf("shadow diagnostics kept=%#v dropped=%#v", shadowKept, shadowDropped)
+	}
+}
+
+func TestSupportGateRescuesConfirmedSingleFrameLabel(t *testing.T) {
+	spans := supportGateFixture()
+	supports := summarizeSupports(spans, 2, nil)
+	filtered, _, dropped := applySupportGate(
+		spans,
+		supports,
+		AcceptRescue,
+		2,
+		0,
+		6,
+		map[string]bool{"Cowgirl": true, "Dildo Footjob": false},
+	)
+	if got := aitag.CountSpans(filtered); got != 5 {
+		t.Fatalf("rescue spans = %d, want four Blowjob plus Cowgirl", got)
+	}
+	if _, ok := filtered["actions"]["Cowgirl"]; !ok {
+		t.Fatal("confirmed Cowgirl was not rescued")
+	}
+	if _, ok := filtered["actions"]["Dildo Footjob"]; ok {
+		t.Fatal("rejected Dildo Footjob survived rescue")
+	}
+	if len(dropped) != 1 || dropped[0].Tag != "Dildo Footjob" {
+		t.Fatalf("dropped supports = %#v", dropped)
+	}
+}
+
+func TestTaxonomyAnalyzerRescueReverifiesOneCandidate(t *testing.T) {
+	ffmpeg, video := makeTaxonomyTestVideo(t)
+	entries := map[string]taxonomy.Entry{
+		"cowgirl": {StashID: "cowgirl", Canonical: "Cowgirl", Category: "Acts"},
+		"dildo":   {StashID: "dildo", Canonical: "Dildo Footjob", Category: "Acts"},
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request completionRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		if request.ResponseFormat == nil {
+			writeTextCompletion(t, w, "cowgirl dildo footjob")
+			return
+		}
+		labels := schemaRequiredLabels(t, request.ResponseFormat.JSONSchema.Schema)
+		decisions := make(map[string]string, len(labels))
+		for _, label := range labels {
+			if len(labels) > 1 || label == "Cowgirl" {
+				decisions[label] = "yes"
+			} else {
+				decisions[label] = "no"
+			}
+		}
+		encoded, _ := json.Marshal(decisions)
+		writeTextCompletion(t, w, string(encoded))
+	}))
+	defer server.Close()
+
+	analyzer := newTaxonomyTestAnalyzer(t, server, ffmpeg, entries, []string{"Acts"}, 4)
+	analyzer.AcceptMode = AcceptRescue
+	analyzer.MinSupport = 2
+	result, err := analyzer.Analyze(context.Background(), video, aitag.Options{FrameInterval: 2}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := aitag.CountSpans(result.Spans); got != 1 {
+		t.Fatalf("rescue result spans = %d: %#v", got, result.Spans)
+	}
+	if _, ok := result.Spans["actions"]["Cowgirl"]; !ok {
+		t.Fatalf("Cowgirl was not rescued: %#v", result.Spans)
+	}
+	if _, ok := result.Spans["actions"]["Dildo Footjob"]; ok {
+		t.Fatalf("Dildo Footjob survived rescue: %#v", result.Spans)
+	}
+}
+
+func supportGateFixture() aitag.SpansByCategory {
+	end2, end6, end10, end14 := 2.0, 6.0, 10.0, 14.0
+	return aitag.SpansByCategory{
+		"actions": {
+			"Blowjob": {
+				{Start: 0, End: &end2},
+				{Start: 4, End: &end6},
+				{Start: 8, End: &end10},
+				{Start: 12, End: &end14},
+			},
+			"Cowgirl":       {{Start: 16}},
+			"Dildo Footjob": {{Start: 20}},
+		},
 	}
 }
 

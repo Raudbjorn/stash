@@ -17,6 +17,10 @@ import (
 type Client struct {
 	mu                 sync.Mutex
 	Cache              *Cache
+	bm25               *BM25
+	bm25BuiltAt        time.Time
+	bm25Entries        int
+	bm25Aliases        int
 	Endpoint           string
 	APIKey             string
 	StaleTolerance     time.Duration
@@ -34,6 +38,7 @@ func (c *Client) CandidatesByCategory(ctx context.Context, categories []string) 
 	if err := c.ensure(ctx); err != nil {
 		return nil, err
 	}
+	c.rebuildBM25Locked()
 	wanted := make(map[string]string, len(categories))
 	for _, category := range categories {
 		category = strings.TrimSpace(category)
@@ -92,6 +97,30 @@ func (c *Client) Resolve(ctx context.Context, label string) (Entry, bool) {
 		}
 	}
 	return Entry{}, false
+}
+
+// BM25Index returns the lexical index for the active cache. The returned index
+// is safe for concurrent reads and remains valid across atomic rebuilds.
+func (c *Client) BM25Index(ctx context.Context) (*BM25, error) {
+	if c == nil {
+		return nil, fmt.Errorf("taxonomy client is required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := c.ensure(ctx); err != nil {
+		return nil, err
+	}
+	c.rebuildBM25Locked()
+	return c.bm25, nil
+}
+
+// BM25Top returns lexical taxonomy candidates ranked by the active cache.
+func (c *Client) BM25Top(ctx context.Context, query string, k int) ([]BM25Hit, error) {
+	index, err := c.BM25Index(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return index.Top(query, k), nil
 }
 
 // Refresh forces an authoritative fetch and atomically replaces the active
@@ -166,6 +195,26 @@ func (c *Client) ensure(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+func (c *Client) rebuildBM25Locked() {
+	aliasCount := 0
+	for _, entry := range c.Cache.Entries {
+		aliasCount += len(entry.Aliases)
+	}
+	if c.bm25 != nil &&
+		c.bm25Entries == len(c.Cache.Entries) &&
+		c.bm25Aliases == aliasCount &&
+		c.bm25BuiltAt.Equal(c.Cache.UpdatedAt) {
+		return
+	}
+	if c.bm25 == nil {
+		c.bm25 = &BM25{}
+	}
+	c.bm25.Rebuild(sortedEntries(c.Cache.Entries))
+	c.bm25Entries = len(c.Cache.Entries)
+	c.bm25Aliases = aliasCount
+	c.bm25BuiltAt = c.Cache.UpdatedAt
 }
 
 func (c *Client) staleUsable(now time.Time) bool {

@@ -2,8 +2,9 @@ package llamaprov
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"regexp"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -11,11 +12,8 @@ import (
 	"github.com/stashapp/stash/pkg/aitag"
 	"github.com/stashapp/stash/pkg/aitag/native"
 	"github.com/stashapp/stash/pkg/aitag/taxonomy"
+	"github.com/stashapp/stash/pkg/logger"
 )
-
-const defaultMinCandidates = 3
-
-var descriptionSplitRE = regexp.MustCompile(`[ ,;:/()\[\]\.]+`)
 
 // DefaultTaxonomyCategories returns the StashDB categories used when none are
 // configured.
@@ -23,15 +21,32 @@ func DefaultTaxonomyCategories() []string {
 	return []string{"Acts", "Accessories", "Themes", "Roles", "Genitals", "Surfaces", "Clothing"}
 }
 
+// LabelSupport summarizes how often one canonical taxonomy label was verified
+// across a sampled scene.
+type LabelSupport struct {
+	Tag       string  `json:"tag"`
+	StashID   string  `json:"stash_id,omitempty"`
+	Frames    int     `json:"frames"`
+	SpanCount int     `json:"span_count"`
+	FirstAt   float64 `json:"first_at"`
+	LastAt    float64 `json:"last_at"`
+}
+
 // TaxonomyAnalyzer wraps a llama VLM with a taxonomy-grounded two-pass video
 // analyzer. The underlying provider remains available to legacy VLM evaluation.
 type TaxonomyAnalyzer struct {
-	Provider      *Provider
-	Client        *taxonomy.Client
-	Categories    []string
-	MaxCandidates int
-	MaxPerFrame   int
-	MinCandidates int
+	Provider           *Provider
+	Client             *taxonomy.Client
+	Categories         []string
+	MaxCandidates      int
+	MaxPerFrame        int
+	MinCandidates      int
+	AcceptMode         AcceptMode
+	MinSupport         int
+	MinSupportFraction float64
+	Reranker           Reranker
+	RerankTopK         int
+	VoyageQueryInstr   string
 }
 
 func (a *TaxonomyAnalyzer) Name() string { return a.Provider.Name() }
@@ -83,6 +98,10 @@ func (a *TaxonomyAnalyzer) Analyze(ctx context.Context, videoPath string, opts a
 	if len(pool) == 0 {
 		return nil, fmt.Errorf("taxonomy has no candidates in categories %s", strings.Join(categories, ", "))
 	}
+	bm25, err := a.Client.BM25Index(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	duration, err := native.ProbeDuration(ctx, a.Provider.ffmpegPath, videoPath)
 	if err != nil {
@@ -99,6 +118,7 @@ func (a *TaxonomyAnalyzer) Analyze(ctx context.Context, videoPath string, opts a
 	defer frames.Close()
 
 	detected := make([]aitag.Frame, 0)
+	sampledTimes := make([]float64, 0)
 	resolvedIDs := make(map[string]string)
 	var buffer []byte
 	var lastTime float64
@@ -115,6 +135,7 @@ func (a *TaxonomyAnalyzer) Analyze(ctx context.Context, videoPath string, opts a
 		}
 		buffer = frame.RGB
 		lastTime = frame.Time
+		sampledTimes = append(sampledTimes, frame.Time)
 		classifierFrame := aitag.Frame{
 			RGB: frame.RGB, Width: frames.Width, Height: frames.Height, Time: frame.Time,
 		}
@@ -122,7 +143,34 @@ func (a *TaxonomyAnalyzer) Analyze(ctx context.Context, videoPath string, opts a
 		if err != nil {
 			return nil, fmt.Errorf("describe frame %.3f: %w", frame.Time, err)
 		}
-		candidates := a.selectCandidates(description, pool)
+		candidates := a.selectCandidates(description, pool, bm25)
+		if a.Reranker != nil {
+			instruction := a.VoyageQueryInstr
+			if instruction == "" {
+				instruction = defaultVoyageQueryInstruction
+			}
+			topK := a.RerankTopK
+			if topK <= 0 {
+				topK = defaultMaxPerFrame
+			}
+			rerankStarted := time.Now()
+			reranked, rerankErr := a.Reranker.Rerank(
+				ctx,
+				instruction+"\n\n"+description,
+				candidates,
+				topK,
+			)
+			switch {
+			case errors.Is(rerankErr, ErrVoyageNoAPIKey):
+				logger.Warnf("%v", rerankErr)
+			case rerankErr != nil:
+				logger.Warnf("voyage rerank failed; using local candidate order: %v", rerankErr)
+			case len(reranked) > 0:
+				candidates = reranked
+				logger.Infof("voyage rerank completed candidates=%d elapsed=%s", len(candidates), time.Since(rerankStarted))
+				logger.Debugf("voyage rerank query=%q", description)
+			}
+		}
 		labels := make([]string, len(candidates))
 		for i := range candidates {
 			labels[i] = candidates[i].Canonical
@@ -169,6 +217,29 @@ func (a *TaxonomyAnalyzer) Analyze(ctx context.Context, videoPath string, opts a
 	sort.SliceStable(detected, func(i, j int) bool { return detected[i].Index < detected[j].Index })
 	spans := aitag.CollapseFrames(detected, interval, a.Provider.maxMerge)
 	aitag.SortSpans(spans)
+	supports := summarizeSupports(spans, interval, resolvedIDs)
+	mode := a.AcceptMode
+	if mode != AcceptShadow && mode != AcceptRescue && mode != AcceptStrict {
+		mode = AcceptShadow
+	}
+	threshold := supportThreshold(a.MinSupport, a.MinSupportFraction, len(sampledTimes))
+	rescued := map[string]bool{}
+	if mode == AcceptRescue {
+		rescued, err = a.rescueOneFrameLabels(ctx, videoPath, opts, interval, supports, sampledTimes, threshold)
+		if err != nil {
+			return nil, err
+		}
+	}
+	spans, keptSupports, droppedSupports := applySupportGate(
+		spans,
+		supports,
+		mode,
+		a.MinSupport,
+		a.MinSupportFraction,
+		len(sampledTimes),
+		rescued,
+	)
+	supportMetrics := supportsToMetrics(supports)
 	model := a.Provider.modelInfo(interval)
 	cacheStatus := a.Client.Status()
 	endpoint := cacheStatus.Endpoint
@@ -193,61 +264,167 @@ func (a *TaxonomyAnalyzer) Analyze(ctx context.Context, videoPath string, opts a
 		Models:        []aitag.ModelInfo{model},
 		Spans:         spans,
 		Metrics: map[string]any{
-			"frames":        frames.Count(),
-			"elapsed_ms":    elapsed.Milliseconds(),
-			"total_seconds": elapsed.Seconds(),
+			"frames":                 frames.Count(),
+			"elapsed_ms":             elapsed.Milliseconds(),
+			"total_seconds":          elapsed.Seconds(),
+			"label_supports":         supportMetrics,
+			"label_supports_kept":    supportsToMetrics(keptSupports),
+			"label_supports_dropped": supportsToMetrics(droppedSupports),
+			"accept_mode":            mode.String(),
+			"support_threshold":      threshold,
 		},
 	}, nil
 }
 
-func (a *TaxonomyAnalyzer) selectCandidates(description string, pool []taxonomy.Entry) []taxonomy.Entry {
-	terms := descriptionTerms(description)
-	type scoredCandidate struct {
-		entry taxonomy.Entry
-		score int
+func summarizeSupports(spans aitag.SpansByCategory, interval float64, stashIDs map[string]string) []LabelSupport {
+	if interval <= 0 {
+		return nil
 	}
-	scored := make([]scoredCandidate, 0)
-	for _, entry := range pool {
-		if score := entryDescriptionScore(entry, terms); score > 0 {
-			scored = append(scored, scoredCandidate{entry: entry, score: score})
+	byTag := make(map[string]*LabelSupport)
+	for _, labels := range spans {
+		for tag, tagSpans := range labels {
+			support := byTag[tag]
+			if support == nil {
+				support = &LabelSupport{
+					Tag:     tag,
+					StashID: stashIDs[tag],
+					FirstAt: math.Inf(1),
+					LastAt:  math.Inf(-1),
+				}
+				byTag[tag] = support
+			}
+			for _, span := range tagSpans {
+				support.Frames += max(1, int(math.Ceil(span.Duration(interval)/interval)))
+				support.SpanCount++
+				support.FirstAt = min(support.FirstAt, span.Start)
+				support.LastAt = max(support.LastAt, span.EndOrStart())
+			}
 		}
 	}
-	sort.SliceStable(scored, func(i, j int) bool {
-		if scored[i].score == scored[j].score {
-			return scored[i].entry.Canonical < scored[j].entry.Canonical
+	ret := make([]LabelSupport, 0, len(byTag))
+	for _, support := range byTag {
+		ret = append(ret, *support)
+	}
+	sort.Slice(ret, func(i, j int) bool {
+		if ret[i].Tag == ret[j].Tag {
+			return ret[i].StashID < ret[j].StashID
 		}
-		return scored[i].score > scored[j].score
+		return ret[i].Tag < ret[j].Tag
 	})
-	matched := make([]taxonomy.Entry, len(scored))
-	for i := range scored {
-		matched[i] = scored[i].entry
-	}
+	return ret
+}
+
+func (a *TaxonomyAnalyzer) selectCandidates(description string, pool []taxonomy.Entry, bm25 *taxonomy.BM25) []taxonomy.Entry {
 	minCandidates := a.MinCandidates
 	if minCandidates <= 0 {
 		minCandidates = defaultMinCandidates
 	}
 	maxCandidates := a.MaxCandidates
+	if maxCandidates <= 0 {
+		maxCandidates = defaultMaxCandidates
+	}
 	if maxCandidates < minCandidates {
 		maxCandidates = minCandidates
 	}
 	maxPerFrame := a.MaxPerFrame
-	if maxPerFrame <= 0 || maxPerFrame > maxCandidates {
-		maxPerFrame = maxCandidates
+	if maxPerFrame <= 0 {
+		maxPerFrame = defaultMaxPerFrame
 	}
+	maxPerFrame = min(maxPerFrame, maxCandidates)
 	if maxPerFrame < minCandidates {
 		maxPerFrame = minCandidates
 	}
-	if len(matched) == 0 {
-		count := min(maxCandidates, len(pool))
-		if count < minCandidates {
-			count = min(minCandidates, len(pool))
+
+	terms := descriptionTerms(description)
+	type phraseCandidate struct {
+		entry taxonomy.Entry
+		score int
+	}
+	phrase := make([]phraseCandidate, 0)
+	poolByID := make(map[string]taxonomy.Entry, len(pool))
+	for _, entry := range pool {
+		poolByID[entry.StashID] = entry
+		if score := entryDescriptionScore(entry, terms); score > 0 {
+			phrase = append(phrase, phraseCandidate{entry: entry, score: score})
 		}
-		matched = append(matched, pool[:count]...)
 	}
-	if len(matched) > maxPerFrame {
-		matched = matched[:maxPerFrame]
+	sort.SliceStable(phrase, func(i, j int) bool {
+		if phrase[i].score == phrase[j].score {
+			if phrase[i].entry.Canonical == phrase[j].entry.Canonical {
+				return phrase[i].entry.StashID < phrase[j].entry.StashID
+			}
+			return phrase[i].entry.Canonical < phrase[j].entry.Canonical
+		}
+		return phrase[i].score > phrase[j].score
+	})
+	if len(phrase) > maxCandidates {
+		phrase = phrase[:maxCandidates]
 	}
-	return matched
+
+	phraseRanks := make(map[string]int, len(phrase))
+	entries := make(map[string]taxonomy.Entry, len(phrase))
+	for i, candidate := range phrase {
+		phraseRanks[candidate.entry.StashID] = i + 1
+		entries[candidate.entry.StashID] = candidate.entry
+	}
+
+	bm25Ranks := make(map[string]int)
+	if bm25 != nil {
+		for i, hit := range bm25.Top(strings.ToLower(description), maxCandidates*4) {
+			entry, ok := poolByID[hit.Entry.StashID]
+			if !ok {
+				continue
+			}
+			bm25Ranks[entry.StashID] = i + 1
+			entries[entry.StashID] = entry
+		}
+	}
+
+	fallbackRank := len(phrase) + 1
+	for _, entry := range pool {
+		if len(entries) >= minCandidates {
+			break
+		}
+		if _, ok := entries[entry.StashID]; ok {
+			continue
+		}
+		entries[entry.StashID] = entry
+		phraseRanks[entry.StashID] = fallbackRank
+		fallbackRank++
+	}
+
+	type fusedCandidate struct {
+		entry taxonomy.Entry
+		score float64
+	}
+	fused := make([]fusedCandidate, 0, len(entries))
+	for id, entry := range entries {
+		score := 0.0
+		if rank := phraseRanks[id]; rank > 0 {
+			score += phraseFusionWeight / float64(fusionRankConstant+rank)
+		}
+		if rank := bm25Ranks[id]; rank > 0 {
+			score += bm25FusionWeight / float64(fusionRankConstant+rank)
+		}
+		fused = append(fused, fusedCandidate{entry: entry, score: score})
+	}
+	sort.SliceStable(fused, func(i, j int) bool {
+		if fused[i].score == fused[j].score {
+			if fused[i].entry.Canonical == fused[j].entry.Canonical {
+				return fused[i].entry.StashID < fused[j].entry.StashID
+			}
+			return fused[i].entry.Canonical < fused[j].entry.Canonical
+		}
+		return fused[i].score > fused[j].score
+	})
+	if len(fused) > maxPerFrame {
+		fused = fused[:maxPerFrame]
+	}
+	ret := make([]taxonomy.Entry, len(fused))
+	for i := range fused {
+		ret[i] = fused[i].entry
+	}
+	return ret
 }
 
 func flattenCandidates(byCategory map[string][]taxonomy.Entry) []taxonomy.Entry {
@@ -276,7 +453,7 @@ type descriptionIndex struct {
 }
 
 func descriptionTerms(description string) descriptionIndex {
-	parts := descriptionSplitRE.Split(strings.ToLower(description), -1)
+	parts := taxonomy.TokenizeRE.Split(strings.ToLower(description), -1)
 	index := descriptionIndex{words: make(map[string]struct{}, len(parts))}
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
@@ -296,7 +473,7 @@ func entryDescriptionScore(entry taxonomy.Entry, index descriptionIndex) int {
 }
 
 func nameDescriptionScore(name string, index descriptionIndex) int {
-	parts := descriptionSplitRE.Split(strings.ToLower(name), -1)
+	parts := taxonomy.TokenizeRE.Split(strings.ToLower(name), -1)
 	terms := 0
 	matches := 0
 	for _, part := range parts {

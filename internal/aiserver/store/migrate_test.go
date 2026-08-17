@@ -207,6 +207,77 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestSegmentMigrationPreservesExistingEmbeddings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "upgrade.db")
+	conn, err := sql.Open(driverName, databaseDSN(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	ctx := context.Background()
+	statements := []string{
+		migrationLedgerDDL,
+		`CREATE TABLE ai_result_aggregates (id INTEGER PRIMARY KEY) STRICT`,
+		`CREATE TABLE ai_scene_embeddings (
+			id INTEGER PRIMARY KEY, service TEXT NOT NULL, scene_id INTEGER NOT NULL,
+			model TEXT NOT NULL, dim INTEGER NOT NULL, frame_count INTEGER NOT NULL,
+			frame_interval REAL NOT NULL, times TEXT NOT NULL, vectors BLOB NOT NULL,
+			created_at INTEGER NOT NULL
+		) STRICT`,
+		`CREATE UNIQUE INDEX ux_ai_scene_embeddings ON ai_scene_embeddings (service, scene_id, model)`,
+		`INSERT INTO schema_migrations(version, name, applied_at) VALUES
+			(1, 'initial', 1), (2, 'marker_writeback', 2)`,
+		`INSERT INTO ai_scene_embeddings
+			(service, scene_id, model, dim, frame_count, frame_interval, times, vectors, created_at)
+		 VALUES ('native', 7, 'model', 2, 2, 2, '[2,8]', x'00010203', 3)`,
+	}
+	for _, statement := range statements {
+		if _, err := conn.ExecContext(ctx, statement); err != nil {
+			t.Fatalf("seed upgrade database: %v", err)
+		}
+	}
+	db := &DB{sql: conn, conn: conn, path: path}
+	if err := db.migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var start, end float64
+	var vectors []byte
+	if err := conn.QueryRowContext(ctx,
+		`SELECT segment_start, segment_end, vectors FROM ai_scene_embeddings
+		 WHERE service='native' AND scene_id=7 AND model='model'`,
+	).Scan(&start, &end, &vectors); err != nil {
+		t.Fatal(err)
+	}
+	if start != 2 || end != 8 || len(vectors) != 4 {
+		t.Fatalf("migrated row start=%v end=%v vectors=%x", start, end, vectors)
+	}
+
+	indexColumns := []string{}
+	rows, err := conn.QueryContext(ctx, `PRAGMA index_info(ux_ai_scene_embeddings)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var seq, cid int
+		var name string
+		if err := rows.Scan(&seq, &cid, &name); err != nil {
+			t.Fatal(err)
+		}
+		indexColumns = append(indexColumns, name)
+	}
+	want := []string{"service", "scene_id", "model", "segment_start"}
+	if len(indexColumns) != len(want) {
+		t.Fatalf("index columns = %q, want %q", indexColumns, want)
+	}
+	for i := range want {
+		if indexColumns[i] != want[i] {
+			t.Fatalf("index columns = %q, want %q", indexColumns, want)
+		}
+	}
+}
+
 func TestOpenCreatesParentDirectory(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "deeper", "ai.db")
 	db, err := Open(context.Background(), path)

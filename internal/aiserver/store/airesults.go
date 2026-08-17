@@ -89,6 +89,9 @@ type SceneRunInput struct {
 	// cannot resolve still produce timespans, but no aggregate - see
 	// StoreSceneRun.
 	ResolveReference func(label, category string) *int
+	// LabelSupports is the scene-level support diagnostic emitted by the VLM
+	// taxonomy analyzer. It is stored even when a label has no local tag.
+	LabelSupports []StoredLabelSupport
 }
 
 // ImageRunInput is a completed analysis of one image.
@@ -111,6 +114,16 @@ type StoredRun struct {
 	// the category is empty.
 	Aggregates map[string]float64
 	Models     []AIModel
+}
+
+// StoredLabelSupport is one scene-level taxonomy support diagnostic.
+type StoredLabelSupport struct {
+	Tag       string  `json:"tag"`
+	StashID   string  `json:"stash_id,omitempty"`
+	Frames    int     `json:"frames"`
+	SpanCount int     `json:"span_count"`
+	FirstAt   float64 `json:"first_at"`
+	LastAt    float64 `json:"last_at"`
 }
 
 // StoreSceneRun records a completed scene analysis and returns the run id.
@@ -168,7 +181,10 @@ func (db *DB) StoreSceneRun(ctx context.Context, in SceneRunInput) (int64, error
 		if err != nil {
 			return err
 		}
-		return insertSceneAggregates(ctx, tx, runID, in, totals)
+		if err := insertSceneAggregates(ctx, tx, runID, in, totals); err != nil {
+			return err
+		}
+		return insertLabelSupports(ctx, tx, runID, in)
 	})
 
 	return runID, err
@@ -264,6 +280,25 @@ func insertSceneAggregates(ctx context.Context, tx *sql.Tx, runID int64, in Scen
 			totals[key], NowMillis()); err != nil {
 			return fmt.Errorf("insert aggregate: %w", err)
 		}
+	}
+	return nil
+}
+
+func insertLabelSupports(ctx context.Context, tx *sql.Tx, runID int64, in SceneRunInput) error {
+	if len(in.LabelSupports) == 0 {
+		return nil
+	}
+	supports, err := MarshalArg(in.LabelSupports)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO ai_result_aggregates
+		 (run_id, entity_type, entity_id, payload_type, category, str_value,
+		  value_id, metric, value_float, value_json, created_at, label_supports)
+		 VALUES (?,'scene',?,'diagnostic',NULL,NULL,NULL,'label_supports',NULL,NULL,?,?)`,
+		runID, in.SceneID, NowMillis(), supports); err != nil {
+		return fmt.Errorf("insert label supports: %w", err)
 	}
 	return nil
 }
@@ -671,6 +706,35 @@ func (db *DB) GetSceneSpansByLabel(ctx context.Context, service string, sceneID 
 	}
 
 	return out, rows.Err()
+}
+
+// GetSceneLabelSupports returns support diagnostics from one analysis run.
+// runID zero selects the latest completed run for the requested service.
+func (db *DB) GetSceneLabelSupports(ctx context.Context, service string, sceneID int, runID int64) ([]StoredLabelSupport, error) {
+	query := `SELECT a.label_supports
+		 FROM ai_result_aggregates a
+		 JOIN ai_model_runs r ON r.id = a.run_id
+		 WHERE r.service = ? AND r.entity_type = 'scene' AND r.entity_id = ?
+		   AND a.payload_type = 'diagnostic' AND a.metric = 'label_supports'`
+	args := []any{service, sceneID}
+	if runID > 0 {
+		query += ` AND a.run_id = ?`
+		args = append(args, runID)
+	}
+	query += ` ORDER BY (r.completed_at IS NULL) ASC, r.completed_at DESC, a.run_id DESC LIMIT 1`
+
+	var supports JSONText[[]StoredLabelSupport]
+	err := db.sql.QueryRowContext(ctx, query, args...).Scan(&supports)
+	if errors.Is(err, sql.ErrNoRows) {
+		return []StoredLabelSupport{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get scene label supports: %w", err)
+	}
+	if !supports.Valid {
+		return []StoredLabelSupport{}, nil
+	}
+	return supports.Data, nil
 }
 
 // GetSceneTagTotals returns total detected seconds per tag id, summed across

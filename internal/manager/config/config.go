@@ -281,6 +281,27 @@ const (
 	AITaggingVLMContext = "ai_tagging_vlm_context"
 	// AITaggingAnalyzeMode selects taxonomy-grounded or legacy VLM analysis.
 	AITaggingAnalyzeMode = "ai_tagging_analyze_mode"
+	// AITaggingVLMAcceptMode selects shadow diagnostics, surrounding-frame
+	// rescue, or strict support filtering. Shadow is the safe default.
+	AITaggingVLMAcceptMode        = "ai_tagging_vlm_accept_mode"
+	aiTaggingVLMAcceptModeDefault = "shadow"
+	// Optional Voyage cross-encoder reranking. A model is empty by default, so
+	// storing an API key alone does not enable external requests.
+	AITaggingVLMVoyageAPIKey                   = "ai_tagging_vlm_voyage_api_key"
+	AITaggingVLMVoyageRerankModel              = "ai_tagging_vlm_voyage_rerank_model"
+	AITaggingVLMVoyageRerankTopK               = "ai_tagging_vlm_voyage_rerank_top_k"
+	AITaggingVLMVoyageEndpoint                 = "ai_tagging_vlm_voyage_endpoint"
+	aiTaggingVLMVoyageTopKDefault              = 12
+	aiTaggingVLMVoyageEndpointDefault          = "https://api.voyageai.com/v1/rerank"
+	AITaggingVLMVoyageVideoEnabled             = "ai_tagging_vlm_voyage_video_enabled"
+	AITaggingVLMVoyageVideoModel               = "ai_tagging_vlm_voyage_video_model"
+	AITaggingVLMVoyageSegmentSecs              = "ai_tagging_vlm_voyage_segment_secs"
+	AITaggingVLMVoyageDimension                = "ai_tagging_vlm_voyage_dimension"
+	AITaggingVLMVoyageEmbeddingEndpoint        = "ai_tagging_vlm_voyage_embedding_endpoint"
+	aiTaggingVLMVoyageVideoModelDefault        = "voyage-multimodal-3.5"
+	aiTaggingVLMVoyageSegmentSecsDefault       = 30.0
+	aiTaggingVLMVoyageDimensionDefault         = 256
+	aiTaggingVLMVoyageEmbeddingEndpointDefault = "https://api.voyageai.com/v1/multimodalembeddings"
 	// AITaggingTaxonomyEndpoint is the StashDB GraphQL taxonomy source.
 	AITaggingTaxonomyEndpoint = "ai_tagging_taxonomy_endpoint"
 	// AITaggingTaxonomyAPIKey optionally authenticates taxonomy requests.
@@ -2360,6 +2381,74 @@ func (i *Config) GetAITaggingAnalyzeMode() string {
 		return "legacy"
 	}
 	return "taxonomy"
+}
+
+func (i *Config) GetAITaggingVLMAcceptMode() string {
+	switch mode := i.getString(AITaggingVLMAcceptMode); mode {
+	case "rescue", "strict":
+		return mode
+	case "shadow", "":
+		return aiTaggingVLMAcceptModeDefault
+	default:
+		return aiTaggingVLMAcceptModeDefault
+	}
+}
+
+func (i *Config) GetAITaggingVLMVoyageAPIKey() string {
+	return i.getString(AITaggingVLMVoyageAPIKey)
+}
+
+func (i *Config) GetAITaggingVLMVoyageRerankModel() string {
+	return i.getString(AITaggingVLMVoyageRerankModel)
+}
+
+func (i *Config) GetAITaggingVLMVoyageRerankTopK() int {
+	topK := i.getInt(AITaggingVLMVoyageRerankTopK)
+	if topK <= 0 {
+		return aiTaggingVLMVoyageTopKDefault
+	}
+	return topK
+}
+
+func (i *Config) GetAITaggingVLMVoyageEndpoint() string {
+	if endpoint := i.getString(AITaggingVLMVoyageEndpoint); endpoint != "" {
+		return endpoint
+	}
+	return aiTaggingVLMVoyageEndpointDefault
+}
+
+func (i *Config) GetAITaggingVLMVoyageVideoEnabled() bool {
+	return i.getBoolDefault(AITaggingVLMVoyageVideoEnabled, false)
+}
+
+func (i *Config) GetAITaggingVLMVoyageVideoModel() string {
+	if model := i.getString(AITaggingVLMVoyageVideoModel); model != "" {
+		return model
+	}
+	return aiTaggingVLMVoyageVideoModelDefault
+}
+
+func (i *Config) GetAITaggingVLMVoyageSegmentSecs() float64 {
+	seconds := i.getFloat64(AITaggingVLMVoyageSegmentSecs)
+	if seconds <= 0 {
+		return aiTaggingVLMVoyageSegmentSecsDefault
+	}
+	return seconds
+}
+
+func (i *Config) GetAITaggingVLMVoyageDimension() int {
+	dimension := i.getInt(AITaggingVLMVoyageDimension)
+	if dimension <= 0 {
+		return aiTaggingVLMVoyageDimensionDefault
+	}
+	return dimension
+}
+
+func (i *Config) GetAITaggingVLMVoyageEmbeddingEndpoint() string {
+	if endpoint := i.getString(AITaggingVLMVoyageEmbeddingEndpoint); endpoint != "" {
+		return endpoint
+	}
+	return aiTaggingVLMVoyageEmbeddingEndpointDefault
 }
 
 func (i *Config) GetAITaggingTaxonomyEndpoint() string {

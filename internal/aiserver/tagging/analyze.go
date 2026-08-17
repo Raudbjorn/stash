@@ -208,16 +208,17 @@ type AnalyzeRequest struct {
 
 // AnalyzeResult summarises what an analysis produced.
 type AnalyzeResult struct {
-	SceneID  int              `json:"scene_id"`
-	RunID    int64            `json:"run_id"`
-	Provider string           `json:"provider"`
-	Duration float64          `json:"duration"`
-	Spans    int              `json:"spans"`
-	Markers  int              `json:"markers"`
-	Elapsed  float64          `json:"elapsed_seconds"`
-	Error    string           `json:"error,omitempty"`
-	Frames   int              `json:"frames"`
-	Write    *WritebackResult `json:"writeback,omitempty"`
+	SceneID  int                      `json:"scene_id"`
+	RunID    int64                    `json:"run_id"`
+	Provider string                   `json:"provider"`
+	Duration float64                  `json:"duration"`
+	Spans    int                      `json:"spans"`
+	Markers  int                      `json:"markers"`
+	Elapsed  float64                  `json:"elapsed_seconds"`
+	Error    string                   `json:"error,omitempty"`
+	Frames   int                      `json:"frames"`
+	Write    *WritebackResult         `json:"writeback,omitempty"`
+	Supports []llamaprov.LabelSupport `json:"supports,omitempty"`
 }
 
 // AnalyzeScene runs the whole pipeline over one scene.
@@ -256,6 +257,18 @@ func (s *Service) AnalyzeScene(ctx context.Context, req AnalyzeRequest, sink ait
 	// Ordering is a precondition of clustering, not an assumption about the
 	// provider: an unsorted set silently produces overlapping markers.
 	aitag.SortSpans(result.Spans)
+	supports := labelSupportsFromMetric(result.Metrics["label_supports"])
+	if len(supports) > 0 {
+		aggregated, aggregateErr := s.aggregateSupportParents(ctx, supports, s.TaxonomyStatus().Endpoint)
+		if aggregateErr != nil {
+			logger.Warnf("could not aggregate AI label support through tag parents for scene %d: %v", req.SceneID, aggregateErr)
+		} else {
+			if result.Metrics == nil {
+				result.Metrics = make(map[string]any)
+			}
+			result.Metrics["label_supports_with_parents"] = aggregated
+		}
+	}
 
 	out := &AnalyzeResult{
 		SceneID:  req.SceneID,
@@ -264,6 +277,7 @@ func (s *Service) AnalyzeScene(ctx context.Context, req AnalyzeRequest, sink ait
 		Spans:    aitag.CountSpans(result.Spans),
 	}
 	out.Frames = metricInt(result.Metrics["frames"])
+	out.Supports = supports
 
 	runID, err := s.storeRun(ctx, provider.Name(), req.SceneID, req.Options, result)
 	if err != nil {
@@ -440,6 +454,19 @@ func (s *Service) storeRun(ctx context.Context, service string, sceneID int, opt
 	metrics["frames_sampled"] = metricInt(result.Metrics["frames"])
 	metrics["taxonomy_entries"] = s.TaxonomyStatus().Entries
 
+	supports := labelSupportsFromMetric(result.Metrics["label_supports"])
+	storedSupports := make([]store.StoredLabelSupport, len(supports))
+	for i, support := range supports {
+		storedSupports[i] = store.StoredLabelSupport{
+			Tag:       support.Tag,
+			StashID:   support.StashID,
+			Frames:    support.Frames,
+			SpanCount: support.SpanCount,
+			FirstAt:   support.FirstAt,
+			LastAt:    support.LastAt,
+		}
+	}
+
 	return s.db.StoreSceneRun(ctx, store.SceneRunInput{
 		Service: service,
 		SceneID: sceneID,
@@ -456,6 +483,7 @@ func (s *Service) storeRun(ctx context.Context, service string, sceneID int, opt
 		SchemaVersion:    result.SchemaVersion,
 		Models:           models,
 		ResolveReference: s.tagResolver(ctx),
+		LabelSupports:    storedSupports,
 	})
 }
 
@@ -472,6 +500,56 @@ func metricInt(value any) int {
 	default:
 		return 0
 	}
+}
+
+func labelSupportsFromMetric(value any) []llamaprov.LabelSupport {
+	switch supports := value.(type) {
+	case []llamaprov.LabelSupport:
+		return append([]llamaprov.LabelSupport(nil), supports...)
+	case []map[string]any:
+		ret := make([]llamaprov.LabelSupport, 0, len(supports))
+		for _, support := range supports {
+			ret = append(ret, llamaprov.LabelSupport{
+				Tag:       stringMetric(support["tag"]),
+				StashID:   stringMetric(support["stash_id"]),
+				Frames:    metricInt(support["frames"]),
+				SpanCount: metricInt(support["span_count"]),
+				FirstAt:   metricFloat(support["first_at"]),
+				LastAt:    metricFloat(support["last_at"]),
+			})
+		}
+		return ret
+	case []any:
+		ret := make([]llamaprov.LabelSupport, 0, len(supports))
+		for _, raw := range supports {
+			if support, ok := raw.(map[string]any); ok {
+				ret = append(ret, labelSupportsFromMetric([]map[string]any{support})...)
+			}
+		}
+		return ret
+	default:
+		return nil
+	}
+}
+
+func metricFloat(value any) float64 {
+	switch value := value.(type) {
+	case int:
+		return float64(value)
+	case int64:
+		return float64(value)
+	case float64:
+		return value
+	case float32:
+		return float64(value)
+	default:
+		return 0
+	}
+}
+
+func stringMetric(value any) string {
+	ret, _ := value.(string)
+	return ret
 }
 
 // tagResolver maps a provider label to a Stash tag id for the aggregates.

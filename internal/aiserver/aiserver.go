@@ -100,9 +100,10 @@ type Server struct {
 	plugins    *pluginhost.Manager
 	catalog    *catalog.Manager
 
-	tagging       *tagging.Service
-	trainer       *tagging.Trainer
-	taggingStatus tagging.Status
+	tagging        *tagging.Service
+	trainer        *tagging.Trainer
+	taggingStatus  tagging.Status
+	voyageSegments *recommend.VoyageSegmentIndex
 
 	// graphQL is Stash's own API handler, registered after construction.
 	graphQL http.Handler
@@ -273,6 +274,13 @@ func (s *Server) Recommenders() *recommend.Registry { return s.recommenders }
 // rather than the schema-guessing SQL the out-of-process server needed.
 func (s *Server) SceneFetcher() *recommend.Fetcher { return recommend.NewFetcher(s.deps.Repo) }
 
+// VoyageSegmentIndex returns the opt-in read-only video recommendation index.
+func (s *Server) VoyageSegmentIndex() *recommend.VoyageSegmentIndex {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.voyageSegments
+}
+
 // Tasks returns the scheduler, or nil when not running.
 func (s *Server) Tasks() *task.Manager {
 	if s == nil {
@@ -381,6 +389,11 @@ func (s *Server) Start(ctx context.Context) error {
 		VLMGPULayers:          s.deps.Config.GetAITaggingVLMGPULayers(),
 		VLMContext:            s.deps.Config.GetAITaggingVLMContext(),
 		AnalyzeMode:           s.deps.Config.GetAITaggingAnalyzeMode(),
+		VLMAcceptMode:         s.deps.Config.GetAITaggingVLMAcceptMode(),
+		VLMVoyageAPIKey:       s.deps.Config.GetAITaggingVLMVoyageAPIKey(),
+		VLMVoyageRerankModel:  s.deps.Config.GetAITaggingVLMVoyageRerankModel(),
+		VLMVoyageRerankTopK:   s.deps.Config.GetAITaggingVLMVoyageRerankTopK(),
+		VLMVoyageEndpoint:     s.deps.Config.GetAITaggingVLMVoyageEndpoint(),
 		TaxonomyEndpoint:      s.deps.Config.GetAITaggingTaxonomyEndpoint(),
 		TaxonomyAPIKey:        s.deps.Config.GetAITaggingTaxonomyAPIKey(),
 		TaxonomyCategories:    s.deps.Config.GetAITaggingTaxonomyCategories(),
@@ -400,6 +413,19 @@ func (s *Server) Start(ctx context.Context) error {
 			s.deps.Config.GetAITaggingProvider(), s.deps.Config.GetAITaggingFrameInterval()),
 	})
 	s.trainer = tagging.NewTrainer(s.deps.Repo, db)
+	s.voyageSegments = nil
+	if s.deps.Config.GetAITaggingVLMVoyageVideoEnabled() &&
+		s.deps.Config.GetAITaggingVLMVoyageAPIKey() != "" {
+		s.voyageSegments = &recommend.VoyageSegmentIndex{
+			APIKey:      s.deps.Config.GetAITaggingVLMVoyageAPIKey(),
+			Model:       s.deps.Config.GetAITaggingVLMVoyageVideoModel(),
+			Endpoint:    s.deps.Config.GetAITaggingVLMVoyageEmbeddingEndpoint(),
+			SegmentSecs: s.deps.Config.GetAITaggingVLMVoyageSegmentSecs(),
+			Dimension:   s.deps.Config.GetAITaggingVLMVoyageDimension(),
+			DB:          db,
+			FFmpegPath:  s.deps.Config.GetFFMpegPath(),
+		}
+	}
 
 	// Registered whatever the provider's state: the action must be visible so
 	// the user can see WHY it is unavailable when they try it, rather than the
@@ -517,6 +543,7 @@ func (s *Server) Shutdown() {
 	s.catalog = nil
 	s.tagging = nil
 	s.trainer = nil
+	s.voyageSegments = nil
 	s.mu.Unlock()
 
 	// Withdraw every registration before cancellation so no new task can enter

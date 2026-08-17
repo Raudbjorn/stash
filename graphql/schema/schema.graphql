@@ -318,6 +318,8 @@ type Query {
   aiTaggingStatus: AITaggingStatus!
   "Detected tag spans for a scene, grouped by category/label. Empty when the AI server is not running or nothing has been analysed yet."
   aiTaggingSpans(sceneID: ID!): [AITaggingSpanGroup!]!
+  "Scene-level taxonomy support diagnostics. runID defaults to the latest completed llama_vlm run."
+  aiTaggingSceneSupports(sceneID: Int!, runID: Int): [AITaggingLabelSupport!]!
   "Active StashDB taxonomy cache status."
   aiServerTaxonomy: AIServerTaxonomyStatus!
   "The AI server's own task queue (queued/running work), polled rather than subscribed to since the scheduler is rebuilt on every configureAIServer change."

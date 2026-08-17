@@ -59,6 +59,11 @@ type Settings struct {
 	// VLMContext overrides the pair's default context window when positive.
 	VLMContext            int
 	AnalyzeMode           string
+	VLMAcceptMode         string
+	VLMVoyageAPIKey       string
+	VLMVoyageRerankModel  string
+	VLMVoyageRerankTopK   int
+	VLMVoyageEndpoint     string
 	TaxonomyEndpoint      string
 	TaxonomyAPIKey        string
 	TaxonomyCategories    []string
@@ -441,20 +446,34 @@ func buildVLM(ctx context.Context, settings Settings, status *Status) (aitag.Pro
 		if err := cache.Load(cache.Path); err != nil {
 			logger.Warnf("could not load AI tagging taxonomy cache: %v", err)
 		}
-		active = &llamaprov.TaxonomyAnalyzer{
-			Provider: provider,
-			Client: &taxonomy.Client{
-				Cache:    cache,
-				Endpoint: settings.TaxonomyEndpoint,
-				APIKey:   settings.TaxonomyAPIKey,
-			},
+		client := &taxonomy.Client{
+			Cache:    cache,
+			Endpoint: settings.TaxonomyEndpoint,
+			APIKey:   settings.TaxonomyAPIKey,
+		}
+		reranker := newVoyageReranker(settings)
+		active = llamaprov.NewTaxonomyAnalyzer(provider, client, llamaprov.TaxonomyOptions{
 			Categories:    settings.TaxonomyCategories,
 			MaxCandidates: settings.TaxonomyMaxCandidates,
-			MaxPerFrame:   settings.TaxonomyMaxCandidates,
-		}
+			AcceptMode:    llamaprov.ParseAcceptMode(settings.VLMAcceptMode),
+			MinSupport:    2,
+			Reranker:      reranker,
+			RerankTopK:    settings.VLMVoyageRerankTopK,
+		})
 	}
 	*status = status.Current(active)
 	return active, true
+}
+
+func newVoyageReranker(settings Settings) llamaprov.Reranker {
+	if settings.VLMVoyageAPIKey == "" || settings.VLMVoyageRerankModel == "" {
+		return nil
+	}
+	return &llamaprov.VoyageReranker{
+		APIKey:   settings.VLMVoyageAPIKey,
+		Model:    settings.VLMVoyageRerankModel,
+		Endpoint: settings.VLMVoyageEndpoint,
+	}
 }
 
 // AttachHead loads a trained head into a native provider.

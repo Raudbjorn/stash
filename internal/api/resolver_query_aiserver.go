@@ -35,24 +35,34 @@ func buildAIServerConfig(c *manager.Manager) *AIServerConfig {
 	}
 
 	return &AIServerConfig{
-		Enabled:                      cfg.GetAIEnabled(),
-		TaggingProvider:              provider,
-		TaggingServerURL:             cfg.GetAITaggingServerURL(),
-		TaggingOpenAIKeySet:          cfg.GetAITaggingOpenAIKeyConfigured(),
-		TaggingModelDir:              cfg.GetAITaggingModelDir(),
-		TaggingRulesDir:              cfg.GetAITaggingRulesDir(),
-		TaggingFrameInterval:         cfg.GetAITaggingFrameInterval(),
-		TaggingThreshold:             cfg.GetAITaggingThreshold(),
-		TaggingMaxSpanMerge:          cfg.GetAITaggingMaxSpanMerge(),
-		TaggingVLMModel:              cfg.GetAITaggingVLMModel(),
-		TaggingVLMLabels:             cfg.GetAITaggingVLMLabels(),
-		TaggingVLMGPULayers:          cfg.GetAITaggingVLMGPULayers(),
-		TaggingVLMContext:            cfg.GetAITaggingVLMContext(),
-		TaggingAnalyzeMode:           cfg.GetAITaggingAnalyzeMode(),
-		TaggingTaxonomyEndpoint:      cfg.GetAITaggingTaxonomyEndpoint(),
-		TaggingTaxonomyAPIKeySet:     cfg.GetAITaggingTaxonomyAPIKey() != "",
-		TaggingTaxonomyCategories:    cfg.GetAITaggingTaxonomyCategories(),
-		TaggingTaxonomyMaxCandidates: cfg.GetAITaggingTaxonomyMaxCandidates(),
+		Enabled:                           cfg.GetAIEnabled(),
+		TaggingProvider:                   provider,
+		TaggingServerURL:                  cfg.GetAITaggingServerURL(),
+		TaggingOpenAIKeySet:               cfg.GetAITaggingOpenAIKeyConfigured(),
+		TaggingModelDir:                   cfg.GetAITaggingModelDir(),
+		TaggingRulesDir:                   cfg.GetAITaggingRulesDir(),
+		TaggingFrameInterval:              cfg.GetAITaggingFrameInterval(),
+		TaggingThreshold:                  cfg.GetAITaggingThreshold(),
+		TaggingMaxSpanMerge:               cfg.GetAITaggingMaxSpanMerge(),
+		TaggingVLMModel:                   cfg.GetAITaggingVLMModel(),
+		TaggingVLMLabels:                  cfg.GetAITaggingVLMLabels(),
+		TaggingVLMGPULayers:               cfg.GetAITaggingVLMGPULayers(),
+		TaggingVLMContext:                 cfg.GetAITaggingVLMContext(),
+		TaggingAnalyzeMode:                cfg.GetAITaggingAnalyzeMode(),
+		TaggingVLMAcceptMode:              cfg.GetAITaggingVLMAcceptMode(),
+		TaggingVLMVoyageAPIKeySet:         cfg.GetAITaggingVLMVoyageAPIKey() != "",
+		TaggingVLMVoyageRerankModel:       cfg.GetAITaggingVLMVoyageRerankModel(),
+		TaggingVLMVoyageRerankTopK:        cfg.GetAITaggingVLMVoyageRerankTopK(),
+		TaggingVLMVoyageEndpoint:          cfg.GetAITaggingVLMVoyageEndpoint(),
+		TaggingVLMVoyageVideoEnabled:      cfg.GetAITaggingVLMVoyageVideoEnabled(),
+		TaggingVLMVoyageVideoModel:        cfg.GetAITaggingVLMVoyageVideoModel(),
+		TaggingVLMVoyageSegmentSecs:       cfg.GetAITaggingVLMVoyageSegmentSecs(),
+		TaggingVLMVoyageDimension:         cfg.GetAITaggingVLMVoyageDimension(),
+		TaggingVLMVoyageEmbeddingEndpoint: cfg.GetAITaggingVLMVoyageEmbeddingEndpoint(),
+		TaggingTaxonomyEndpoint:           cfg.GetAITaggingTaxonomyEndpoint(),
+		TaggingTaxonomyAPIKeySet:          cfg.GetAITaggingTaxonomyAPIKey() != "",
+		TaggingTaxonomyCategories:         cfg.GetAITaggingTaxonomyCategories(),
+		TaggingTaxonomyMaxCandidates:      cfg.GetAITaggingTaxonomyMaxCandidates(),
 	}
 }
 
@@ -209,6 +219,40 @@ func (r *queryResolver) AiTaggingSpans(ctx context.Context, sceneID string) ([]*
 			}
 			ret = append(ret, group)
 		}
+	}
+	return ret, nil
+}
+
+func (r *queryResolver) AiTaggingSceneSupports(ctx context.Context, sceneID int, runID *int) ([]*AITaggingLabelSupport, error) {
+	db := manager.GetInstance().AIServer.DB()
+	if db == nil {
+		return []*AITaggingLabelSupport{}, nil
+	}
+
+	var selectedRun int64
+	if runID != nil {
+		selectedRun = int64(*runID)
+	}
+	supports, err := db.GetSceneLabelSupports(ctx, llamaprov.ProviderName, sceneID, selectedRun)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := make([]*AITaggingLabelSupport, 0, len(supports))
+	for _, support := range supports {
+		var stashID *string
+		if support.StashID != "" {
+			id := support.StashID
+			stashID = &id
+		}
+		ret = append(ret, &AITaggingLabelSupport{
+			Tag:       support.Tag,
+			StashID:   stashID,
+			Frames:    support.Frames,
+			SpanCount: support.SpanCount,
+			FirstAt:   support.FirstAt,
+			LastAt:    support.LastAt,
+		})
 	}
 	return ret, nil
 }

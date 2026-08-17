@@ -21,6 +21,15 @@ type AITaggingSpanGroup {
   spans: [AITaggingSpan!]!
 }
 
+type AITaggingLabelSupport {
+  tag: String!
+  stashID: String
+  frames: Int!
+  spanCount: Int!
+  firstAt: Float!
+  lastAt: Float!
+}
+
 "Result of triggering per-scene analysis. Mirrors the REST layer's 409/already-in-progress case as a typed field rather than a GraphQL error, so a duplicate click is a normal, renderable result."
 type AnalyzeSceneWithAIResult {
   taskID: ID!

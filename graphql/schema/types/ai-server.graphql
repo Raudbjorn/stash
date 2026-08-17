@@ -34,6 +34,16 @@ type AIServerConfig {
   taggingVLMGPULayers: Int!
   taggingVLMContext: Int!
   taggingAnalyzeMode: String!
+  taggingVLMAcceptMode: String!
+  taggingVLMVoyageAPIKeySet: Boolean!
+  taggingVLMVoyageRerankModel: String!
+  taggingVLMVoyageRerankTopK: Int!
+  taggingVLMVoyageEndpoint: String!
+  taggingVLMVoyageVideoEnabled: Boolean!
+  taggingVLMVoyageVideoModel: String!
+  taggingVLMVoyageSegmentSecs: Float!
+  taggingVLMVoyageDimension: Int!
+  taggingVLMVoyageEmbeddingEndpoint: String!
   taggingTaxonomyEndpoint: String!
   taggingTaxonomyAPIKeySet: Boolean!
   taggingTaxonomyCategories: [String!]!
@@ -56,6 +66,17 @@ input AIServerConfigInput {
   taggingVLMGPULayers: Int!
   taggingVLMContext: Int!
   taggingAnalyzeMode: String!
+  taggingVLMAcceptMode: String!
+  "Only written when non-null; omit/null leaves the stored Voyage key untouched."
+  taggingVLMVoyageAPIKey: String
+  taggingVLMVoyageRerankModel: String!
+  taggingVLMVoyageRerankTopK: Int!
+  taggingVLMVoyageEndpoint: String!
+  taggingVLMVoyageVideoEnabled: Boolean!
+  taggingVLMVoyageVideoModel: String!
+  taggingVLMVoyageSegmentSecs: Float!
+  taggingVLMVoyageDimension: Int!
+  taggingVLMVoyageEmbeddingEndpoint: String!
   taggingTaxonomyEndpoint: String!
   "Only written when non-null; omit/null leaves the stored key untouched."
   taggingTaxonomyAPIKey: String

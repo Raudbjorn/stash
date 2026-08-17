@@ -2,7 +2,7 @@
 # In-tree package for the private git.s8n.is/sveinbjorn/stash fork.
 # Builds from the repository this PKGBUILD lives in, not from upstream.
 pkgname=stash
-pkgver=r26.g8f325c2
+pkgver=r140.gdc08c92
 pkgrel=1
 pkgdesc="Locally hosted web-based app written in Go which organizes and serves your media library (sveinbjorn/stash fork)"
 arch=('x86_64')
