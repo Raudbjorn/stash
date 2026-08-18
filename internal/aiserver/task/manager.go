@@ -617,6 +617,7 @@ func (m *Manager) run(ctx context.Context, id string, handler action.Handler) {
 
 	f := nowSeconds()
 	rec.FinishedAt = &f
+	rec.Result = result
 
 	var event EventType
 	switch {
@@ -631,7 +632,6 @@ func (m *Manager) run(ctx context.Context, id string, handler action.Handler) {
 		event = EventFailed
 	default:
 		rec.Status = StatusCompleted
-		rec.Result = result
 		event = EventCompleted
 	}
 

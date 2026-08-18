@@ -2,4 +2,10 @@ query SceneAITaggingSpans($sceneID: ID!) {
   aiTaggingSpans(sceneID: $sceneID) {
     ...AITaggingSpanGroupData
   }
+  aiTasks(filter: { service: "ai_tagging" }) {
+    ...AITaskData
+  }
+  aiTaskHistory(limit: 50) {
+    ...AITaskData
+  }
 }

@@ -32,6 +32,11 @@ export const SettingsAIServerPanel: React.FC = () => {
         <AIServerProviderForm
           enabled={aiServerStatus.enabled}
           config={aiServerStatus.config}
+          availableVLMModels={aiServerStatus.availableVLMModels}
+          availableVoyageRerankModels={
+            aiServerStatus.availableVoyageRerankModels
+          }
+          availableVoyageVideoModels={aiServerStatus.availableVoyageVideoModels}
           onSaved={() => void refetch()}
         />
       </SettingSection>

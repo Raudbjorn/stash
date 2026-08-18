@@ -1,33 +1,32 @@
 package recommend
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image/jpeg"
-	"io"
 	"net/http"
 	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/stashapp/stash/internal/aiserver/store"
+	"github.com/stashapp/stash/pkg/aitag/taxonomy"
 )
 
+// VoyageProviderName identifies direct Voyage multimodal retrieval runs.
+const VoyageProviderName = "voyage_multimodal"
+
 const (
-	voyageSegmentService         = "voyage_multimodal"
+	voyageSegmentService         = VoyageProviderName
 	defaultVoyageSegmentModel    = "voyage-multimodal-3.5"
 	defaultVoyageSegmentEndpoint = "https://api.voyageai.com/v1/multimodalembeddings"
 	defaultVoyageSegmentSecs     = 30.0
-	defaultVoyageDimension       = 256
+	defaultVoyageDimension       = 1024
 	maxVoyageMediaBytes          = 20 << 20
-	maxVoyageInputTokens         = 32_000
 )
 
 var sceneTimeRE = regexp.MustCompile(`pts_time:([0-9]+(?:\.[0-9]+)?)`)
@@ -39,11 +38,13 @@ type VoyageSegmentIndex struct {
 	Endpoint      string
 	SegmentSecs   float64
 	Dimension     int
+	MaxSceneTags  int
 	DB            *store.DB
-	Cache         *SegmentCache
 	FFmpegPath    string
 	Client        *http.Client
-	ExtractFrame  func(context.Context, string, float64) ([]byte, error)
+	Taxonomy      *taxonomy.Client
+	Categories    []string
+	ExtractVideo  func(context.Context, string, float64, float64) ([]byte, error)
 }
 
 type SegmentCache struct {
@@ -64,10 +65,7 @@ func (v *VoyageSegmentIndex) Build(ctx context.Context, sceneID int, videoPath, 
 	if duration <= 0 {
 		return nil, errors.New("voyage segment duration must be positive")
 	}
-	model := strings.TrimSpace(v.Model)
-	if model == "" {
-		model = defaultVoyageSegmentModel
-	}
+	model := v.cacheModel()
 	segments := v.segments(ctx, videoPath, duration)
 	stored, err := v.DB.GetEmbeddingSegments(ctx, voyageSegmentService, sceneID, model)
 	if err != nil {
@@ -84,11 +82,11 @@ func (v *VoyageSegmentIndex) Build(ctx context.Context, sceneID int, videoPath, 
 			ret = append(ret, SegmentCache{SceneID: sceneID, Start: segment.Start, End: segment.End, Vector: append([]float32(nil), item.Vectors...)})
 			continue
 		}
-		images, err := v.segmentFrames(ctx, videoPath, segment.Start, segment.End)
+		video, err := v.segmentVideo(ctx, videoPath, segment.Start, segment.End)
 		if err != nil {
 			return nil, err
 		}
-		vector, err := v.embed(ctx, transcript, images)
+		vector, err := v.embed(ctx, transcript, video)
 		if err != nil {
 			return nil, fmt.Errorf("embed scene %d segment %.3f-%.3f: %w", sceneID, segment.Start, segment.End, err)
 		}
@@ -99,10 +97,15 @@ func (v *VoyageSegmentIndex) Build(ctx context.Context, sceneID int, videoPath, 
 			return nil, err
 		}
 		item := SegmentCache{SceneID: sceneID, Start: segment.Start, End: segment.End, Vector: vector}
-		v.Cache = &item
 		ret = append(ret, item)
 	}
 	return ret, nil
+}
+
+// IndexScene populates the read-only segment cache after scene analysis.
+func (v *VoyageSegmentIndex) IndexScene(ctx context.Context, sceneID int, videoPath string, duration float64) (int, error) {
+	segments, err := v.Build(ctx, sceneID, videoPath, "", duration)
+	return len(segments), err
 }
 
 func (v *VoyageSegmentIndex) segments(ctx context.Context, videoPath string, duration float64) []SegmentCache {
@@ -152,126 +155,71 @@ func (v *VoyageSegmentIndex) shotBoundaries(ctx context.Context, videoPath strin
 	return cuts
 }
 
-func (v *VoyageSegmentIndex) segmentFrames(ctx context.Context, videoPath string, start, end float64) ([][]byte, error) {
-	ret := make([][]byte, 0, 5)
-	for _, fraction := range []float64{0, 0.25, 0.5, 0.75, 1} {
-		at := start + (end-start)*fraction
-		if at == end && end > start {
-			at = max(start, end-0.001)
-		}
-		var image []byte
-		var err error
-		if v.ExtractFrame != nil {
-			image, err = v.ExtractFrame(ctx, videoPath, at)
-		} else {
-			image, err = v.extractFrame(ctx, videoPath, at)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("extract frame %.3f: %w", at, err)
-		}
-		if err := validateVoyageImage(image); err != nil {
-			return nil, err
-		}
-		ret = append(ret, image)
+func (v *VoyageSegmentIndex) segmentVideo(ctx context.Context, videoPath string, start, end float64) ([]byte, error) {
+	var video []byte
+	var err error
+	if v.ExtractVideo != nil {
+		video, err = v.ExtractVideo(ctx, videoPath, start, end)
+	} else {
+		video, err = v.extractVideo(ctx, videoPath, start, end)
 	}
-	return ret, nil
+	if err != nil {
+		return nil, fmt.Errorf("extract video %.3f-%.3f: %w", start, end, err)
+	}
+	if len(video) == 0 {
+		return nil, errors.New("Voyage multimodal video is empty")
+	}
+	if len(video) > maxVoyageMediaBytes {
+		return nil, fmt.Errorf("Voyage multimodal video is %d bytes; limit is %d", len(video), maxVoyageMediaBytes)
+	}
+	return video, nil
 }
 
-func (v *VoyageSegmentIndex) extractFrame(ctx context.Context, videoPath string, at float64) ([]byte, error) {
+func (v *VoyageSegmentIndex) extractVideo(ctx context.Context, videoPath string, start, end float64) ([]byte, error) {
 	ffmpeg := v.FFmpegPath
 	if ffmpeg == "" {
 		ffmpeg = "ffmpeg"
 	}
+	duration := end - start
+	if duration <= 0 {
+		return nil, errors.New("Voyage video segment duration must be positive")
+	}
 	command := exec.CommandContext(ctx, ffmpeg,
-		"-nostdin", "-hide_banner", "-loglevel", "error", "-ss", strconv.FormatFloat(at, 'f', 3, 64),
-		"-i", videoPath, "-frames:v", "1", "-vf", "scale=448:-2", "-f", "image2pipe", "-vcodec", "mjpeg", "pipe:1")
+		"-nostdin", "-hide_banner", "-loglevel", "error",
+		"-ss", strconv.FormatFloat(start, 'f', 3, 64),
+		"-t", strconv.FormatFloat(duration, 'f', 3, 64),
+		"-i", videoPath, "-an",
+		"-vf", "fps=1/6,scale=448:-2",
+		"-c:v", "libx264", "-preset", "veryfast", "-crf", "28",
+		"-pix_fmt", "yuv420p", "-movflags", "frag_keyframe+empty_moov",
+		"-f", "mp4", "pipe:1")
 	return command.Output()
 }
 
-func (v *VoyageSegmentIndex) embed(ctx context.Context, transcript string, images [][]byte) ([]float32, error) {
+func (v *VoyageSegmentIndex) embed(ctx context.Context, transcript string, video []byte) ([]float32, error) {
 	type contentItem struct {
 		Type        string `json:"type"`
 		Text        string `json:"text,omitempty"`
-		ImageBase64 string `json:"image_base64,omitempty"`
+		VideoBase64 string `json:"video_base64,omitempty"`
 	}
-	content := make([]contentItem, 0, len(images)+1)
+	content := make([]contentItem, 0, 2)
 	if transcript != "" {
 		content = append(content, contentItem{Type: "text", Text: transcript})
 	}
-	tokens := (len(transcript) + 3) / 4
-	for _, image := range images {
-		config, err := jpeg.DecodeConfig(bytes.NewReader(image))
-		if err != nil {
-			return nil, fmt.Errorf("decode JPEG dimensions: %w", err)
-		}
-		tokens += config.Width * config.Height / 560
-		content = append(content, contentItem{Type: "image_base64", ImageBase64: "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(image)})
-	}
-	if tokens > maxVoyageInputTokens {
-		return nil, fmt.Errorf("voyage multimodal input is approximately %d tokens; limit is %d", tokens, maxVoyageInputTokens)
-	}
-	model := v.Model
-	if model == "" {
-		model = defaultVoyageSegmentModel
-	}
+	content = append(content, contentItem{
+		Type: "video_base64", VideoBase64: "data:video/mp4;base64," + base64.StdEncoding.EncodeToString(video),
+	})
 	payload, err := json.Marshal(map[string]any{
 		"inputs": []any{map[string]any{"content": content}},
-		"model":  model, "input_type": "document", "truncation": false,
+		"model":  v.model(), "input_type": "document", "truncation": false,
+		"output_dimension": v.dimension(),
 	})
 	if err != nil {
 		return nil, err
 	}
-	endpoint := v.Endpoint
-	if endpoint == "" {
-		endpoint = defaultVoyageSegmentEndpoint
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	vectors, err := v.embeddingRequest(ctx, payload, 1)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+v.APIKey)
-	req.Header.Set("Content-Type", "application/json")
-	client := v.Client
-	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	var decoded struct {
-		Data []struct {
-			Embedding []float32 `json:"embedding"`
-			Index     int       `json:"index"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&decoded); err != nil {
-		return nil, err
-	}
-	if len(decoded.Data) != 1 || len(decoded.Data[0].Embedding) == 0 {
-		return nil, errors.New("voyage multimodal response contained no embedding")
-	}
-	dimension := v.Dimension
-	if dimension <= 0 {
-		dimension = defaultVoyageDimension
-	}
-	if len(decoded.Data[0].Embedding) != dimension {
-		return nil, fmt.Errorf("voyage embedding dimension %d, want %d", len(decoded.Data[0].Embedding), dimension)
-	}
-	return decoded.Data[0].Embedding, nil
-}
-
-func validateVoyageImage(image []byte) error {
-	if len(image) == 0 {
-		return errors.New("voyage multimodal image is empty")
-	}
-	if len(image) > maxVoyageMediaBytes {
-		return fmt.Errorf("voyage multimodal image is %d bytes; limit is %d", len(image), maxVoyageMediaBytes)
-	}
-	return nil
+	return v.prepareVector(vectors[0])
 }

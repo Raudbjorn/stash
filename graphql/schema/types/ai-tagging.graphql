@@ -1,8 +1,12 @@
 type AITaggingStatus {
   "The configured provider, or empty when none is configured."
   provider: String!
-  "Whether analysis can run right now."
+  "Whether at least one configured analysis service can run."
   available: Boolean!
+  "Whether the configured local or remote tagging provider can run."
+  localAvailable: Boolean!
+  "Whether direct Voyage video-to-taxonomy retrieval can run."
+  voyageAvailable: Boolean!
   message: String
   "What to do to make it available, when it is not (e.g. \"configure a VLM model in Settings -> AI Server\")."
   remediation: String

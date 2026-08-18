@@ -25,6 +25,12 @@ type AITask {
   startedAt: Float
   finishedAt: Float
   error: String
+  "Single detail-view entity acted on, when applicable."
+  itemID: ID
+  "Parameters submitted with the task."
+  parameters: Map
+  "Terminal handler response retained for debugging."
+  result: Any
   cancelRequested: Boolean!
 }
 

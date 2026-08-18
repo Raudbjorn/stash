@@ -196,6 +196,9 @@ type Options struct {
 	SkipCategories []string
 	// WantEmbeddings requests per-frame vectors.
 	WantEmbeddings bool
+	// UseVoyageReranker selects the configured external taxonomy reranker.
+	// Nil preserves the provider's configured default.
+	UseVoyageReranker *bool
 }
 
 // Progress is one incremental report from a running analysis.

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 
 	"github.com/stashapp/stash/internal/aiserver/action"
@@ -10,6 +11,7 @@ import (
 	"github.com/stashapp/stash/internal/aiserver/task"
 	"github.com/stashapp/stash/internal/manager"
 	"github.com/stashapp/stash/internal/manager/config"
+	"github.com/stashapp/stash/pkg/aitag/assets"
 	"github.com/stashapp/stash/pkg/logger"
 )
 
@@ -26,10 +28,25 @@ import (
 // whichever mutation's c.Write() ran last.
 func (r *mutationResolver) ConfigureAIServer(ctx context.Context, input AIServerConfigInput) (*AIServerConfig, error) {
 	c := config.GetInstance()
+	switch input.TaggingAnalyzeMode {
+	case "legacy", "taxonomy":
+	default:
+		return nil, errors.New("taggingAnalyzeMode must be legacy or taxonomy")
+	}
+	if _, ok := assets.FindPair(input.TaggingVLMModel); !ok {
+		return nil, errors.New("taggingVLMModel is not available in this build")
+	}
 	switch input.TaggingVLMAcceptMode {
 	case "shadow", "rescue", "strict":
 	default:
 		return nil, errors.New("taggingVLMAcceptMode must be shadow, rescue, or strict")
+	}
+	if input.TaggingVLMVoyageRerankModel != "" &&
+		!containsString(availableVoyageRerankModelValues, input.TaggingVLMVoyageRerankModel) {
+		return nil, errors.New("taggingVLMVoyageRerankModel is not available in this build")
+	}
+	if !containsString(availableVoyageVideoModelValues, input.TaggingVLMVoyageVideoModel) {
+		return nil, errors.New("taggingVLMVoyageVideoModel is not available in this build")
 	}
 	if input.TaggingVLMVoyageRerankTopK <= 0 || input.TaggingVLMVoyageRerankTopK > 1000 {
 		return nil, errors.New("taggingVLMVoyageRerankTopK must be between 1 and 1000")
@@ -41,8 +58,8 @@ func (r *mutationResolver) ConfigureAIServer(ctx context.Context, input AIServer
 	if input.TaggingVLMVoyageSegmentSecs <= 0 {
 		return nil, errors.New("taggingVLMVoyageSegmentSecs must be positive")
 	}
-	if input.TaggingVLMVoyageDimension <= 0 {
-		return nil, errors.New("taggingVLMVoyageDimension must be positive")
+	if input.TaggingVLMVoyageDimension != 1024 {
+		return nil, errors.New("taggingVLMVoyageDimension must be 1024")
 	}
 	embeddingEndpoint, err := url.ParseRequestURI(input.TaggingVLMVoyageEmbeddingEndpoint)
 	if err != nil || embeddingEndpoint.Host == "" || (embeddingEndpoint.Scheme != "http" && embeddingEndpoint.Scheme != "https") {
@@ -122,8 +139,31 @@ func (r *mutationResolver) RefreshAITaggingTaxonomy(ctx context.Context) (*AISer
 	}, nil
 }
 
-func (r *mutationResolver) AnalyzeSceneWithAi(ctx context.Context, sceneID string) (*AnalyzeSceneWithAIResult, error) {
+func (r *mutationResolver) AnalyzeSceneWithAi(ctx context.Context, sceneID string, serviceName string) (*AnalyzeSceneWithAIResult, error) {
 	mgr := manager.GetInstance()
+	tagger := mgr.AIServer.Tagging()
+	if tagger == nil {
+		return nil, errors.New("AI tagging service is not running")
+	}
+	provider := tagger.Provider()
+	switch serviceName {
+	case "local":
+		if provider == nil || provider.Name() != tagging.ProviderVLM {
+			return nil, errors.New("local VLM analysis is not configured")
+		}
+	case "local_voyage":
+		if !tagger.SupportsVoyageReranking() {
+			return nil, errors.New("Voyage reranking is not configured")
+		}
+	case "voyage":
+		if !tagger.SupportsVoyageTagging() {
+			return nil, errors.New("Voyage video tagging is not configured")
+		}
+	default:
+		if provider == nil || provider.Name() != serviceName {
+			return nil, fmt.Errorf("analysis service %q is not configured", serviceName)
+		}
+	}
 
 	actx := action.ContextInput{
 		Page:         "scenes",
@@ -131,8 +171,13 @@ func (r *mutationResolver) AnalyzeSceneWithAi(ctx context.Context, sceneID strin
 		IsDetailView: true,
 		SelectedIDs:  []string{sceneID},
 	}
+	params := map[string]any{
+		"analysis_service":    serviceName,
+		"apply_scene_tags":    true,
+		"create_missing_tags": true,
+	}
 
-	rec, err := mgr.AIServer.SubmitAction(ctx, tagging.ActionID, actx, nil, nil)
+	rec, err := mgr.AIServer.SubmitAction(ctx, tagging.ActionID, actx, params, nil)
 	if err != nil {
 		var dup *task.ErrDuplicateSubmission
 		if errors.As(err, &dup) {

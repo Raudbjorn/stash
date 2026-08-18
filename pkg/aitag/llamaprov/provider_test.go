@@ -51,6 +51,25 @@ func writeCompletion(t *testing.T, w http.ResponseWriter, decisions map[string]s
 	})
 }
 
+func TestTaxonomyAnalyzerForwardsCompleteJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeCompletion(t, w, map[string]string{"value": "forwarded"})
+	}))
+	defer server.Close()
+
+	analyzer := &TaxonomyAnalyzer{Provider: newTestProvider(t, server, "label")}
+	var response struct {
+		Value string `json:"value"`
+	}
+	schema := json.RawMessage(`{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}`)
+	if err := analyzer.CompleteJSON(context.Background(), "system", "user", "forwarding", schema, 32, &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Value != "forwarded" {
+		t.Fatalf("response = %#v", response)
+	}
+}
+
 func TestNewNormalizesAndValidatesLabels(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	defer server.Close()

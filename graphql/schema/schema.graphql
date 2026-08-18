@@ -725,8 +725,8 @@ type Mutation {
   configureAIServer(input: AIServerConfigInput!): AIServerConfig!
   "Refresh the active StashDB AI-tagging taxonomy without restarting the AI server."
   refreshAITaggingTaxonomy: AIServerTaxonomyRefresh!
-  "Trigger AI tagging analysis for a single scene. Returns immediately with a task id to poll via aiTasks/aiTask."
-  analyzeSceneWithAI(sceneID: ID!): AnalyzeSceneWithAIResult!
+  "Trigger AI tagging analysis for a single scene with one configured service. Returns immediately with a task id to poll via aiTasks/aiTask."
+  analyzeSceneWithAI(sceneID: ID!, service: String!): AnalyzeSceneWithAIResult!
   "Cancel a queued or running AI server task. Returns false if it was not found or already finished."
   cancelAITask(id: ID!): Boolean!
 }

@@ -33,6 +33,7 @@ var expectedTables = []string{
 	"ai_marker_writeback",
 	"ai_scene_embeddings",
 	"ai_trained_heads",
+	"ai_taxonomy_embeddings",
 	"ai_model_run_models",
 	"ai_model_runs",
 	"ai_models",
@@ -96,6 +97,7 @@ var expectedIndexes = []string{
 	"ix_scene_watch_session_scene",
 	"ix_task_history_created_at",
 	"ix_task_history_service_status_created",
+	"ux_ai_taxonomy_embeddings",
 }
 
 func openTestDB(t *testing.T) *DB {
@@ -167,10 +169,9 @@ func TestMigrateCreatesFullSchema(t *testing.T) {
 		}
 	}
 
-	// 19 from the baseline plus the three migration 0002 added. Asserted so
-	// that adding a table without listing it above cannot pass unnoticed.
-	if n := len(expectedTables); n != 22 {
-		t.Errorf("expected 22 tables across the migrations, listed %d", n)
+	// 19 from the baseline plus the four tables added by Go migrations.
+	if n := len(expectedTables); n != 23 {
+		t.Errorf("expected 23 tables across the migrations, listed %d", n)
 	}
 }
 
@@ -218,6 +219,12 @@ func TestSegmentMigrationPreservesExistingEmbeddings(t *testing.T) {
 	statements := []string{
 		migrationLedgerDDL,
 		`CREATE TABLE ai_result_aggregates (id INTEGER PRIMARY KEY) STRICT`,
+		`CREATE TABLE task_history (
+			id INTEGER PRIMARY KEY, task_id TEXT NOT NULL UNIQUE, action_id TEXT NOT NULL,
+			service TEXT NOT NULL, status TEXT NOT NULL, submitted_at REAL NOT NULL,
+			started_at REAL, finished_at REAL, duration_ms INTEGER, items_sent INTEGER,
+			item_id TEXT, error TEXT, created_at INTEGER NOT NULL
+		) STRICT`,
 		`CREATE TABLE ai_scene_embeddings (
 			id INTEGER PRIMARY KEY, service TEXT NOT NULL, scene_id INTEGER NOT NULL,
 			model TEXT NOT NULL, dim INTEGER NOT NULL, frame_count INTEGER NOT NULL,

@@ -68,6 +68,7 @@ type Settings struct {
 	TaxonomyAPIKey        string
 	TaxonomyCategories    []string
 	TaxonomyMaxCandidates int
+	TaxonomyClient        *taxonomy.Client
 
 	FFmpegPath          string
 	FrameInterval       float64
@@ -358,6 +359,20 @@ func buildNative(ctx context.Context, settings Settings, status *Status) (aitag.
 	return provider, true
 }
 
+// NewTaxonomyClient loads the shared authoritative taxonomy snapshot used by
+// local VLM analysis and Voyage-only retrieval.
+func NewTaxonomyClient(settings Settings) *taxonomy.Client {
+	cache := &taxonomy.Cache{Path: filepath.Join(settings.ModelDir, "taxonomy-cache.json")}
+	if err := cache.Load(cache.Path); err != nil {
+		logger.Warnf("could not load AI tagging taxonomy cache: %v", err)
+	}
+	return &taxonomy.Client{
+		Cache:    cache,
+		Endpoint: settings.TaxonomyEndpoint,
+		APIKey:   settings.TaxonomyAPIKey,
+	}
+}
+
 func buildVLM(ctx context.Context, settings Settings, status *Status) (aitag.Provider, bool) {
 	if settings.FFmpegPath == "" {
 		status.Message = "ffmpeg is not available."
@@ -442,14 +457,9 @@ func buildVLM(ctx context.Context, settings Settings, status *Status) (aitag.Pro
 	supervisor.Start()
 	var active aitag.Provider = provider
 	if settings.AnalyzeMode != "legacy" {
-		cache := &taxonomy.Cache{Path: filepath.Join(settings.ModelDir, "taxonomy-cache.json")}
-		if err := cache.Load(cache.Path); err != nil {
-			logger.Warnf("could not load AI tagging taxonomy cache: %v", err)
-		}
-		client := &taxonomy.Client{
-			Cache:    cache,
-			Endpoint: settings.TaxonomyEndpoint,
-			APIKey:   settings.TaxonomyAPIKey,
+		client := settings.TaxonomyClient
+		if client == nil {
+			client = NewTaxonomyClient(settings)
 		}
 		reranker := newVoyageReranker(settings)
 		active = llamaprov.NewTaxonomyAnalyzer(provider, client, llamaprov.TaxonomyOptions{

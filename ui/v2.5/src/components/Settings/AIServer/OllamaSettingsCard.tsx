@@ -42,7 +42,7 @@ export const OllamaSettingsCard: React.FC = () => {
   if (loading && !data) return <LoadingIndicator />;
   if (!data?.ollamaStatus || !form) return null;
 
-  const { available, config } = data.ollamaStatus;
+  const { available, config, models } = data.ollamaStatus;
 
   function update(patch: Partial<Omit<OllamaConfigInput, "mistralApiKey">>) {
     setForm((prev) => (prev ? { ...prev, ...patch } : prev));
@@ -124,12 +124,39 @@ export const OllamaSettingsCard: React.FC = () => {
         />
       </Setting>
 
-      <Setting headingID="config.ollama.model">
+      <Setting
+        headingID="config.ollama.model"
+        subHeadingID="config.ollama.model_description"
+      >
         <Form.Control
-          className="text-input"
+          as="select"
+          className="input-control"
           value={form.model}
+          disabled={models.length === 0}
           onChange={(e) => update({ model: e.currentTarget.value })}
-        />
+        >
+          {models.length === 0 && (
+            <option value={form.model}>
+              {form.model ||
+                intl.formatMessage({ id: "config.ollama.no_models" })}
+            </option>
+          )}
+          {models.length > 0 &&
+            form.model !== "" &&
+            !models.includes(form.model) && (
+              <option value={form.model} disabled>
+                {intl.formatMessage(
+                  { id: "config.ollama.model_unavailable" },
+                  { model: form.model }
+                )}
+              </option>
+            )}
+          {models.map((model) => (
+            <option key={model} value={model}>
+              {model}
+            </option>
+          ))}
+        </Form.Control>
       </Setting>
 
       <BooleanSetting

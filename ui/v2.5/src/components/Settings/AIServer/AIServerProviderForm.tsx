@@ -13,6 +13,9 @@ import { useToast } from "src/hooks/Toast";
 interface AIServerProviderFormProps {
   enabled: boolean;
   config: AiServerConfigDataFragment;
+  availableVLMModels: string[];
+  availableVoyageRerankModels: string[];
+  availableVoyageVideoModels: string[];
   onSaved: () => void;
 }
 
@@ -33,12 +36,28 @@ function toInput(
     taggingVLMLabels: config.taggingVLMLabels,
     taggingVLMGPULayers: config.taggingVLMGPULayers,
     taggingVLMContext: config.taggingVLMContext,
+    taggingAnalyzeMode: config.taggingAnalyzeMode,
+    taggingVLMAcceptMode: config.taggingVLMAcceptMode,
+    taggingVLMVoyageRerankModel: config.taggingVLMVoyageRerankModel,
+    taggingVLMVoyageRerankTopK: config.taggingVLMVoyageRerankTopK,
+    taggingVLMVoyageEndpoint: config.taggingVLMVoyageEndpoint,
+    taggingVLMVoyageVideoEnabled: config.taggingVLMVoyageVideoEnabled,
+    taggingVLMVoyageVideoModel: config.taggingVLMVoyageVideoModel,
+    taggingVLMVoyageSegmentSecs: config.taggingVLMVoyageSegmentSecs,
+    taggingVLMVoyageDimension: config.taggingVLMVoyageDimension,
+    taggingVLMVoyageEmbeddingEndpoint: config.taggingVLMVoyageEmbeddingEndpoint,
+    taggingTaxonomyEndpoint: config.taggingTaxonomyEndpoint,
+    taggingTaxonomyCategories: config.taggingTaxonomyCategories,
+    taggingTaxonomyMaxCandidates: config.taggingTaxonomyMaxCandidates,
   };
 }
 
 export const AIServerProviderForm: React.FC<AIServerProviderFormProps> = ({
   enabled,
   config,
+  availableVLMModels,
+  availableVoyageRerankModels,
+  availableVoyageVideoModels,
   onSaved,
 }) => {
   const intl = useIntl();
@@ -47,6 +66,7 @@ export const AIServerProviderForm: React.FC<AIServerProviderFormProps> = ({
     toInput(enabled, config)
   );
   const [openAIKey, setOpenAIKey] = useState("");
+  const [voyageAPIKey, setVoyageAPIKey] = useState("");
   const [saving, setSaving] = useState(false);
   // The status query polls every 5s with fetchPolicy "no-cache", so `config`
   // is a fresh object on every tick even when nothing changed. Re-seeding the
@@ -71,8 +91,10 @@ export const AIServerProviderForm: React.FC<AIServerProviderFormProps> = ({
       await mutateConfigureAIServer({
         ...form,
         taggingOpenAIKey: openAIKey ? openAIKey : undefined,
+        taggingVLMVoyageAPIKey: voyageAPIKey || undefined,
       });
       setOpenAIKey("");
+      setVoyageAPIKey("");
       dirty.current = false;
       Toast.success(intl.formatMessage({ id: "config.ai_server.saved" }));
       onSaved();
@@ -173,12 +195,80 @@ export const AIServerProviderForm: React.FC<AIServerProviderFormProps> = ({
             subHeadingID="config.ai_server.vlm_model_description"
           >
             <Form.Control
-              className="text-input"
+              as="select"
+              className="input-control"
               value={form.taggingVLMModel}
               onChange={(e) =>
                 update({ taggingVLMModel: e.currentTarget.value })
               }
-            />
+            >
+              {!availableVLMModels.includes(form.taggingVLMModel) && (
+                <option value={form.taggingVLMModel} disabled>
+                  {intl.formatMessage(
+                    { id: "config.ai_server.vlm_model_unavailable" },
+                    { model: form.taggingVLMModel }
+                  )}
+                </option>
+              )}
+              {availableVLMModels.map((model) => (
+                <option key={model} value={model}>
+                  {model}
+                </option>
+              ))}
+            </Form.Control>
+          </Setting>
+          <Setting
+            headingID="config.ai_server.vlm_analyze_mode"
+            subHeadingID="config.ai_server.vlm_analyze_mode_description"
+          >
+            <Form.Control
+              as="select"
+              className="input-control"
+              value={form.taggingAnalyzeMode}
+              onChange={(e) =>
+                update({ taggingAnalyzeMode: e.currentTarget.value })
+              }
+            >
+              <option value="legacy">
+                {intl.formatMessage({
+                  id: "config.ai_server.vlm_analyze_mode_legacy",
+                })}
+              </option>
+              <option value="taxonomy">
+                {intl.formatMessage({
+                  id: "config.ai_server.vlm_analyze_mode_taxonomy",
+                })}
+              </option>
+            </Form.Control>
+          </Setting>
+          <Setting
+            headingID="config.ai_server.vlm_accept_mode"
+            subHeadingID="config.ai_server.vlm_accept_mode_description"
+          >
+            <Form.Control
+              as="select"
+              className="input-control"
+              value={form.taggingVLMAcceptMode}
+              onChange={(e) =>
+                update({ taggingVLMAcceptMode: e.currentTarget.value })
+              }
+            >
+              <option value="shadow">
+                {intl.formatMessage({
+                  id: "config.ai_server.vlm_accept_mode_shadow",
+                })}
+              </option>
+              <option value="rescue">
+                {intl.formatMessage({
+                  id: "config.ai_server.vlm_accept_mode_rescue",
+                })}
+              </option>
+              <option value="strict">
+                {intl.formatMessage({
+                  id: "config.ai_server.vlm_accept_mode_strict",
+                })}
+              </option>
+            </Form.Control>
           </Setting>
           <Setting
             headingID="config.ai_server.vlm_gpu_layers"
@@ -214,6 +304,97 @@ export const AIServerProviderForm: React.FC<AIServerProviderFormProps> = ({
           </Setting>
         </>
       )}
+      <Setting
+        headingID="config.ai_server.voyage_api_key"
+        subHeadingID="config.ai_server.voyage_api_key_description"
+      >
+        <Form.Control
+          type="password"
+          className="text-input"
+          placeholder={
+            config.taggingVLMVoyageAPIKeySet
+              ? intl.formatMessage({
+                  id: "config.ai_server.voyage_api_key_set",
+                })
+              : ""
+          }
+          value={voyageAPIKey}
+          onChange={(e) => setVoyageAPIKey(e.currentTarget.value)}
+        />
+      </Setting>
+      <Setting
+        headingID="config.ai_server.voyage_rerank_model"
+        subHeadingID="config.ai_server.voyage_rerank_model_description"
+      >
+        <Form.Control
+          as="select"
+          className="input-control"
+          value={form.taggingVLMVoyageRerankModel}
+          onChange={(e) =>
+            update({
+              taggingVLMVoyageRerankModel: e.currentTarget.value,
+            })
+          }
+        >
+          <option value="">
+            {intl.formatMessage({
+              id: "config.ai_server.voyage_rerank_model_disabled",
+            })}
+          </option>
+          {!availableVoyageRerankModels.includes(
+            form.taggingVLMVoyageRerankModel
+          ) &&
+            form.taggingVLMVoyageRerankModel !== "" && (
+              <option value={form.taggingVLMVoyageRerankModel} disabled>
+                {intl.formatMessage(
+                  { id: "config.ai_server.vlm_model_unavailable" },
+                  { model: form.taggingVLMVoyageRerankModel }
+                )}
+              </option>
+            )}
+          {availableVoyageRerankModels.map((model) => (
+            <option key={model} value={model}>
+              {model}
+            </option>
+          ))}
+        </Form.Control>
+      </Setting>
+      <BooleanSetting
+        id="ai-server-voyage-video-enabled"
+        headingID="config.ai_server.voyage_video_enabled"
+        subHeadingID="config.ai_server.voyage_video_enabled_description"
+        checked={form.taggingVLMVoyageVideoEnabled}
+        onChange={(v) => update({ taggingVLMVoyageVideoEnabled: v })}
+      />
+      <Setting
+        headingID="config.ai_server.voyage_video_model"
+        subHeadingID="config.ai_server.voyage_video_model_description"
+      >
+        <Form.Control
+          as="select"
+          className="input-control"
+          value={form.taggingVLMVoyageVideoModel}
+          onChange={(e) =>
+            update({ taggingVLMVoyageVideoModel: e.currentTarget.value })
+          }
+        >
+          {!availableVoyageVideoModels.includes(
+            form.taggingVLMVoyageVideoModel
+          ) && (
+            <option value={form.taggingVLMVoyageVideoModel} disabled>
+              {intl.formatMessage(
+                { id: "config.ai_server.vlm_model_unavailable" },
+                { model: form.taggingVLMVoyageVideoModel }
+              )}
+            </option>
+          )}
+          {availableVoyageVideoModels.map((model) => (
+            <option key={model} value={model}>
+              {model}
+            </option>
+          ))}
+        </Form.Control>
+      </Setting>
 
       <div className="ai-server-save">
         <Button disabled={saving} onClick={save}>

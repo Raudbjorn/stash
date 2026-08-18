@@ -6,8 +6,24 @@ import (
 
 	"github.com/stashapp/stash/internal/aiserver"
 	"github.com/stashapp/stash/internal/manager"
+	"github.com/stashapp/stash/pkg/aitag/assets"
 	"github.com/stashapp/stash/pkg/aitag/llamaprov"
 	"github.com/stashapp/stash/pkg/ollama"
+)
+
+var (
+	availableVoyageRerankModelValues = []string{
+		"rerank-2.5",
+		"rerank-2.5-lite",
+		"rerank-2",
+		"rerank-2-lite",
+		"rerank-1",
+		"rerank-lite-1",
+	}
+	availableVoyageVideoModelValues = []string{
+		"voyage-multimodal-3.5",
+		"voyage-multimodal-3",
+	}
 )
 
 func aiServerStateFromHealth(s aiserver.State) AIServerState {
@@ -64,6 +80,32 @@ func buildAIServerConfig(c *manager.Manager) *AIServerConfig {
 		TaggingTaxonomyCategories:         cfg.GetAITaggingTaxonomyCategories(),
 		TaggingTaxonomyMaxCandidates:      cfg.GetAITaggingTaxonomyMaxCandidates(),
 	}
+}
+
+func availableVLMModels() []string {
+	pairs := assets.VisionPairs()
+	ret := make([]string, len(pairs))
+	for i, pair := range pairs {
+		ret[i] = pair.Name
+	}
+	return ret
+}
+
+func availableVoyageRerankModels() []string {
+	return append([]string(nil), availableVoyageRerankModelValues...)
+}
+
+func availableVoyageVideoModels() []string {
+	return append([]string(nil), availableVoyageVideoModelValues...)
+}
+
+func containsString(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
 }
 
 func aiTaggingProviderFromString(s string) *AITaggingProvider {
@@ -125,13 +167,16 @@ func (r *queryResolver) AiServerStatus(ctx context.Context) (*AIServerStatus, er
 		// (e.g. after fixing the provider) would silently turn the whole
 		// server off by round-tripping this value back through
 		// configureAIServer. Ready is the separate "actually running" signal.
-		Enabled:              mgr.Config.GetAIEnabled(),
-		Ready:                srv.Ready(),
-		HasVLMProvider:       taggingStatus.Provider == llamaprov.ProviderName && taggingStatus.Available,
-		HasLocalTextProvider: hasLocalTextProvider,
-		BackendVersion:       health.BackendVersion,
-		SchemaVersion:        schemaVersion,
-		Error:                errMsg,
+		Enabled:                     mgr.Config.GetAIEnabled(),
+		Ready:                       srv.Ready(),
+		HasVLMProvider:              taggingStatus.Provider == llamaprov.ProviderName && taggingStatus.Available,
+		HasLocalTextProvider:        hasLocalTextProvider,
+		AvailableVLMModels:          availableVLMModels(),
+		AvailableVoyageRerankModels: availableVoyageRerankModels(),
+		AvailableVoyageVideoModels:  availableVoyageVideoModels(),
+		BackendVersion:              health.BackendVersion,
+		SchemaVersion:               schemaVersion,
+		Error:                       errMsg,
 		Database: &AIServerHealthComponent{
 			Status:  string(health.Database.Status),
 			Message: health.Database.Message,
@@ -143,20 +188,29 @@ func (r *queryResolver) AiServerStatus(ctx context.Context) (*AIServerStatus, er
 func (r *queryResolver) AiTaggingStatus(ctx context.Context) (*AITaggingStatus, error) {
 	mgr := manager.GetInstance()
 	status := mgr.AIServer.TaggingStatus()
+	tagger := mgr.AIServer.Tagging()
+	voyageAvailable := tagger != nil && tagger.SupportsVoyageTagging()
 
 	var message, remediation *string
-	if status.Message != "" {
-		message = &status.Message
-	}
-	if status.Remediation != "" {
-		remediation = &status.Remediation
+	if voyageAvailable && !status.Available {
+		value := "Voyage AI video tagging is ready."
+		message = &value
+	} else {
+		if status.Message != "" {
+			message = &status.Message
+		}
+		if status.Remediation != "" {
+			remediation = &status.Remediation
+		}
 	}
 
 	return &AITaggingStatus{
-		Provider:    status.Provider,
-		Available:   status.Available,
-		Message:     message,
-		Remediation: remediation,
+		Provider:        status.Provider,
+		Available:       status.Available || voyageAvailable,
+		LocalAvailable:  status.Available,
+		VoyageAvailable: voyageAvailable,
+		Message:         message,
+		Remediation:     remediation,
 	}, nil
 }
 

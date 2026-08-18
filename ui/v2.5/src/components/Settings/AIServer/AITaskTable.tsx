@@ -41,6 +41,19 @@ const TaskRow: React.FC<{ task: AiTaskDataFragment }> = ({ task }) => {
           </Button>
         )}
         {task.error && <span className="job-error">{task.error}</span>}
+        {(task.parameters != null || task.result != null) && (
+          <details className="mt-1">
+            <summary>
+              <FormattedMessage id="config.ai_server.task_details" />
+            </summary>
+            {task.parameters != null && (
+              <pre>{JSON.stringify(task.parameters, null, 2)}</pre>
+            )}
+            {task.result != null && (
+              <pre>{JSON.stringify(task.result, null, 2)}</pre>
+            )}
+          </details>
+        )}
       </td>
     </tr>
   );

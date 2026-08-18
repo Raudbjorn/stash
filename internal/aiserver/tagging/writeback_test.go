@@ -294,7 +294,6 @@ func TestTagCreationIsOptIn(t *testing.T) {
 		t.Errorf("tags were created without being asked: %v", tagRepo.created)
 	}
 
-	writer.InvalidateTagCache()
 	opts := DefaultWritebackOptions()
 	opts.CreateMissingTags = true
 
@@ -309,6 +308,37 @@ func TestTagCreationIsOptIn(t *testing.T) {
 	if len(tagRepo.created) != 1 || tagRepo.created[0] != "Novel_AI" {
 		t.Errorf("created tags = %v, want [Novel_AI]", tagRepo.created)
 	}
+}
+
+func TestWritebackCreatesAndAppliesDistinctSceneTags(t *testing.T) {
+	writer, _, tagRepo, _ := newTestWriter(t)
+	tagRepo.byName["Known_AI"] = 7
+	sceneRepo := &mocks.SceneReaderWriter{}
+	sceneRepo.On("UpdatePartial", mock.Anything, 42, mock.MatchedBy(func(partial models.ScenePartial) bool {
+		if partial.TagIDs == nil || partial.TagIDs.Mode != models.RelationshipUpdateModeAdd {
+			return false
+		}
+		return len(partial.TagIDs.IDs) == 2 &&
+			partial.TagIDs.IDs[0] == 7 &&
+			partial.TagIDs.IDs[1] == 1001
+	})).Return(&models.Scene{ID: 42}, nil).Once()
+	writer.repo.Scene = sceneRepo
+
+	opts := DefaultWritebackOptions()
+	opts.CreateMissingTags = true
+	opts.ApplySceneTags = true
+	result, err := writer.Write(context.Background(), "llama_vlm", 42, 1, []aitag.Marker{
+		markerFixture("Known", 0, 30),
+		markerFixture("Known", 60, 90),
+		markerFixture("Novel", 120, 150),
+	}, 2, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.TagsApplied != 2 || result.TagsCreated != 1 {
+		t.Fatalf("result = %+v, want 2 applied and 1 created tag", result)
+	}
+	sceneRepo.AssertExpectations(t)
 }
 
 // An alias is how a user maps a generated name onto a tag they already have, so

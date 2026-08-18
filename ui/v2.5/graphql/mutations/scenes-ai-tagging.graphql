@@ -1,5 +1,5 @@
-mutation AnalyzeSceneWithAI($sceneID: ID!) {
-  analyzeSceneWithAI(sceneID: $sceneID) {
+mutation AnalyzeSceneWithAI($sceneID: ID!, $service: String!) {
+  analyzeSceneWithAI(sceneID: $sceneID, service: $service) {
     taskID
     status
     alreadyInProgress
