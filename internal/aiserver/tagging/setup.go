@@ -15,6 +15,7 @@ import (
 	"github.com/stashapp/stash/pkg/aitag/llamaprov"
 	"github.com/stashapp/stash/pkg/aitag/moderation"
 	"github.com/stashapp/stash/pkg/aitag/native"
+	"github.com/stashapp/stash/pkg/aitag/taxonomy"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/onnx"
 )
@@ -56,7 +57,18 @@ type Settings struct {
 	// VLMGPULayers enables explicit llama.cpp GPU offload when positive.
 	VLMGPULayers int
 	// VLMContext overrides the pair's default context window when positive.
-	VLMContext int
+	VLMContext            int
+	AnalyzeMode           string
+	VLMAcceptMode         string
+	VLMVoyageAPIKey       string
+	VLMVoyageRerankModel  string
+	VLMVoyageRerankTopK   int
+	VLMVoyageEndpoint     string
+	TaxonomyEndpoint      string
+	TaxonomyAPIKey        string
+	TaxonomyCategories    []string
+	TaxonomyMaxCandidates int
+	TaxonomyClient        *taxonomy.Client
 
 	FFmpegPath          string
 	FrameInterval       float64
@@ -347,6 +359,20 @@ func buildNative(ctx context.Context, settings Settings, status *Status) (aitag.
 	return provider, true
 }
 
+// NewTaxonomyClient loads the shared authoritative taxonomy snapshot used by
+// local VLM analysis and Voyage-only retrieval.
+func NewTaxonomyClient(settings Settings) *taxonomy.Client {
+	cache := &taxonomy.Cache{Path: filepath.Join(settings.ModelDir, "taxonomy-cache.json")}
+	if err := cache.Load(cache.Path); err != nil {
+		logger.Warnf("could not load AI tagging taxonomy cache: %v", err)
+	}
+	return &taxonomy.Client{
+		Cache:    cache,
+		Endpoint: settings.TaxonomyEndpoint,
+		APIKey:   settings.TaxonomyAPIKey,
+	}
+}
+
 func buildVLM(ctx context.Context, settings Settings, status *Status) (aitag.Provider, bool) {
 	if settings.FFmpegPath == "" {
 		status.Message = "ffmpeg is not available."
@@ -354,10 +380,12 @@ func buildVLM(ctx context.Context, settings Settings, status *Status) (aitag.Pro
 		return nil, false
 	}
 
-	if err := llamaprov.ValidateLabels(settings.VLMLabels); err != nil {
-		status.Message = err.Error()
-		status.Remediation = "Set ai_tagging_vlm_labels to a non-empty list of unique action labels."
-		return nil, false
+	if settings.AnalyzeMode == "legacy" {
+		if err := llamaprov.ValidateLabels(settings.VLMLabels); err != nil {
+			status.Message = err.Error()
+			status.Remediation = "Set ai_tagging_vlm_labels to a non-empty list of unique action labels."
+			return nil, false
+		}
 	}
 
 	artifacts, err := resolveVLMArtifacts(settings)
@@ -398,17 +426,18 @@ func buildVLM(ctx context.Context, settings Settings, status *Status) (aitag.Pro
 		supervisor.Stop(stopCtx)
 	}
 	provider, err := llamaprov.New(llamaprov.Config{
-		Client:          supervisor.Client(),
-		BaseURL:         "http://llama",
-		Pair:            artifacts.pair,
-		Labels:          settings.VLMLabels,
-		Category:        "actions",
-		FFmpegPath:      settings.FFmpegPath,
-		DefaultInterval: llamaprov.DefaultFrameInterval,
-		MaxMergeSeconds: settings.MaxSpanMergeSeconds,
-		Available:       supervisor.Available,
-		WaitReady:       supervisor.WaitReady,
-		CloseHost:       stopHost,
+		Client:           supervisor.Client(),
+		BaseURL:          "http://llama",
+		Pair:             artifacts.pair,
+		Labels:           settings.VLMLabels,
+		AllowEmptyLabels: settings.AnalyzeMode != "legacy",
+		Category:         "actions",
+		FFmpegPath:       settings.FFmpegPath,
+		DefaultInterval:  llamaprov.DefaultFrameInterval,
+		MaxMergeSeconds:  settings.MaxSpanMergeSeconds,
+		Available:        supervisor.Available,
+		WaitReady:        supervisor.WaitReady,
+		CloseHost:        stopHost,
 	})
 	if err != nil {
 		stopHost()
@@ -426,8 +455,35 @@ func buildVLM(ctx context.Context, settings Settings, status *Status) (aitag.Pro
 		return available, hostStatus.Message, remediation
 	}
 	supervisor.Start()
-	*status = status.Current(provider)
-	return provider, true
+	var active aitag.Provider = provider
+	if settings.AnalyzeMode != "legacy" {
+		client := settings.TaxonomyClient
+		if client == nil {
+			client = NewTaxonomyClient(settings)
+		}
+		reranker := newVoyageReranker(settings)
+		active = llamaprov.NewTaxonomyAnalyzer(provider, client, llamaprov.TaxonomyOptions{
+			Categories:    settings.TaxonomyCategories,
+			MaxCandidates: settings.TaxonomyMaxCandidates,
+			AcceptMode:    llamaprov.ParseAcceptMode(settings.VLMAcceptMode),
+			MinSupport:    2,
+			Reranker:      reranker,
+			RerankTopK:    settings.VLMVoyageRerankTopK,
+		})
+	}
+	*status = status.Current(active)
+	return active, true
+}
+
+func newVoyageReranker(settings Settings) llamaprov.Reranker {
+	if settings.VLMVoyageAPIKey == "" || settings.VLMVoyageRerankModel == "" {
+		return nil
+	}
+	return &llamaprov.VoyageReranker{
+		APIKey:   settings.VLMVoyageAPIKey,
+		Model:    settings.VLMVoyageRerankModel,
+		Endpoint: settings.VLMVoyageEndpoint,
+	}
 }
 
 // AttachHead loads a trained head into a native provider.

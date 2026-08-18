@@ -135,6 +135,9 @@ type StoredEmbeddings struct {
 	Dim           int
 	FrameInterval float64
 	Times         []float64
+	SegmentStart  float64
+	SegmentEnd    float64
+	InputHash     string
 	// Vectors is FrameCount*Dim values, frame-major.
 	Vectors []float32
 }
@@ -165,20 +168,27 @@ func (db *DB) StoreEmbeddings(ctx context.Context, service string, in StoredEmbe
 	// roughly ten times that as text, which would have to be parsed on every
 	// read.
 	blob := encodeFloat32s(in.Vectors)
+	segmentEnd := in.SegmentEnd
+	if segmentEnd <= in.SegmentStart && len(in.Times) > 0 {
+		segmentEnd = in.Times[len(in.Times)-1]
+	}
 
 	_, err = db.sql.ExecContext(ctx,
 		`INSERT INTO ai_scene_embeddings
-		     (service, scene_id, model, dim, frame_count, frame_interval, times, vectors, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(service, scene_id, model) DO UPDATE SET
+		     (service, scene_id, model, dim, frame_count, frame_interval, times, vectors,
+		      segment_start, segment_end, input_hash, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(service, scene_id, model, segment_start) DO UPDATE SET
 		     dim            = excluded.dim,
 		     frame_count    = excluded.frame_count,
 		     frame_interval = excluded.frame_interval,
 		     times          = excluded.times,
 		     vectors        = excluded.vectors,
+		     segment_end    = excluded.segment_end,
+		     input_hash     = excluded.input_hash,
 		     created_at     = excluded.created_at`,
 		service, in.SceneID, in.Model, in.Dim, in.FrameCount(), in.FrameInterval,
-		string(times), blob, NowMillis())
+		string(times), blob, in.SegmentStart, segmentEnd, in.InputHash, NowMillis())
 	return err
 }
 
@@ -191,9 +201,12 @@ func (db *DB) GetEmbeddings(ctx context.Context, service string, sceneID int, mo
 	)
 
 	err := db.sql.QueryRowContext(ctx,
-		`SELECT dim, frame_interval, times, vectors
-		 FROM ai_scene_embeddings WHERE service = ? AND scene_id = ? AND model = ?`,
-		service, sceneID, model).Scan(&out.Dim, &out.FrameInterval, &timesJSON, &blob)
+		`SELECT dim, frame_interval, times, vectors, segment_start, segment_end, input_hash
+		 FROM ai_scene_embeddings
+		 WHERE service = ? AND scene_id = ? AND model = ? AND segment_start = 0`,
+		service, sceneID, model).Scan(
+		&out.Dim, &out.FrameInterval, &timesJSON, &blob, &out.SegmentStart, &out.SegmentEnd, &out.InputHash,
+	)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -216,7 +229,7 @@ func (db *DB) GetEmbeddings(ctx context.Context, service string, sceneID int, mo
 // memory at once.
 func (db *DB) EmbeddedScenes(ctx context.Context, service, model string) ([]int, error) {
 	rows, err := db.sql.QueryContext(ctx,
-		`SELECT scene_id FROM ai_scene_embeddings
+		`SELECT DISTINCT scene_id FROM ai_scene_embeddings
 		 WHERE service = ? AND model = ? ORDER BY scene_id`, service, model)
 	if err != nil {
 		return nil, err
@@ -232,6 +245,47 @@ func (db *DB) EmbeddedScenes(ctx context.Context, service, model string) ([]int,
 		out = append(out, id)
 	}
 	return out, rows.Err()
+}
+
+// GetEmbeddingSegments returns every cached segment for a scene/model.
+func (db *DB) GetEmbeddingSegments(ctx context.Context, service string, sceneID int, model string) ([]StoredEmbeddings, error) {
+	rows, err := db.sql.QueryContext(ctx,
+		`SELECT dim, frame_interval, times, vectors, segment_start, segment_end, input_hash
+		 FROM ai_scene_embeddings
+		 WHERE service = ? AND scene_id = ? AND model = ?
+		 ORDER BY segment_start`, service, sceneID, model)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ret := make([]StoredEmbeddings, 0)
+	for rows.Next() {
+		var (
+			item      StoredEmbeddings
+			timesJSON string
+			blob      []byte
+		)
+		if err := rows.Scan(
+			&item.Dim,
+			&item.FrameInterval,
+			&timesJSON,
+			&blob,
+			&item.SegmentStart,
+			&item.SegmentEnd,
+			&item.InputHash,
+		); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(timesJSON), &item.Times); err != nil {
+			return nil, fmt.Errorf("decode segment embedding timestamps: %w", err)
+		}
+		item.SceneID = sceneID
+		item.Model = model
+		item.Vectors = decodeFloat32s(blob)
+		ret = append(ret, item)
+	}
+	return ret, rows.Err()
 }
 
 // DeleteEmbeddings removes a scene's cached vectors.

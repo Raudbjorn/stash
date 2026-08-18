@@ -3029,9 +3029,7 @@ export const mutateUninstallPythonPackages = (names: string[]) =>
     variables: { names },
   });
 
-export const mutateConfigurePythonIndexes = (
-  indexes: GQL.PythonIndexInput[]
-) =>
+export const mutateConfigurePythonIndexes = (indexes: GQL.PythonIndexInput[]) =>
   client.mutate<
     GQL.ConfigurePythonIndexesMutation,
     GQL.ConfigurePythonIndexesMutationVariables
@@ -3101,22 +3099,33 @@ export const mutateCancelAITask = (id: string) =>
     },
   });
 
-export const mutateAnalyzeSceneWithAI = (sceneID: string) =>
+export const mutateAnalyzeSceneWithAI = (sceneID: string, service: string) =>
   client.mutate<
     GQL.AnalyzeSceneWithAiMutation,
     GQL.AnalyzeSceneWithAiMutationVariables
   >({
     mutation: GQL.AnalyzeSceneWithAiDocument,
-    variables: { sceneID },
+    variables: { sceneID, service },
     update(cache, result) {
       if (!result.data?.analyzeSceneWithAI) return;
       evictQueries(cache, aiServerMutationImpactedQueries);
     },
   });
 
-export const useSceneAITaggingSpans = (sceneID: string, pollInterval = 0) =>
+export const refreshSceneAfterAI = (sceneID: string) => {
+  client.cache.evict({
+    id: client.cache.identify({ __typename: "Scene", id: sceneID }),
+  });
+  client.cache.gc();
+};
+
+export const useSceneAITaggingSpans = (
+  sceneID: string,
+  service: string,
+  pollInterval = 0
+) =>
   GQL.useSceneAiTaggingSpansQuery({
-    variables: { sceneID },
+    variables: { sceneID, service },
     fetchPolicy: "no-cache",
     pollInterval,
   });

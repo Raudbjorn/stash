@@ -539,6 +539,72 @@ func TestAnalyzeSceneMetadataReplacesPerformersFromAuthoritativeSceneID(t *testi
 	}
 }
 
+func TestAnalyzeSceneMetadataCreatesMissingAuthoritativePerformer(t *testing.T) {
+	r := newTestRepository(t)
+	const endpoint = "https://stashdb.org/graphql"
+	existingID := createTestPerformerWithStashID(t, r, "Existing Performer", endpoint, "existing")
+	wrongID := createTestPerformer(t, r, "Wrong Performer", "", "", nil, nil)
+
+	scene := models.NewScene()
+	scene.Title = "Authoritative cast"
+	scene.PerformerIDs = models.NewRelatedIDs([]int{wrongID, existingID})
+	scene.StashIDs = models.NewRelatedStashIDs([]models.StashID{{
+		Endpoint: endpoint,
+		StashID:  "scene-id",
+	}})
+	if err := r.WithTxn(context.Background(), func(ctx context.Context) error {
+		return r.Scene.Create(ctx, &scene, nil)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	job := &analyzeSceneMetadataJob{
+		repository:           r,
+		configuredStashBoxes: []*models.StashBox{{Endpoint: endpoint}},
+		scenePerformerLookup: func(context.Context, models.StashBox, string) ([]*models.ScrapedPerformer, error) {
+			return []*models.ScrapedPerformer{
+				scrapedPerformer("Existing Performer", func(p *models.ScrapedPerformer) {
+					p.RemoteSiteID = stringPointer("existing")
+				}),
+				scrapedPerformer("New Performer", func(p *models.ScrapedPerformer) {
+					p.RemoteSiteID = stringPointer("new")
+				}),
+			}, nil
+		},
+	}
+
+	if err := job.processScene(context.Background(), &scene); err != nil {
+		t.Fatal(err)
+	}
+	var matches []performerIdentity
+	var stashMatches []*models.Performer
+	if err := r.WithReadTxn(context.Background(), func(ctx context.Context) error {
+		var err error
+		matches, err = findExactPerformerIdentities(ctx, r.Performer, "New Performer")
+		if err != nil {
+			return err
+		}
+		stashMatches, err = r.Performer.FindByStashID(ctx, models.StashID{
+			Endpoint: endpoint,
+			StashID:  "new",
+		})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("created performer matches = %d, want 1", len(matches))
+	}
+	got := scenePerformerIDs(t, r, scene.ID)
+	want := []int{existingID, matches[0].ID}
+	if !sameIDSet(got, want) {
+		t.Fatalf("scene performer IDs = %v, want %v", got, want)
+	}
+	if len(stashMatches) != 1 || stashMatches[0].ID != matches[0].ID {
+		t.Fatalf("created performer Stash-box identity = %+v", stashMatches)
+	}
+}
+
 func TestAnalyzeSceneMetadataDuplicateLibrary(t *testing.T) {
 	r := newTestRepository(t)
 	first := createTestPerformer(t, r, "Duplicate Name", "first", "", nil, nil)

@@ -84,6 +84,8 @@ type ModelInfo struct {
 	// FrameInterval is how far apart this model's frames were sampled.
 	FrameInterval float64 `json:"frame_interval,omitempty"`
 	Threshold     float64 `json:"threshold,omitempty"`
+	// Extra records provider-specific configuration needed to reproduce a run.
+	Extra map[string]any `json:"extra,omitempty"`
 }
 
 // Span is one raw detection over a range of a video.
@@ -194,6 +196,9 @@ type Options struct {
 	SkipCategories []string
 	// WantEmbeddings requests per-frame vectors.
 	WantEmbeddings bool
+	// UseVoyageReranker selects the configured external taxonomy reranker.
+	// Nil preserves the provider's configured default.
+	UseVoyageReranker *bool
 }
 
 // Progress is one incremental report from a running analysis.

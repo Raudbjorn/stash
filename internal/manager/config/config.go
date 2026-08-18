@@ -207,11 +207,14 @@ const (
 	DubbingVoice        = "dubbing_voice"
 	dubbingVoiceDefault = "nix"
 
-	// Ollama dictionary / word-explanation service (opt-in, disabled by
-	// default). OllamaBaseURL is empty by default; when unset (or disabled)
-	// no requests are made.
+	// Text-generation service used for dictionary / word explanation requests.
+	// The historical Ollama names are retained in the persisted config and
+	// GraphQL API, while OllamaBackend selects either Ollama's native protocol
+	// or an OpenAI-compatible server such as llama-server.
 	OllamaEnabled                   = "ollama_enabled"
 	ollamaEnabledDefault            = false
+	OllamaBackend                   = "ollama_backend"
+	ollamaBackendDefault            = "ollama"
 	OllamaBaseURL                   = "ollama_base_url"
 	OllamaModel                     = "ollama_model"
 	ollamaModelDefault              = "huihui_ai/qwen3-abliterated:8b-v2"
@@ -276,6 +279,37 @@ const (
 	// AITaggingVLMContext overrides the selected pair's context window. Zero
 	// keeps the pair's checksum-pinned default.
 	AITaggingVLMContext = "ai_tagging_vlm_context"
+	// AITaggingAnalyzeMode selects taxonomy-grounded or legacy VLM analysis.
+	AITaggingAnalyzeMode = "ai_tagging_analyze_mode"
+	// AITaggingVLMAcceptMode selects shadow diagnostics, surrounding-frame
+	// rescue, or strict support filtering. Shadow is the safe default.
+	AITaggingVLMAcceptMode        = "ai_tagging_vlm_accept_mode"
+	aiTaggingVLMAcceptModeDefault = "shadow"
+	// Optional Voyage cross-encoder reranking. A model is empty by default, so
+	// storing an API key alone does not enable external requests.
+	AITaggingVLMVoyageAPIKey                   = "ai_tagging_vlm_voyage_api_key"
+	AITaggingVLMVoyageRerankModel              = "ai_tagging_vlm_voyage_rerank_model"
+	AITaggingVLMVoyageRerankTopK               = "ai_tagging_vlm_voyage_rerank_top_k"
+	AITaggingVLMVoyageEndpoint                 = "ai_tagging_vlm_voyage_endpoint"
+	aiTaggingVLMVoyageTopKDefault              = 12
+	aiTaggingVLMVoyageEndpointDefault          = "https://api.voyageai.com/v1/rerank"
+	AITaggingVLMVoyageVideoEnabled             = "ai_tagging_vlm_voyage_video_enabled"
+	AITaggingVLMVoyageVideoModel               = "ai_tagging_vlm_voyage_video_model"
+	AITaggingVLMVoyageSegmentSecs              = "ai_tagging_vlm_voyage_segment_secs"
+	AITaggingVLMVoyageDimension                = "ai_tagging_vlm_voyage_dimension"
+	AITaggingVLMVoyageEmbeddingEndpoint        = "ai_tagging_vlm_voyage_embedding_endpoint"
+	aiTaggingVLMVoyageVideoModelDefault        = "voyage-multimodal-3.5"
+	aiTaggingVLMVoyageSegmentSecsDefault       = 30.0
+	aiTaggingVLMVoyageDimensionDefault         = 1024
+	aiTaggingVLMVoyageEmbeddingEndpointDefault = "https://api.voyageai.com/v1/multimodalembeddings"
+	// AITaggingTaxonomyEndpoint is the StashDB GraphQL taxonomy source.
+	AITaggingTaxonomyEndpoint = "ai_tagging_taxonomy_endpoint"
+	// AITaggingTaxonomyAPIKey optionally authenticates taxonomy requests.
+	AITaggingTaxonomyAPIKey = "ai_tagging_taxonomy_api_key"
+	// AITaggingTaxonomyCategories limits candidate tags by StashDB category.
+	AITaggingTaxonomyCategories = "ai_tagging_taxonomy_categories"
+	// AITaggingTaxonomyMaxCandidates caps each frame's verification set.
+	AITaggingTaxonomyMaxCandidates = "ai_tagging_taxonomy_max_candidates"
 	// MistralAPIKey is the Mistral AI API key used as an alternative dictionary
 	// provider. Empty by default; the MISTRAL_API_KEY environment variable is
 	// honored as a fallback.
@@ -2169,6 +2203,16 @@ func (i *Config) GetOllamaBaseURL() string {
 	return strings.TrimRight(i.getString(OllamaBaseURL), "/")
 }
 
+// GetOllamaBackend returns the configured text-generation protocol.
+func (i *Config) GetOllamaBackend() string {
+	switch ret := i.getString(OllamaBackend); ret {
+	case "openai_compatible":
+		return ret
+	default:
+		return ollamaBackendDefault
+	}
+}
+
 // GetOllamaModel returns the configured Ollama model name.
 func (i *Config) GetOllamaModel() string {
 	ret := i.getString(OllamaModel)
@@ -2329,6 +2373,99 @@ func (i *Config) GetAITaggingVLMGPULayers() int {
 // GetAITaggingVLMContext returns the configured context override, or zero.
 func (i *Config) GetAITaggingVLMContext() int {
 	return i.getInt(AITaggingVLMContext)
+}
+
+// GetAITaggingAnalyzeMode preserves the legacy analyzer unless taxonomy mode is
+// explicitly enabled. Existing VLM installations predate this key and must not
+// start requiring a taxonomy endpoint after an upgrade.
+func (i *Config) GetAITaggingAnalyzeMode() string {
+	if i.getString(AITaggingAnalyzeMode) == "taxonomy" {
+		return "taxonomy"
+	}
+	return "legacy"
+}
+
+func (i *Config) GetAITaggingVLMAcceptMode() string {
+	switch mode := i.getString(AITaggingVLMAcceptMode); mode {
+	case "rescue", "strict":
+		return mode
+	case "shadow", "":
+		return aiTaggingVLMAcceptModeDefault
+	default:
+		return aiTaggingVLMAcceptModeDefault
+	}
+}
+
+func (i *Config) GetAITaggingVLMVoyageAPIKey() string {
+	return i.getString(AITaggingVLMVoyageAPIKey)
+}
+
+func (i *Config) GetAITaggingVLMVoyageRerankModel() string {
+	return i.getString(AITaggingVLMVoyageRerankModel)
+}
+
+func (i *Config) GetAITaggingVLMVoyageRerankTopK() int {
+	topK := i.getInt(AITaggingVLMVoyageRerankTopK)
+	if topK <= 0 {
+		return aiTaggingVLMVoyageTopKDefault
+	}
+	return topK
+}
+
+func (i *Config) GetAITaggingVLMVoyageEndpoint() string {
+	if endpoint := i.getString(AITaggingVLMVoyageEndpoint); endpoint != "" {
+		return endpoint
+	}
+	return aiTaggingVLMVoyageEndpointDefault
+}
+
+func (i *Config) GetAITaggingVLMVoyageVideoEnabled() bool {
+	return i.getBoolDefault(AITaggingVLMVoyageVideoEnabled, false)
+}
+
+func (i *Config) GetAITaggingVLMVoyageVideoModel() string {
+	if model := i.getString(AITaggingVLMVoyageVideoModel); model != "" {
+		return model
+	}
+	return aiTaggingVLMVoyageVideoModelDefault
+}
+
+func (i *Config) GetAITaggingVLMVoyageSegmentSecs() float64 {
+	seconds := i.getFloat64(AITaggingVLMVoyageSegmentSecs)
+	if seconds <= 0 {
+		return aiTaggingVLMVoyageSegmentSecsDefault
+	}
+	return seconds
+}
+
+// GetAITaggingVLMVoyageDimension returns the multimodal REST API's fixed
+// response dimension. The endpoint does not expose an output-dimension request
+// field, so persisted values from earlier builds cannot select another size.
+func (i *Config) GetAITaggingVLMVoyageDimension() int {
+	return aiTaggingVLMVoyageDimensionDefault
+}
+
+func (i *Config) GetAITaggingVLMVoyageEmbeddingEndpoint() string {
+	if endpoint := i.getString(AITaggingVLMVoyageEmbeddingEndpoint); endpoint != "" {
+		return endpoint
+	}
+	return aiTaggingVLMVoyageEmbeddingEndpointDefault
+}
+
+func (i *Config) GetAITaggingTaxonomyEndpoint() string {
+	return i.getString(AITaggingTaxonomyEndpoint)
+}
+
+func (i *Config) GetAITaggingTaxonomyAPIKey() string {
+	return i.getString(AITaggingTaxonomyAPIKey)
+}
+
+func (i *Config) GetAITaggingTaxonomyCategories() []string {
+	return i.getStringSlice(AITaggingTaxonomyCategories)
+}
+
+func (i *Config) GetAITaggingTaxonomyMaxCandidates() int {
+	return i.getInt(AITaggingTaxonomyMaxCandidates)
 }
 
 // GetMistralAPIKey returns the Mistral AI API key, honoring the MISTRAL_API_KEY

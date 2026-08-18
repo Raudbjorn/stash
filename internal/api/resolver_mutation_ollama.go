@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/stashapp/stash/internal/manager/config"
+	"github.com/stashapp/stash/pkg/ollama"
 )
 
 // ConfigureOllama configures the Ollama service settings and persists them
@@ -13,6 +14,7 @@ func (r *mutationResolver) ConfigureOllama(ctx context.Context, input OllamaConf
 
 	c.SetBool(config.OllamaEnabled, input.Enabled)
 	c.SetString(config.OllamaBaseURL, input.BaseURL)
+	c.SetString(config.OllamaBackend, string(ollamaBackendToConfig(input.Backend)))
 	c.SetString(config.OllamaModel, input.Model)
 	c.SetInt(config.OllamaTimeout, input.Timeout)
 	c.SetBool(config.OllamaFallbackToTraditionalDict, input.FallbackToTraditionalDict)
@@ -30,6 +32,7 @@ func (r *mutationResolver) ConfigureOllama(ctx context.Context, input OllamaConf
 
 	return &OllamaConfig{
 		BaseURL:                   cfg.BaseURL,
+		Backend:                   ollamaBackendFromConfig(cfg.Backend),
 		Model:                     cfg.Model,
 		Timeout:                   cfg.Timeout,
 		Enabled:                   cfg.Enabled,
@@ -37,6 +40,20 @@ func (r *mutationResolver) ConfigureOllama(ctx context.Context, input OllamaConf
 		PromptTemplate:            cfg.PromptTemplate,
 		MistralAPIKeySet:          c.GetMistralAPIKeyConfigured(),
 	}, nil
+}
+
+func ollamaBackendToConfig(backend OllamaBackend) ollama.Backend {
+	if backend == OllamaBackendOpenaiCompatible {
+		return ollama.BackendOpenAICompatible
+	}
+	return ollama.BackendOllama
+}
+
+func ollamaBackendFromConfig(backend ollama.Backend) OllamaBackend {
+	if backend == ollama.BackendOpenAICompatible {
+		return OllamaBackendOpenaiCompatible
+	}
+	return OllamaBackendOllama
 }
 
 // OllamaGenerate generates text using Ollama

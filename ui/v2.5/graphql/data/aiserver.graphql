@@ -12,6 +12,21 @@ fragment AIServerConfigData on AIServerConfig {
   taggingVLMLabels
   taggingVLMGPULayers
   taggingVLMContext
+  taggingAnalyzeMode
+  taggingVLMAcceptMode
+  taggingVLMVoyageAPIKeySet
+  taggingVLMVoyageRerankModel
+  taggingVLMVoyageRerankTopK
+  taggingVLMVoyageEndpoint
+  taggingVLMVoyageVideoEnabled
+  taggingVLMVoyageVideoModel
+  taggingVLMVoyageSegmentSecs
+  taggingVLMVoyageDimension
+  taggingVLMVoyageEmbeddingEndpoint
+  taggingTaxonomyEndpoint
+  taggingTaxonomyAPIKeySet
+  taggingTaxonomyCategories
+  taggingTaxonomyMaxCandidates
 }
 
 fragment AIServerStatusData on AIServerStatus {
@@ -19,6 +34,10 @@ fragment AIServerStatusData on AIServerStatus {
   enabled
   ready
   hasVLMProvider
+  hasLocalTextProvider
+  availableVLMModels
+  availableVoyageRerankModels
+  availableVoyageVideoModels
   backendVersion
   schemaVersion
   error
@@ -34,6 +53,8 @@ fragment AIServerStatusData on AIServerStatus {
 fragment AITaggingStatusData on AITaggingStatus {
   provider
   available
+  localAvailable
+  voyageAvailable
   message
   remediation
 }
@@ -49,4 +70,7 @@ fragment AITaskData on AITask {
   finishedAt
   error
   cancelRequested
+  itemID
+  parameters
+  result
 }

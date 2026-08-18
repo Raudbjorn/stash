@@ -32,6 +32,8 @@ func TestTaskHistoryRoundTrip(t *testing.T) {
 	e.ItemID = &itemID
 	e.ItemsSent = &items
 	e.Error = &errText
+	e.InputParams = map[string]any{"analysis_service": "voyage"}
+	e.Result = map[string]any{"spans": 14, "message": "done"}
 
 	if err := db.InsertTaskHistory(ctx, e); err != nil {
 		t.Fatalf("insert: %v", err)
@@ -61,6 +63,13 @@ func TestTaskHistoryRoundTrip(t *testing.T) {
 	}
 	if g.Error == nil || *g.Error != "boom" {
 		t.Errorf("error = %v", g.Error)
+	}
+	if g.InputParams["analysis_service"] != "voyage" {
+		t.Errorf("input_params = %#v", g.InputParams)
+	}
+	result, ok := g.Result.(map[string]any)
+	if !ok || result["spans"] != float64(14) || result["message"] != "done" {
+		t.Errorf("result = %#v", g.Result)
 	}
 }
 

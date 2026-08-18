@@ -142,6 +142,32 @@ func VisionPairs() []Pair {
 			ContextTokens: 4096,
 		},
 		{
+			Name: "smolvlm2-2.2b",
+			Description: "SmolVLM2 2.2B: a video-trained option, ~1.7 GB for both halves. " +
+				"Uses the publisher's Q4_K_M model and Q8 projector to fit a 4 GB card.",
+			License:    LicenseApache2,
+			LicenseURL: "https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct",
+			Primary: Asset{
+				Name:        "smolvlm2-2.2b-instruct-q4_k_m.gguf",
+				URL:         hfURL("ggml-org/SmolVLM2-2.2B-Instruct-GGUF", "SmolVLM2-2.2B-Instruct-Q4_K_M.gguf"),
+				SHA256:      "0cf76814555b8665149075b74ab6b5c1d428ea1d3d01c1918c12012e8d7c9f58",
+				Size:        1112602656,
+				Description: "The language model, 4-bit.",
+				License:     LicenseApache2,
+				LicenseURL:  "https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct",
+			},
+			Companion: Asset{
+				Name:        "smolvlm2-2.2b-mmproj-q8_0.gguf",
+				URL:         hfURL("ggml-org/SmolVLM2-2.2B-Instruct-GGUF", "mmproj-SmolVLM2-2.2B-Instruct-Q8_0.gguf"),
+				SHA256:      "ae07ea1facd07dd3230c4483b63e8cda96c6944ad2481f33d531f79e892dd024",
+				Size:        592523200,
+				Description: "The Q8 multimodal projector from the same publisher export.",
+				License:     LicenseApache2,
+				LicenseURL:  "https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct",
+			},
+			ContextTokens: 8192,
+		},
+		{
 			Name: "qwen2.5-vl-7b",
 			Description: "Qwen2.5-VL 7B: the quality option, ~6 GB for both halves. " +
 				"CPU or a card with room to spare; too large for 4 GB of VRAM.",

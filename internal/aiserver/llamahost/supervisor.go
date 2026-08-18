@@ -379,11 +379,10 @@ func command(cfg Config, socket string) ([]string, []string) {
 		"--log-colors", "off",
 		"--log-verbosity", "2",
 	}
-	if cfg.GPULayers > 0 {
-		args = append(args, "--mmproj-offload")
-	} else {
-		args = append(args, "--no-mmproj-offload")
-	}
+	// Keep the multimodal projector on CPU. llama-server b10107's Vulkan
+	// projector offload segfaults on Pascal GPUs during the first image
+	// evaluation; text-model layers remain offloaded through --gpu-layers.
+	args = append(args, "--no-mmproj-offload")
 	key := "PATH"
 	switch runtime.GOOS {
 	case "linux":

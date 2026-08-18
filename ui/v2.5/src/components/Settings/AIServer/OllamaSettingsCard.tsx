@@ -6,7 +6,7 @@ import {
   mutateConfigureOllama,
   useOllamaSettings,
 } from "src/core/StashService";
-import { OllamaConfigInput } from "src/core/generated-graphql";
+import { OllamaBackend, OllamaConfigInput } from "src/core/generated-graphql";
 import { useToast } from "src/hooks/Toast";
 import { LoadingIndicator } from "src/components/Shared/LoadingIndicator";
 
@@ -29,6 +29,7 @@ export const OllamaSettingsCard: React.FC = () => {
     const { config } = data.ollamaStatus;
     setForm({
       baseUrl: config.baseUrl,
+      backend: config.backend,
       model: config.model,
       timeout: config.timeout,
       enabled: config.enabled,
@@ -41,7 +42,7 @@ export const OllamaSettingsCard: React.FC = () => {
   if (loading && !data) return <LoadingIndicator />;
   if (!data?.ollamaStatus || !form) return null;
 
-  const { available, config } = data.ollamaStatus;
+  const { available, config, models } = data.ollamaStatus;
 
   function update(patch: Partial<Omit<OllamaConfigInput, "mistralApiKey">>) {
     setForm((prev) => (prev ? { ...prev, ...patch } : prev));
@@ -89,7 +90,33 @@ export const OllamaSettingsCard: React.FC = () => {
         onChange={(v) => update({ enabled: v })}
       />
 
-      <Setting headingID="config.ollama.base_url">
+      <Setting
+        headingID="config.ollama.backend"
+        subHeadingID="config.ollama.backend_description"
+      >
+        <Form.Control
+          as="select"
+          className="input-control"
+          value={form.backend}
+          onChange={(e) =>
+            update({ backend: e.currentTarget.value as OllamaBackend })
+          }
+        >
+          <option value={OllamaBackend.Ollama}>
+            {intl.formatMessage({ id: "config.ollama.backend_ollama" })}
+          </option>
+          <option value={OllamaBackend.OpenaiCompatible}>
+            {intl.formatMessage({
+              id: "config.ollama.backend_openai_compatible",
+            })}
+          </option>
+        </Form.Control>
+      </Setting>
+
+      <Setting
+        headingID="config.ollama.base_url"
+        subHeadingID="config.ollama.base_url_description"
+      >
         <Form.Control
           className="text-input"
           value={form.baseUrl}
@@ -97,12 +124,39 @@ export const OllamaSettingsCard: React.FC = () => {
         />
       </Setting>
 
-      <Setting headingID="config.ollama.model">
+      <Setting
+        headingID="config.ollama.model"
+        subHeadingID="config.ollama.model_description"
+      >
         <Form.Control
-          className="text-input"
+          as="select"
+          className="input-control"
           value={form.model}
+          disabled={models.length === 0}
           onChange={(e) => update({ model: e.currentTarget.value })}
-        />
+        >
+          {models.length === 0 && (
+            <option value={form.model}>
+              {form.model ||
+                intl.formatMessage({ id: "config.ollama.no_models" })}
+            </option>
+          )}
+          {models.length > 0 &&
+            form.model !== "" &&
+            !models.includes(form.model) && (
+              <option value={form.model} disabled>
+                {intl.formatMessage(
+                  { id: "config.ollama.model_unavailable" },
+                  { model: form.model }
+                )}
+              </option>
+            )}
+          {models.map((model) => (
+            <option key={model} value={model}>
+              {model}
+            </option>
+          ))}
+        </Form.Control>
       </Setting>
 
       <BooleanSetting

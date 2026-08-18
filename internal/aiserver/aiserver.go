@@ -35,6 +35,7 @@ import (
 	"github.com/stashapp/stash/internal/aiserver/tagging"
 	"github.com/stashapp/stash/internal/aiserver/task"
 	"github.com/stashapp/stash/internal/manager/config"
+	"github.com/stashapp/stash/pkg/aitag/llamaprov"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
 )
@@ -100,9 +101,10 @@ type Server struct {
 	plugins    *pluginhost.Manager
 	catalog    *catalog.Manager
 
-	tagging       *tagging.Service
-	trainer       *tagging.Trainer
-	taggingStatus tagging.Status
+	tagging        *tagging.Service
+	trainer        *tagging.Trainer
+	taggingStatus  tagging.Status
+	voyageSegments *recommend.VoyageSegmentIndex
 
 	// graphQL is Stash's own API handler, registered after construction.
 	graphQL http.Handler
@@ -273,6 +275,13 @@ func (s *Server) Recommenders() *recommend.Registry { return s.recommenders }
 // rather than the schema-guessing SQL the out-of-process server needed.
 func (s *Server) SceneFetcher() *recommend.Fetcher { return recommend.NewFetcher(s.deps.Repo) }
 
+// VoyageSegmentIndex returns the opt-in read-only video recommendation index.
+func (s *Server) VoyageSegmentIndex() *recommend.VoyageSegmentIndex {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.voyageSegments
+}
+
 // Tasks returns the scheduler, or nil when not running.
 func (s *Server) Tasks() *task.Manager {
 	if s == nil {
@@ -370,22 +379,51 @@ func (s *Server) Start(ctx context.Context) error {
 	// rather than an error: a missing model or an unreachable inference server
 	// disables analysis and leaves the scheduler, the interactions pipeline and
 	// the recommenders running.
-	provider, rules, taggingStatus := tagging.Build(ctx, tagging.Settings{
-		Provider:            s.deps.Config.GetAITaggingProvider(),
-		ServerURL:           s.deps.Config.GetAITaggingServerURL(),
-		OpenAIKey:           s.deps.Config.GetAITaggingOpenAIKey(),
-		ModelDir:            s.deps.Config.GetAITaggingModelDir(),
-		RulesDir:            s.deps.Config.GetAITaggingRulesDir(),
-		VLMModel:            s.deps.Config.GetAITaggingVLMModel(),
-		VLMLabels:           s.deps.Config.GetAITaggingVLMLabels(),
-		VLMGPULayers:        s.deps.Config.GetAITaggingVLMGPULayers(),
-		VLMContext:          s.deps.Config.GetAITaggingVLMContext(),
-		FFmpegPath:          s.deps.Config.GetFFMpegPath(),
-		FrameInterval:       s.deps.Config.GetAITaggingFrameInterval(),
-		Threshold:           s.deps.Config.GetAITaggingThreshold(),
-		MaxSpanMergeSeconds: s.deps.Config.GetAITaggingMaxSpanMerge(),
-	})
+	taxonomyCategories := effectiveTaxonomyCategories(s.deps.Config.GetAITaggingTaxonomyCategories())
+	taggingSettings := tagging.Settings{
+		Provider:              s.deps.Config.GetAITaggingProvider(),
+		ServerURL:             s.deps.Config.GetAITaggingServerURL(),
+		OpenAIKey:             s.deps.Config.GetAITaggingOpenAIKey(),
+		ModelDir:              s.deps.Config.GetAITaggingModelDir(),
+		RulesDir:              s.deps.Config.GetAITaggingRulesDir(),
+		VLMModel:              s.deps.Config.GetAITaggingVLMModel(),
+		VLMLabels:             s.deps.Config.GetAITaggingVLMLabels(),
+		VLMGPULayers:          s.deps.Config.GetAITaggingVLMGPULayers(),
+		VLMContext:            s.deps.Config.GetAITaggingVLMContext(),
+		AnalyzeMode:           s.deps.Config.GetAITaggingAnalyzeMode(),
+		VLMAcceptMode:         s.deps.Config.GetAITaggingVLMAcceptMode(),
+		VLMVoyageAPIKey:       s.deps.Config.GetAITaggingVLMVoyageAPIKey(),
+		VLMVoyageRerankModel:  s.deps.Config.GetAITaggingVLMVoyageRerankModel(),
+		VLMVoyageRerankTopK:   s.deps.Config.GetAITaggingVLMVoyageRerankTopK(),
+		VLMVoyageEndpoint:     s.deps.Config.GetAITaggingVLMVoyageEndpoint(),
+		TaxonomyEndpoint:      s.deps.Config.GetAITaggingTaxonomyEndpoint(),
+		TaxonomyAPIKey:        s.deps.Config.GetAITaggingTaxonomyAPIKey(),
+		TaxonomyCategories:    taxonomyCategories,
+		TaxonomyMaxCandidates: s.deps.Config.GetAITaggingTaxonomyMaxCandidates(),
+		FFmpegPath:            s.deps.Config.GetFFMpegPath(),
+		FrameInterval:         s.deps.Config.GetAITaggingFrameInterval(),
+		Threshold:             s.deps.Config.GetAITaggingThreshold(),
+		MaxSpanMergeSeconds:   s.deps.Config.GetAITaggingMaxSpanMerge(),
+	}
+	taxonomyClient := tagging.NewTaxonomyClient(taggingSettings)
+	taggingSettings.TaxonomyClient = taxonomyClient
+	provider, rules, taggingStatus := tagging.Build(ctx, taggingSettings)
 	s.taggingStatus = taggingStatus
+	s.voyageSegments = nil
+	if s.deps.Config.GetAITaggingVLMVoyageVideoEnabled() &&
+		s.deps.Config.GetAITaggingVLMVoyageAPIKey() != "" {
+		s.voyageSegments = &recommend.VoyageSegmentIndex{
+			APIKey:      s.deps.Config.GetAITaggingVLMVoyageAPIKey(),
+			Model:       s.deps.Config.GetAITaggingVLMVoyageVideoModel(),
+			Endpoint:    s.deps.Config.GetAITaggingVLMVoyageEmbeddingEndpoint(),
+			SegmentSecs: s.deps.Config.GetAITaggingVLMVoyageSegmentSecs(),
+			Dimension:   s.deps.Config.GetAITaggingVLMVoyageDimension(),
+			DB:          db,
+			FFmpegPath:  s.deps.Config.GetFFMpegPath(),
+			Taxonomy:    taxonomyClient,
+			Categories:  taggingSettings.TaxonomyCategories,
+		}
+	}
 	s.tagging = tagging.NewService(s.deps.Repo, db, tagging.Config{
 		Provider:            provider,
 		Rules:               rules,
@@ -393,6 +431,10 @@ func (s *Server) Start(ctx context.Context) error {
 		FFmpegPath:          s.deps.Config.GetFFMpegPath(),
 		DefaultFrameInterval: tagging.DefaultFrameInterval(
 			s.deps.Config.GetAITaggingProvider(), s.deps.Config.GetAITaggingFrameInterval()),
+		SegmentIndexer:     s.voyageSegments,
+		VoyageAnalyzer:     s.voyageSegments,
+		TaxonomyClient:     taxonomyClient,
+		TaxonomyCategories: taggingSettings.TaxonomyCategories,
 	})
 	s.trainer = tagging.NewTrainer(s.deps.Repo, db)
 
@@ -512,6 +554,7 @@ func (s *Server) Shutdown() {
 	s.catalog = nil
 	s.tagging = nil
 	s.trainer = nil
+	s.voyageSegments = nil
 	s.mu.Unlock()
 
 	// Withdraw every registration before cancellation so no new task can enter
@@ -612,3 +655,10 @@ func (s *Server) DB() *store.DB {
 
 // Repo exposes Stash's repository to the AI subsystem's own packages.
 func (s *Server) Repo() models.Repository { return s.deps.Repo }
+
+func effectiveTaxonomyCategories(configured []string) []string {
+	if len(configured) == 0 {
+		return llamaprov.DefaultTaxonomyCategories()
+	}
+	return append([]string(nil), configured...)
+}

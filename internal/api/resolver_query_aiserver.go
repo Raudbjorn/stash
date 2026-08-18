@@ -5,8 +5,26 @@ import (
 	"strconv"
 
 	"github.com/stashapp/stash/internal/aiserver"
+	"github.com/stashapp/stash/internal/aiserver/recommend"
 	"github.com/stashapp/stash/internal/manager"
+	"github.com/stashapp/stash/pkg/aitag/assets"
 	"github.com/stashapp/stash/pkg/aitag/llamaprov"
+	"github.com/stashapp/stash/pkg/ollama"
+)
+
+var (
+	availableVoyageRerankModelValues = []string{
+		"rerank-2.5",
+		"rerank-2.5-lite",
+		"rerank-2",
+		"rerank-2-lite",
+		"rerank-1",
+		"rerank-lite-1",
+	}
+	availableVoyageVideoModelValues = []string{
+		"voyage-multimodal-3.5",
+		"voyage-multimodal-3",
+	}
 )
 
 func aiServerStateFromHealth(s aiserver.State) AIServerState {
@@ -34,20 +52,61 @@ func buildAIServerConfig(c *manager.Manager) *AIServerConfig {
 	}
 
 	return &AIServerConfig{
-		Enabled:              cfg.GetAIEnabled(),
-		TaggingProvider:      provider,
-		TaggingServerURL:     cfg.GetAITaggingServerURL(),
-		TaggingOpenAIKeySet:  cfg.GetAITaggingOpenAIKeyConfigured(),
-		TaggingModelDir:      cfg.GetAITaggingModelDir(),
-		TaggingRulesDir:      cfg.GetAITaggingRulesDir(),
-		TaggingFrameInterval: cfg.GetAITaggingFrameInterval(),
-		TaggingThreshold:     cfg.GetAITaggingThreshold(),
-		TaggingMaxSpanMerge:  cfg.GetAITaggingMaxSpanMerge(),
-		TaggingVLMModel:      cfg.GetAITaggingVLMModel(),
-		TaggingVLMLabels:     cfg.GetAITaggingVLMLabels(),
-		TaggingVLMGPULayers:  cfg.GetAITaggingVLMGPULayers(),
-		TaggingVLMContext:    cfg.GetAITaggingVLMContext(),
+		Enabled:                           cfg.GetAIEnabled(),
+		TaggingProvider:                   provider,
+		TaggingServerURL:                  cfg.GetAITaggingServerURL(),
+		TaggingOpenAIKeySet:               cfg.GetAITaggingOpenAIKeyConfigured(),
+		TaggingModelDir:                   cfg.GetAITaggingModelDir(),
+		TaggingRulesDir:                   cfg.GetAITaggingRulesDir(),
+		TaggingFrameInterval:              cfg.GetAITaggingFrameInterval(),
+		TaggingThreshold:                  cfg.GetAITaggingThreshold(),
+		TaggingMaxSpanMerge:               cfg.GetAITaggingMaxSpanMerge(),
+		TaggingVLMModel:                   cfg.GetAITaggingVLMModel(),
+		TaggingVLMLabels:                  cfg.GetAITaggingVLMLabels(),
+		TaggingVLMGPULayers:               cfg.GetAITaggingVLMGPULayers(),
+		TaggingVLMContext:                 cfg.GetAITaggingVLMContext(),
+		TaggingAnalyzeMode:                cfg.GetAITaggingAnalyzeMode(),
+		TaggingVLMAcceptMode:              cfg.GetAITaggingVLMAcceptMode(),
+		TaggingVLMVoyageAPIKeySet:         cfg.GetAITaggingVLMVoyageAPIKey() != "",
+		TaggingVLMVoyageRerankModel:       cfg.GetAITaggingVLMVoyageRerankModel(),
+		TaggingVLMVoyageRerankTopK:        cfg.GetAITaggingVLMVoyageRerankTopK(),
+		TaggingVLMVoyageEndpoint:          cfg.GetAITaggingVLMVoyageEndpoint(),
+		TaggingVLMVoyageVideoEnabled:      cfg.GetAITaggingVLMVoyageVideoEnabled(),
+		TaggingVLMVoyageVideoModel:        cfg.GetAITaggingVLMVoyageVideoModel(),
+		TaggingVLMVoyageSegmentSecs:       cfg.GetAITaggingVLMVoyageSegmentSecs(),
+		TaggingVLMVoyageDimension:         cfg.GetAITaggingVLMVoyageDimension(),
+		TaggingVLMVoyageEmbeddingEndpoint: cfg.GetAITaggingVLMVoyageEmbeddingEndpoint(),
+		TaggingTaxonomyEndpoint:           cfg.GetAITaggingTaxonomyEndpoint(),
+		TaggingTaxonomyAPIKeySet:          cfg.GetAITaggingTaxonomyAPIKey() != "",
+		TaggingTaxonomyCategories:         cfg.GetAITaggingTaxonomyCategories(),
+		TaggingTaxonomyMaxCandidates:      cfg.GetAITaggingTaxonomyMaxCandidates(),
 	}
+}
+
+func availableVLMModels() []string {
+	pairs := assets.VisionPairs()
+	ret := make([]string, len(pairs))
+	for i, pair := range pairs {
+		ret[i] = pair.Name
+	}
+	return ret
+}
+
+func availableVoyageRerankModels() []string {
+	return append([]string(nil), availableVoyageRerankModelValues...)
+}
+
+func availableVoyageVideoModels() []string {
+	return append([]string(nil), availableVoyageVideoModelValues...)
+}
+
+func containsString(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
 }
 
 func aiTaggingProviderFromString(s string) *AITaggingProvider {
@@ -88,6 +147,10 @@ func (r *queryResolver) AiServerStatus(ctx context.Context) (*AIServerStatus, er
 
 	health := srv.Health(ctx)
 	taggingStatus := srv.TaggingStatus()
+	textService := r.getOllamaService()
+	textConfig := textService.GetConfig()
+	hasLocalTextProvider := textConfig.Backend == ollama.BackendOpenAICompatible &&
+		textService.IsAvailable(ctx)
 
 	var schemaVersion, errMsg *string
 	if health.SchemaVersion != "" {
@@ -105,12 +168,16 @@ func (r *queryResolver) AiServerStatus(ctx context.Context) (*AIServerStatus, er
 		// (e.g. after fixing the provider) would silently turn the whole
 		// server off by round-tripping this value back through
 		// configureAIServer. Ready is the separate "actually running" signal.
-		Enabled:        mgr.Config.GetAIEnabled(),
-		Ready:          srv.Ready(),
-		HasVLMProvider: taggingStatus.Provider == llamaprov.ProviderName && taggingStatus.Available,
-		BackendVersion: health.BackendVersion,
-		SchemaVersion:  schemaVersion,
-		Error:          errMsg,
+		Enabled:                     mgr.Config.GetAIEnabled(),
+		Ready:                       srv.Ready(),
+		HasVLMProvider:              taggingStatus.Provider == llamaprov.ProviderName && taggingStatus.Available,
+		HasLocalTextProvider:        hasLocalTextProvider,
+		AvailableVLMModels:          availableVLMModels(),
+		AvailableVoyageRerankModels: availableVoyageRerankModels(),
+		AvailableVoyageVideoModels:  availableVoyageVideoModels(),
+		BackendVersion:              health.BackendVersion,
+		SchemaVersion:               schemaVersion,
+		Error:                       errMsg,
 		Database: &AIServerHealthComponent{
 			Status:  string(health.Database.Status),
 			Message: health.Database.Message,
@@ -122,24 +189,47 @@ func (r *queryResolver) AiServerStatus(ctx context.Context) (*AIServerStatus, er
 func (r *queryResolver) AiTaggingStatus(ctx context.Context) (*AITaggingStatus, error) {
 	mgr := manager.GetInstance()
 	status := mgr.AIServer.TaggingStatus()
+	tagger := mgr.AIServer.Tagging()
+	voyageAvailable := tagger != nil && tagger.SupportsVoyageTagging()
 
 	var message, remediation *string
-	if status.Message != "" {
-		message = &status.Message
-	}
-	if status.Remediation != "" {
-		remediation = &status.Remediation
+	if voyageAvailable && !status.Available {
+		value := "Voyage AI video tagging is ready."
+		message = &value
+	} else {
+		if status.Message != "" {
+			message = &status.Message
+		}
+		if status.Remediation != "" {
+			remediation = &status.Remediation
+		}
 	}
 
 	return &AITaggingStatus{
-		Provider:    status.Provider,
-		Available:   status.Available,
-		Message:     message,
-		Remediation: remediation,
+		Provider:        status.Provider,
+		Available:       status.Available || voyageAvailable,
+		LocalAvailable:  status.Available,
+		VoyageAvailable: voyageAvailable,
+		Message:         message,
+		Remediation:     remediation,
 	}, nil
 }
 
-func (r *queryResolver) AiTaggingSpans(ctx context.Context, sceneID string) ([]*AITaggingSpanGroup, error) {
+func (r *queryResolver) AiServerTaxonomy(ctx context.Context) (*AIServerTaxonomyStatus, error) {
+	service := manager.GetInstance().AIServer.Tagging()
+	if service == nil {
+		return &AIServerTaxonomyStatus{CandidatesByCategory: []string{}}, nil
+	}
+	status := service.TaxonomyStatus()
+	return &AIServerTaxonomyStatus{
+		Endpoint:             status.Endpoint,
+		Entries:              status.Entries,
+		RefreshedAt:          status.RefreshedAt,
+		CandidatesByCategory: status.CandidatesByCategory,
+	}, nil
+}
+
+func (r *queryResolver) AiTaggingSpans(ctx context.Context, sceneID string, service string, runID *int) ([]*AITaggingSpanGroup, error) {
 	mgr := manager.GetInstance()
 	db := mgr.AIServer.DB()
 	if db == nil {
@@ -151,12 +241,16 @@ func (r *queryResolver) AiTaggingSpans(ctx context.Context, sceneID string) ([]*
 		return nil, err
 	}
 
-	service := mgr.Config.GetAITaggingProvider()
-	if service == "" {
+	storedService := taggingResultService(service, mgr.Config.GetAITaggingProvider())
+	if storedService == "" {
 		return []*AITaggingSpanGroup{}, nil
 	}
+	var selectedRun int64
+	if runID != nil {
+		selectedRun = int64(*runID)
+	}
 
-	byCategory, err := db.GetSceneSpansByLabel(ctx, service, id, 0)
+	byCategory, err := db.GetSceneSpansByLabel(ctx, storedService, id, selectedRun)
 	if err != nil {
 		return nil, err
 	}
@@ -186,4 +280,49 @@ func (r *queryResolver) AiTaggingSpans(ctx context.Context, sceneID string) ([]*
 		}
 	}
 	return ret, nil
+}
+
+func (r *queryResolver) AiTaggingSceneSupports(ctx context.Context, sceneID int, runID *int) ([]*AITaggingLabelSupport, error) {
+	db := manager.GetInstance().AIServer.DB()
+	if db == nil {
+		return []*AITaggingLabelSupport{}, nil
+	}
+
+	var selectedRun int64
+	if runID != nil {
+		selectedRun = int64(*runID)
+	}
+	supports, err := db.GetSceneLabelSupports(ctx, llamaprov.ProviderName, sceneID, selectedRun)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := make([]*AITaggingLabelSupport, 0, len(supports))
+	for _, support := range supports {
+		var stashID *string
+		if support.StashID != "" {
+			id := support.StashID
+			stashID = &id
+		}
+		ret = append(ret, &AITaggingLabelSupport{
+			Tag:       support.Tag,
+			StashID:   stashID,
+			Frames:    support.Frames,
+			SpanCount: support.SpanCount,
+			FirstAt:   support.FirstAt,
+			LastAt:    support.LastAt,
+		})
+	}
+	return ret, nil
+}
+
+func taggingResultService(selection, configuredProvider string) string {
+	switch selection {
+	case "voyage":
+		return recommend.VoyageProviderName
+	case "local", "local_voyage":
+		return configuredProvider
+	default:
+		return selection
+	}
 }

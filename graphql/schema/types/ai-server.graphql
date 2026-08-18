@@ -33,6 +33,21 @@ type AIServerConfig {
   taggingVLMLabels: [String!]!
   taggingVLMGPULayers: Int!
   taggingVLMContext: Int!
+  taggingAnalyzeMode: String!
+  taggingVLMAcceptMode: String!
+  taggingVLMVoyageAPIKeySet: Boolean!
+  taggingVLMVoyageRerankModel: String!
+  taggingVLMVoyageRerankTopK: Int!
+  taggingVLMVoyageEndpoint: String!
+  taggingVLMVoyageVideoEnabled: Boolean!
+  taggingVLMVoyageVideoModel: String!
+  taggingVLMVoyageSegmentSecs: Float!
+  taggingVLMVoyageDimension: Int!
+  taggingVLMVoyageEmbeddingEndpoint: String!
+  taggingTaxonomyEndpoint: String!
+  taggingTaxonomyAPIKeySet: Boolean!
+  taggingTaxonomyCategories: [String!]!
+  taggingTaxonomyMaxCandidates: Int!
 }
 
 input AIServerConfigInput {
@@ -50,6 +65,36 @@ input AIServerConfigInput {
   taggingVLMLabels: [String!]!
   taggingVLMGPULayers: Int!
   taggingVLMContext: Int!
+  taggingAnalyzeMode: String!
+  taggingVLMAcceptMode: String!
+  "Only written when non-null; omit/null leaves the stored Voyage key untouched."
+  taggingVLMVoyageAPIKey: String
+  taggingVLMVoyageRerankModel: String!
+  taggingVLMVoyageRerankTopK: Int!
+  taggingVLMVoyageEndpoint: String!
+  taggingVLMVoyageVideoEnabled: Boolean!
+  taggingVLMVoyageVideoModel: String!
+  taggingVLMVoyageSegmentSecs: Float!
+  taggingVLMVoyageDimension: Int!
+  taggingVLMVoyageEmbeddingEndpoint: String!
+  taggingTaxonomyEndpoint: String!
+  "Only written when non-null; omit/null leaves the stored key untouched."
+  taggingTaxonomyAPIKey: String
+  taggingTaxonomyCategories: [String!]!
+  taggingTaxonomyMaxCandidates: Int!
+}
+
+type AIServerTaxonomyRefresh {
+  endpoint: String!
+  entries: Int!
+  refreshedAt: Time!
+}
+
+type AIServerTaxonomyStatus {
+  endpoint: String!
+  entries: Int!
+  refreshedAt: Time!
+  candidatesByCategory: [String!]!
 }
 
 type AIServerHealthComponent {
@@ -62,8 +107,16 @@ type AIServerStatus {
   enabled: Boolean!
   "True once the server has finished starting and is usable."
   ready: Boolean!
-  "True when a VLM-capable tagging provider (llama_vlm) is active - gates the AnalyzeSceneMetadataInput local-AI options."
+  "True when the embedded VLM-capable tagging provider (llama_vlm) is active."
   hasVLMProvider: Boolean!
+  "True when an enabled OpenAI-compatible local text-generation provider is reachable."
+  hasLocalTextProvider: Boolean!
+  "Checksum-pinned llama.cpp vision-language model pairs offered by this build."
+  availableVLMModels: [String!]!
+  "Voyage reranker model names accepted by this build."
+  availableVoyageRerankModels: [String!]!
+  "Voyage multimodal video model names accepted by this build."
+  availableVoyageVideoModels: [String!]!
   backendVersion: String!
   schemaVersion: String
   error: String

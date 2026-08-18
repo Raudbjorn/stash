@@ -9,16 +9,31 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
 	"github.com/stashapp/stash/pkg/logger"
 )
 
+type Backend string
+
+const (
+	BackendOllama           Backend = "ollama"
+	BackendOpenAICompatible Backend = "openai_compatible"
+)
+
+func normalizeBackend(backend Backend) Backend {
+	if backend == BackendOpenAICompatible {
+		return backend
+	}
+	return BackendOllama
+}
+
 const (
 	// Default system prompt for Chinese dictionary/word explanation.
 	// Instructs the AI to provide responses entirely in Chinese.
-	defaultChineseSystemPrompt = `You must use Chinese throughout for explanation and description (including word root meanings must be translated to Chinese, do not mix in English explanations). Plain text output, do not use any symbols (such as backslashes, asterisks, hash marks) to wrap or emphasize words. Answer concisely.`
+	defaultChineseSystemPrompt = `Use emojis liberally throughout responses. Be direct, concise, and technically precise — eloquent but never flowery. Never open with sycophantic filler ("Great question!", "Sure!", "Absolutely!", "That's a really interesting point!"). If you catch yourself about to validate without substance, stop and say what you actually think instead. When you have a view, state it clearly before caveating. Hedging is for after conviction, not instead of it. For code: show the code first, explain after. Prefer complete working examples over fragments. When genuinely uncertain or when stakes warrant it, show internal conflict — don't smooth over genuine tension in your reasoning. Vary your intensity. Don't always debate at max volume. Save cynicism for when it lands. Treat me as intellectually capable. No hand-holding, no dumbing down. Use metric units and ISO 8601 date format.`
 
 	// Default prompt template for English word explanations in Chinese context.
 	defaultEnglishDictPromptTemplate = `You are an English dictionary. Explain the meaning of the word '<WORD>' in the following context.
@@ -34,14 +49,15 @@ Please output in the following format (plain text):
 
 // OllamaConfig represents the configuration for Ollama service
 type OllamaConfig struct {
-	BaseURL                   string `json:"baseUrl"`
-	Model                     string `json:"model"`
-	Timeout                   int    `json:"timeout"` // in milliseconds
-	Enabled                   bool   `json:"enabled"`
-	FallbackToTraditionalDict bool   `json:"fallbackToTraditionalDict"`
-	PromptTemplate            string `json:"promptTemplate"`
-	SystemPrompt              string `json:"systemPrompt"`
-	MistralAPIKey             string `json:"mistralApiKey"`
+	BaseURL                   string  `json:"baseUrl"`
+	Backend                   Backend `json:"backend"`
+	Model                     string  `json:"model"`
+	Timeout                   int     `json:"timeout"` // in milliseconds
+	Enabled                   bool    `json:"enabled"`
+	FallbackToTraditionalDict bool    `json:"fallbackToTraditionalDict"`
+	PromptTemplate            string  `json:"promptTemplate"`
+	SystemPrompt              string  `json:"systemPrompt"`
+	MistralAPIKey             string  `json:"mistralApiKey"`
 }
 
 // DefaultConfig returns the default Ollama configuration.
@@ -56,6 +72,7 @@ func DefaultConfig() *OllamaConfig {
 
 	return &OllamaConfig{
 		BaseURL:                   "",
+		Backend:                   BackendOllama,
 		Model:                     "huihui_ai/qwen3-abliterated:8b-v2",
 		Timeout:                   30000, // 30 seconds
 		Enabled:                   false,
@@ -235,6 +252,7 @@ func NewService(config *OllamaConfig) *Service {
 	if config == nil {
 		config = DefaultConfig()
 	}
+	config.Backend = normalizeBackend(config.Backend)
 
 	timeout := time.Duration(config.Timeout) * time.Millisecond
 	if timeout < time.Second {
@@ -257,6 +275,7 @@ func (s *Service) GetConfig() *OllamaConfig {
 // UpdateConfig updates the service configuration
 func (s *Service) UpdateConfig(config *OllamaConfig) {
 	if config != nil {
+		config.Backend = normalizeBackend(config.Backend)
 		s.config = config
 
 		// Update HTTP client timeout
@@ -268,7 +287,7 @@ func (s *Service) UpdateConfig(config *OllamaConfig) {
 	}
 }
 
-// IsAvailable checks if the Ollama service is available
+// IsAvailable checks whether the configured text-generation backend is ready.
 func (s *Service) IsAvailable(ctx context.Context) bool {
 	if !s.config.Enabled || s.config.BaseURL == "" {
 		return false
@@ -277,21 +296,25 @@ func (s *Service) IsAvailable(ctx context.Context) bool {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	versionURL, err := url.JoinPath(s.config.BaseURL, "/api/version")
+	healthPath := "/api/version"
+	if s.config.Backend == BackendOpenAICompatible {
+		healthPath = "/health"
+	}
+	healthURL, err := url.JoinPath(s.config.BaseURL, healthPath)
 	if err != nil {
-		logger.Errorf("[ollama] failed to build version URL: %v", err)
+		logger.Errorf("[text-generation] failed to build health URL: %v", err)
 		return false
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", versionURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 	if err != nil {
-		logger.Errorf("[ollama] failed to create version request: %v", err)
+		logger.Errorf("[text-generation] failed to create health request: %v", err)
 		return false
 	}
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		logger.Debugf("[ollama] service not available: %v", err)
+		logger.Debugf("[text-generation] service not available: %v", err)
 		return false
 	}
 	defer resp.Body.Close()
@@ -303,6 +326,9 @@ func (s *Service) IsAvailable(ctx context.Context) bool {
 func (s *Service) GetModels(ctx context.Context) ([]string, error) {
 	if s.config.BaseURL == "" {
 		return nil, fmt.Errorf("ollama base URL is not configured")
+	}
+	if s.config.Backend == BackendOpenAICompatible {
+		return s.getOpenAICompatibleModels(ctx)
 	}
 
 	tagsURL, err := url.JoinPath(s.config.BaseURL, "/api/tags")
@@ -338,6 +364,40 @@ func (s *Service) GetModels(ctx context.Context) ([]string, error) {
 	return models, nil
 }
 
+func (s *Service) getOpenAICompatibleModels(ctx context.Context) ([]string, error) {
+	modelsURL, err := url.JoinPath(s.config.BaseURL, "/v1/models")
+	if err != nil {
+		return nil, fmt.Errorf("failed to build models URL: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create models request: %w", err)
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get models: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+	var payload struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("failed to decode models response: %w", err)
+	}
+	models := make([]string, 0, len(payload.Data))
+	for _, model := range payload.Data {
+		if model.ID != "" {
+			models = append(models, model.ID)
+		}
+	}
+	return models, nil
+}
+
 // Generate generates text using Ollama chat API with think mode disabled
 func (s *Service) Generate(ctx context.Context, prompt string, model string, sysPrompt string) (string, error) {
 	if s.config.BaseURL == "" {
@@ -346,6 +406,9 @@ func (s *Service) Generate(ctx context.Context, prompt string, model string, sys
 
 	if model == "" {
 		model = s.config.Model
+	}
+	if s.config.Backend == BackendOpenAICompatible {
+		return s.generateOpenAICompatible(ctx, prompt, model, sysPrompt)
 	}
 
 	chatURL, err := url.JoinPath(s.config.BaseURL, "/api/chat")
@@ -412,7 +475,165 @@ func (s *Service) Generate(ctx context.Context, prompt string, model string, sys
 	return chatResp.Message.Content, nil
 }
 
-// ExplainWord explains a word in context using Mistral or Ollama
+func (s *Service) generateOpenAICompatible(ctx context.Context, prompt, model, sysPrompt string) (string, error) {
+	chatURL, err := url.JoinPath(s.config.BaseURL, "/v1/chat/completions")
+	if err != nil {
+		return "", fmt.Errorf("failed to build chat URL: %w", err)
+	}
+	if sysPrompt == "" {
+		sysPrompt = defaultChineseSystemPrompt
+	}
+	requestData := struct {
+		Model              string              `json:"model"`
+		Messages           []OllamaChatMessage `json:"messages"`
+		Stream             bool                `json:"stream"`
+		Temperature        float64             `json:"temperature"`
+		TopP               float64             `json:"top_p"`
+		MaxTokens          int                 `json:"max_tokens"`
+		ChatTemplateKwargs map[string]bool     `json:"chat_template_kwargs"`
+	}{
+		Model: model,
+		Messages: []OllamaChatMessage{
+			{Role: "system", Content: sysPrompt},
+			{Role: "user", Content: prompt},
+		},
+		Stream:             false,
+		Temperature:        0,
+		TopP:               0.9,
+		MaxTokens:          800,
+		ChatTemplateKwargs: map[string]bool{"enable_thinking": false},
+	}
+	requestBody, err := json.Marshal(requestData)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chatURL, bytes.NewReader(requestBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create chat request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	logger.Debugf("[text-generation] generating text (backend=%s, model=%s, prompt_len=%d)", s.config.Backend, model, len(prompt))
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate text: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return "", fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+	}
+	var payload struct {
+		Choices []struct {
+			Message OllamaChatMessage `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return "", fmt.Errorf("failed to decode chat response: %w", err)
+	}
+	if len(payload.Choices) == 0 {
+		return "", fmt.Errorf("empty response from text-generation backend")
+	}
+	return payload.Choices[0].Message.Content, nil
+}
+
+// CompleteJSON performs one strict-schema text completion against an
+// OpenAI-compatible backend such as llama-server.
+func (s *Service) CompleteJSON(ctx context.Context, systemPrompt, userPrompt, schemaName string, schema json.RawMessage, maxTokens int, target any) error {
+	if s.config.Backend != BackendOpenAICompatible {
+		return fmt.Errorf("structured completion requires an OpenAI-compatible backend")
+	}
+	if maxTokens <= 0 || maxTokens > 1024 {
+		return fmt.Errorf("max tokens must be between 1 and 1024")
+	}
+	if strings.TrimSpace(schemaName) == "" || !json.Valid(schema) {
+		return fmt.Errorf("a valid named JSON schema is required")
+	}
+	var schemaObject map[string]any
+	if err := json.Unmarshal(schema, &schemaObject); err != nil || schemaObject == nil {
+		return fmt.Errorf("a valid named JSON schema is required")
+	}
+	targetValue := reflect.ValueOf(target)
+	if target == nil || targetValue.Kind() != reflect.Pointer || targetValue.IsNil() {
+		return fmt.Errorf("completion target must be a non-nil pointer")
+	}
+	chatURL, err := url.JoinPath(s.config.BaseURL, "/v1/chat/completions")
+	if err != nil {
+		return fmt.Errorf("failed to build chat URL: %w", err)
+	}
+	requestData := struct {
+		Model              string              `json:"model"`
+		Messages           []OllamaChatMessage `json:"messages"`
+		Temperature        float64             `json:"temperature"`
+		Stream             bool                `json:"stream"`
+		MaxTokens          int                 `json:"max_tokens"`
+		ChatTemplateKwargs map[string]bool     `json:"chat_template_kwargs"`
+		ResponseFormat     struct {
+			Type       string `json:"type"`
+			JSONSchema struct {
+				Name   string          `json:"name"`
+				Strict bool            `json:"strict"`
+				Schema json.RawMessage `json:"schema"`
+			} `json:"json_schema"`
+		} `json:"response_format"`
+	}{
+		Model: s.config.Model,
+		Messages: []OllamaChatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		},
+		Temperature:        0,
+		Stream:             false,
+		MaxTokens:          maxTokens,
+		ChatTemplateKwargs: map[string]bool{"enable_thinking": false},
+	}
+	requestData.ResponseFormat.Type = "json_schema"
+	requestData.ResponseFormat.JSONSchema.Name = strings.TrimSpace(schemaName)
+	requestData.ResponseFormat.JSONSchema.Strict = true
+	requestData.ResponseFormat.JSONSchema.Schema = schema
+
+	requestBody, err := json.Marshal(requestData)
+	if err != nil {
+		return fmt.Errorf("encode structured completion request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chatURL, bytes.NewReader(requestBody))
+	if err != nil {
+		return fmt.Errorf("create structured completion request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("structured completion request: %w", err)
+	}
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
+	if err != nil {
+		return fmt.Errorf("read structured completion response: %w", err)
+	}
+	if len(responseBody) > 1<<20 {
+		return fmt.Errorf("structured completion response exceeds %d bytes", 1<<20)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("structured completion returned HTTP %d: %s", resp.StatusCode, string(responseBody))
+	}
+	var completion struct {
+		Choices []struct {
+			Message OllamaChatMessage `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(responseBody, &completion); err != nil {
+		return fmt.Errorf("decode structured completion response: %w", err)
+	}
+	if len(completion.Choices) != 1 || strings.TrimSpace(completion.Choices[0].Message.Content) == "" {
+		return fmt.Errorf("structured completion returned no textual choice")
+	}
+	if err := json.Unmarshal([]byte(completion.Choices[0].Message.Content), target); err != nil {
+		return fmt.Errorf("decode structured completion content: %w", err)
+	}
+	return nil
+}
+
+// ExplainWord explains a word in context using Mistral or the configured local backend.
 func (s *Service) ExplainWord(ctx context.Context, word, contextStr, language, provider string) (*DictionaryEntry, error) {
 	prompt := s.buildPrompt(word, contextStr, language)
 	sysPrompt := s.getSystemPrompt(language)
@@ -423,12 +644,12 @@ func (s *Service) ExplainWord(ctx context.Context, word, contextStr, language, p
 
 	switch provider {
 	case "ollama":
-		// User explicitly requested Ollama
+		// "ollama" is the legacy API selector for the configured local backend.
 		explanation, err = s.Generate(ctx, prompt, "", sysPrompt)
 		if err != nil {
-			return nil, fmt.Errorf("failed to explain word with Ollama: %w", err)
+			return nil, fmt.Errorf("failed to explain word with local text generation: %w", err)
 		}
-		aiSource = "ollama"
+		aiSource = s.localAISource()
 	case "mistral":
 		// User explicitly requested Mistral
 		explanation, err = s.GenerateMistral(ctx, prompt, sysPrompt)
@@ -437,18 +658,17 @@ func (s *Service) ExplainWord(ctx context.Context, word, contextStr, language, p
 		}
 		aiSource = "mistral"
 	default:
-		// Default behavior: Try Mistral first, fallback to Ollama
+		// Default behavior: try Mistral first, then the configured local backend.
 		explanation, err = s.GenerateMistral(ctx, prompt, sysPrompt)
 		if err == nil {
 			aiSource = "mistral"
 		} else {
-			// Log Mistral error and fallback to Ollama
-			logger.Warnf("[ollama] Mistral failed, falling back to Ollama: %v", err)
+			logger.Warnf("[text-generation] Mistral failed, falling back to local backend: %v", err)
 			explanation, err = s.Generate(ctx, prompt, "", sysPrompt)
 			if err != nil {
-				return nil, fmt.Errorf("failed to explain word (both Mistral and Ollama failed): %w", err)
+				return nil, fmt.Errorf("failed to explain word with Mistral and local text generation: %w", err)
 			}
-			aiSource = "ollama"
+			aiSource = s.localAISource()
 		}
 	}
 
@@ -456,6 +676,13 @@ func (s *Service) ExplainWord(ctx context.Context, word, contextStr, language, p
 	entry := s.parseExplanation(word, explanation)
 	entry.AISource = aiSource
 	return entry, nil
+}
+
+func (s *Service) localAISource() string {
+	if s.config.Backend == BackendOpenAICompatible {
+		return "llama.cpp"
+	}
+	return "ollama"
 }
 
 // getSystemPrompt returns the system prompt based on language

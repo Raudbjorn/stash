@@ -316,8 +316,12 @@ type Query {
   aiServerStatus: AIServerStatus!
   "Whether AI tagging can run right now, and why not when it cannot."
   aiTaggingStatus: AITaggingStatus!
-  "Detected tag spans for a scene, grouped by category/label. Empty when the AI server is not running or nothing has been analysed yet."
-  aiTaggingSpans(sceneID: ID!): [AITaggingSpanGroup!]!
+  "Detected tag spans from one analysis service/run, grouped by category and label. runID defaults to that service's latest completed scene run."
+  aiTaggingSpans(sceneID: ID!, service: String!, runID: Int): [AITaggingSpanGroup!]!
+  "Scene-level taxonomy support diagnostics. runID defaults to the latest completed llama_vlm run."
+  aiTaggingSceneSupports(sceneID: Int!, runID: Int): [AITaggingLabelSupport!]!
+  "Active StashDB taxonomy cache status."
+  aiServerTaxonomy: AIServerTaxonomyStatus!
   "The AI server's own task queue (queued/running work), polled rather than subscribed to since the scheduler is rebuilt on every configureAIServer change."
   aiTasks(filter: AITaskListFilter): [AITask!]!
   "Recently finished AI server tasks."
@@ -719,8 +723,10 @@ type Mutation {
   # AI server
   "Enable/disable the embedded AI server and configure its tagging provider. Restarts the subsystem so the change takes effect without a restart of Stash."
   configureAIServer(input: AIServerConfigInput!): AIServerConfig!
-  "Trigger AI tagging analysis for a single scene. Returns immediately with a task id to poll via aiTasks/aiTask."
-  analyzeSceneWithAI(sceneID: ID!): AnalyzeSceneWithAIResult!
+  "Refresh the active StashDB AI-tagging taxonomy without restarting the AI server."
+  refreshAITaggingTaxonomy: AIServerTaxonomyRefresh!
+  "Trigger AI tagging analysis for a single scene with one configured service. Returns immediately with a task id to poll via aiTasks/aiTask."
+  analyzeSceneWithAI(sceneID: ID!, service: String!): AnalyzeSceneWithAIResult!
   "Cancel a queued or running AI server task. Returns false if it was not found or already finished."
   cancelAITask(id: ID!): Boolean!
 }

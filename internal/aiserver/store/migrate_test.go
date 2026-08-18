@@ -33,6 +33,7 @@ var expectedTables = []string{
 	"ai_marker_writeback",
 	"ai_scene_embeddings",
 	"ai_trained_heads",
+	"ai_taxonomy_embeddings",
 	"ai_model_run_models",
 	"ai_model_runs",
 	"ai_models",
@@ -96,6 +97,7 @@ var expectedIndexes = []string{
 	"ix_scene_watch_session_scene",
 	"ix_task_history_created_at",
 	"ix_task_history_service_status_created",
+	"ux_ai_taxonomy_embeddings",
 }
 
 func openTestDB(t *testing.T) *DB {
@@ -167,10 +169,9 @@ func TestMigrateCreatesFullSchema(t *testing.T) {
 		}
 	}
 
-	// 19 from the baseline plus the three migration 0002 added. Asserted so
-	// that adding a table without listing it above cannot pass unnoticed.
-	if n := len(expectedTables); n != 22 {
-		t.Errorf("expected 22 tables across the migrations, listed %d", n)
+	// 19 from the baseline plus the four tables added by Go migrations.
+	if n := len(expectedTables); n != 23 {
+		t.Errorf("expected 23 tables across the migrations, listed %d", n)
 	}
 }
 
@@ -204,6 +205,84 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	if v1 != v2 || v1 != latestMigrationVersion(t) {
 		t.Errorf("schema version drifted: %d then %d, want %d both times",
 			v1, v2, latestMigrationVersion(t))
+	}
+}
+
+func TestSegmentMigrationPreservesExistingEmbeddings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "upgrade.db")
+	conn, err := sql.Open(driverName, databaseDSN(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	ctx := context.Background()
+	statements := []string{
+		migrationLedgerDDL,
+		`CREATE TABLE ai_result_aggregates (id INTEGER PRIMARY KEY) STRICT`,
+		`CREATE TABLE task_history (
+			id INTEGER PRIMARY KEY, task_id TEXT NOT NULL UNIQUE, action_id TEXT NOT NULL,
+			service TEXT NOT NULL, status TEXT NOT NULL, submitted_at REAL NOT NULL,
+			started_at REAL, finished_at REAL, duration_ms INTEGER, items_sent INTEGER,
+			item_id TEXT, error TEXT, created_at INTEGER NOT NULL
+		) STRICT`,
+		`CREATE TABLE ai_scene_embeddings (
+			id INTEGER PRIMARY KEY, service TEXT NOT NULL, scene_id INTEGER NOT NULL,
+			model TEXT NOT NULL, dim INTEGER NOT NULL, frame_count INTEGER NOT NULL,
+			frame_interval REAL NOT NULL, times TEXT NOT NULL, vectors BLOB NOT NULL,
+			created_at INTEGER NOT NULL
+		) STRICT`,
+		`CREATE UNIQUE INDEX ux_ai_scene_embeddings ON ai_scene_embeddings (service, scene_id, model)`,
+		`INSERT INTO schema_migrations(version, name, applied_at) VALUES
+			(1, 'initial', 1), (2, 'marker_writeback', 2)`,
+		`INSERT INTO ai_scene_embeddings
+			(service, scene_id, model, dim, frame_count, frame_interval, times, vectors, created_at)
+		 VALUES ('native', 7, 'model', 2, 2, 2, '[2,8]', x'00010203', 3)`,
+	}
+	for _, statement := range statements {
+		if _, err := conn.ExecContext(ctx, statement); err != nil {
+			t.Fatalf("seed upgrade database: %v", err)
+		}
+	}
+	db := &DB{sql: conn, conn: conn, path: path}
+	if err := db.migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var start, end float64
+	var vectors []byte
+	var inputHash string
+	if err := conn.QueryRowContext(ctx,
+		`SELECT segment_start, segment_end, vectors, input_hash FROM ai_scene_embeddings
+		 WHERE service='native' AND scene_id=7 AND model='model'`,
+	).Scan(&start, &end, &vectors, &inputHash); err != nil {
+		t.Fatal(err)
+	}
+	if start != 2 || end != 8 || len(vectors) != 4 || inputHash != "" {
+		t.Fatalf("migrated row start=%v end=%v vectors=%x input_hash=%q", start, end, vectors, inputHash)
+	}
+
+	indexColumns := []string{}
+	rows, err := conn.QueryContext(ctx, `PRAGMA index_info(ux_ai_scene_embeddings)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var seq, cid int
+		var name string
+		if err := rows.Scan(&seq, &cid, &name); err != nil {
+			t.Fatal(err)
+		}
+		indexColumns = append(indexColumns, name)
+	}
+	want := []string{"service", "scene_id", "model", "segment_start"}
+	if len(indexColumns) != len(want) {
+		t.Fatalf("index columns = %q, want %q", indexColumns, want)
+	}
+	for i := range want {
+		if indexColumns[i] != want[i] {
+			t.Fatalf("index columns = %q, want %q", indexColumns, want)
+		}
 	}
 }
 

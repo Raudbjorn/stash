@@ -16,6 +16,11 @@ type Frame struct {
 	Index float64
 	// Labels maps a category to the labels that fired on this frame.
 	Labels map[string][]Detection
+	// RGB, Width, Height, and Time are populated when the frame is passed to
+	// an open-vocabulary classifier. Detection-only frames leave them zero.
+	RGB           []byte
+	Width, Height int
+	Time          float64
 }
 
 // Detection is one label on one frame.

@@ -55,6 +55,7 @@ func (r *Resolver) getOllamaService() *ollama.Service {
 	c := config.GetInstance()
 	oc := ollama.DefaultConfig()
 	oc.BaseURL = c.GetOllamaBaseURL()
+	oc.Backend = ollama.Backend(c.GetOllamaBackend())
 	oc.Model = c.GetOllamaModel()
 	oc.Timeout = c.GetOllamaTimeout()
 	oc.Enabled = c.GetOllamaEnabled()

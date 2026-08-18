@@ -53,6 +53,27 @@ func TestConfigAITaggingVLMDefaultsAndOverrides(t *testing.T) {
 	assert.Equal(t, 4096, i.GetAITaggingVLMContext())
 }
 
+func TestConfigAITaggingAnalyzeModeRequiresTaxonomyOptIn(t *testing.T) {
+	i := InitializeEmpty()
+	assert.Equal(t, "legacy", i.GetAITaggingAnalyzeMode())
+
+	i.SetString(AITaggingAnalyzeMode, "taxonomy")
+	assert.Equal(t, "taxonomy", i.GetAITaggingAnalyzeMode())
+
+	i.SetString(AITaggingAnalyzeMode, "invalid")
+	assert.Equal(t, "legacy", i.GetAITaggingAnalyzeMode())
+}
+
+func TestConfigAITaggingVoyageDimensionUsesRESTDefault(t *testing.T) {
+	i := InitializeEmpty()
+	assert.Equal(t, 1024, i.GetAITaggingVLMVoyageDimension())
+
+	// Earlier builds persisted 256 even though the REST endpoint always
+	// returned its 1024-dimensional default. Ignore that stale setting.
+	i.SetInt(AITaggingVLMVoyageDimension, 256)
+	assert.Equal(t, 1024, i.GetAITaggingVLMVoyageDimension())
+}
+
 func TestSceneMetadataModelConfiguration(t *testing.T) {
 	i := InitializeEmpty()
 	assert.Empty(t, i.GetSceneMetadataEntityModel())

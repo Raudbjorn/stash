@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"math"
+	"reflect"
 	"testing"
 )
 
@@ -587,26 +588,73 @@ func TestSpansCanBeRestrictedToOneRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	input.Timespans = map[string]map[string][]FrameDetection{
+		"actions": {"Cowgirl": {{Start: 20, End: &end}}},
+	}
 	second, err := db.StoreSceneRun(ctx, input)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	all, err := db.GetSceneSpansByLabel(ctx, "native", 3, 0)
+	latest, err := db.GetSceneSpansByLabel(ctx, "native", 3, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := len(all["actions"]["Blowjob"]); got != 2 {
-		t.Errorf("across all runs: %d spans, want both analyses' worth", got)
+	if got := len(latest["actions"]["Cowgirl"]); got != 1 {
+		t.Errorf("latest run: %d Cowgirl spans, want 1", got)
+	}
+	if got := len(latest["actions"]["Blowjob"]); got != 0 {
+		t.Errorf("latest run included %d stale Blowjob spans", got)
 	}
 
-	for _, runID := range []int64{first, second} {
+	for runID, label := range map[int64]string{first: "Blowjob", second: "Cowgirl"} {
 		one, err := db.GetSceneSpansByLabel(ctx, "native", 3, runID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := len(one["actions"]["Blowjob"]); got != 1 {
-			t.Errorf("run %d: %d spans, want exactly its own", runID, got)
+		if got := len(one["actions"][label]); got != 1 {
+			t.Errorf("run %d: %d %s spans, want exactly one", runID, got, label)
 		}
+	}
+}
+
+func TestSceneLabelSupportsRoundTripAndLatestRun(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	input := SceneRunInput{
+		Service: "llama_vlm",
+		SceneID: 106502,
+		LabelSupports: []StoredLabelSupport{
+			{Tag: "Blowjob", StashID: "stash-1", Frames: 4, SpanCount: 2, FirstAt: 2, LastAt: 10},
+		},
+	}
+	first, err := db.StoreSceneRun(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.LabelSupports = []StoredLabelSupport{
+		{Tag: "Cowgirl", Frames: 1, SpanCount: 1, FirstAt: 12, LastAt: 12},
+	}
+	if _, err := db.StoreSceneRun(ctx, input); err != nil {
+		t.Fatal(err)
+	}
+
+	latest, err := db.GetSceneLabelSupports(ctx, "llama_vlm", 106502, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(latest, input.LabelSupports) {
+		t.Fatalf("latest supports = %#v, want %#v", latest, input.LabelSupports)
+	}
+
+	wantFirst := []StoredLabelSupport{
+		{Tag: "Blowjob", StashID: "stash-1", Frames: 4, SpanCount: 2, FirstAt: 2, LastAt: 10},
+	}
+	gotFirst, err := db.GetSceneLabelSupports(ctx, "llama_vlm", 106502, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(gotFirst, wantFirst) {
+		t.Fatalf("first supports = %#v, want %#v", gotFirst, wantFirst)
 	}
 }

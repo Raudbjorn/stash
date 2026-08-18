@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/stashapp/stash/internal/aiserver/store"
+	"github.com/stashapp/stash/internal/aiserver/tagging"
 	"github.com/stashapp/stash/internal/aiserver/task"
 	"github.com/stashapp/stash/internal/manager"
 )
@@ -41,6 +42,17 @@ func toAITask(rec task.Record) *AITask {
 	if rec.Error != "" {
 		errMsg = &rec.Error
 	}
+	var itemID *string
+	if rec.Context.IsDetailView && rec.Context.EntityID != nil && *rec.Context.EntityID != "" {
+		value := *rec.Context.EntityID
+		itemID = &value
+	}
+	var parameters map[string]any
+	var result any
+	if rec.ActionID == tagging.ActionID {
+		parameters = rec.Params
+		result = rec.Result
+	}
 	return &AITask{
 		ID:              rec.ID,
 		ActionID:        rec.ActionID,
@@ -51,6 +63,9 @@ func toAITask(rec task.Record) *AITask {
 		StartedAt:       rec.StartedAt,
 		FinishedAt:      rec.FinishedAt,
 		Error:           errMsg,
+		ItemID:          itemID,
+		Parameters:      parameters,
+		Result:          result,
 		CancelRequested: rec.CancelRequested,
 	}
 }
@@ -126,6 +141,12 @@ func (r *queryResolver) AiTaskHistory(ctx context.Context, limit *int) ([]*AITas
 
 	ret := make([]*AITask, len(rows))
 	for i, row := range rows {
+		var parameters map[string]any
+		var result any
+		if row.ActionID == tagging.ActionID {
+			parameters = row.InputParams
+			result = row.Result
+		}
 		ret[i] = &AITask{
 			ID:              row.TaskID,
 			ActionID:        row.ActionID,
@@ -136,6 +157,9 @@ func (r *queryResolver) AiTaskHistory(ctx context.Context, limit *int) ([]*AITas
 			StartedAt:       row.StartedAt,
 			FinishedAt:      row.FinishedAt,
 			Error:           row.Error,
+			ItemID:          row.ItemID,
+			Parameters:      parameters,
+			Result:          result,
 			CancelRequested: false,
 		}
 	}

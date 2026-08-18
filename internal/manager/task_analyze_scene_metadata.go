@@ -74,7 +74,7 @@ func (s *Manager) AnalyzeSceneMetadata(ctx context.Context, input AnalyzeSceneMe
 		repository:           s.Repository,
 		input:                input,
 		ffprobe:              s.FFProbe,
-		completer:            sceneMetadataCompleter(s.AIServer),
+		completer:            sceneMetadataCompleter(s.AIServer, s.Config),
 		configuredStashBoxes: s.Config.GetStashBoxes(),
 	}
 

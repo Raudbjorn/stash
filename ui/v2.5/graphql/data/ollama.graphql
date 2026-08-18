@@ -1,5 +1,6 @@
 fragment OllamaConfigData on OllamaConfig {
   baseUrl
+  backend
   model
   timeout
   enabled

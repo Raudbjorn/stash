@@ -7,14 +7,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/stashapp/stash/pkg/onnx"
 	"github.com/stashapp/stash/internal/aiserver/proc"
+	"github.com/stashapp/stash/pkg/onnx"
 )
 
 func TestMain(m *testing.M) {
@@ -87,11 +87,11 @@ func newTestSupervisor(t *testing.T, health string) (*Supervisor, string) {
 	t.Setenv("LLAMA_HEALTH_FILE", healthFile)
 	t.Setenv("LLAMA_VISION", "true")
 	supervisor, err := New(Config{
-		RunDir:        filepath.Join(t.TempDir(), "run"),
-		Executable:    os.Args[0],
-		ModelPath:     "model.gguf",
-		ProjectorPath: "mmproj.gguf",
-		ContextTokens: 4096,
+		RunDir:         filepath.Join(t.TempDir(), "run"),
+		Executable:     os.Args[0],
+		ModelPath:      "model.gguf",
+		ProjectorPath:  "mmproj.gguf",
+		ContextTokens:  4096,
 		StartupTimeout: 5 * time.Second,
 		Rand:           func() float64 { return 0.5 },
 	})
@@ -369,12 +369,12 @@ func TestCommandBuildsPinnedServerContract(t *testing.T) {
 	cfg.Threads = 3
 	args, _ = command(cfg, "/private/llama.sock")
 	joined := "\x00" + strings.Join(args, "\x00") + "\x00"
-	for _, wantFlag := range []string{"\x00--gpu-layers\x0027\x00", "\x00--threads\x003\x00", "\x00--mmproj-offload\x00"} {
+	for _, wantFlag := range []string{"\x00--gpu-layers\x0027\x00", "\x00--threads\x003\x00", "\x00--no-mmproj-offload\x00"} {
 		if !strings.Contains(joined, wantFlag) {
 			t.Errorf("GPU command is missing %q: %v", wantFlag, args)
 		}
 	}
-	if strings.Contains(joined, "\x00--no-mmproj-offload\x00") {
-		t.Errorf("GPU command disables projector offload: %v", args)
+	if strings.Contains(joined, "\x00--mmproj-offload\x00") {
+		t.Errorf("GPU command enables unstable projector offload: %v", args)
 	}
 }

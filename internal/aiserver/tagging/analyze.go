@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/stashapp/stash/internal/aiserver/store"
 	"github.com/stashapp/stash/pkg/aitag"
+	"github.com/stashapp/stash/pkg/aitag/llamaprov"
+	"github.com/stashapp/stash/pkg/aitag/taxonomy"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
 	"github.com/stashapp/stash/pkg/txn"
@@ -22,19 +25,37 @@ import (
 // threshold regenerates markers from stored spans without re-running inference
 // over the library.
 
+// SceneSegmentIndexer builds optional read-only recommendation embeddings after
+// a scene analysis. Implementations must not write tags or markers.
+type SceneSegmentIndexer interface {
+	IndexScene(context.Context, int, string, float64) (int, error)
+}
+
+// VoyageSceneAnalyzer retrieves taxonomy labels directly from Voyage video
+// and text embeddings.
+type VoyageSceneAnalyzer interface {
+	SceneSegmentIndexer
+	CanTag() bool
+	AnalyzeVideoTags(context.Context, int, string, float64, float64, aitag.Sink) (*aitag.Result, error)
+}
+
 // Service runs analyses.
 type Service struct {
 	repo   models.Repository
 	db     *store.DB
 	writer *Writer
 
-	mu              sync.RWMutex
-	provider        aitag.Provider
-	rules           *aitag.Rules
-	params          aitag.ClusterParams
-	mergeSecs       float64
-	defaultInterval float64
-	ffmpegPath      string
+	mu                 sync.RWMutex
+	provider           aitag.Provider
+	rules              *aitag.Rules
+	params             aitag.ClusterParams
+	mergeSecs          float64
+	defaultInterval    float64
+	ffmpegPath         string
+	segmentIndexer     SceneSegmentIndexer
+	voyageAnalyzer     VoyageSceneAnalyzer
+	taxonomyClient     *taxonomy.Client
+	taxonomyCategories []string
 }
 
 // Config configures the service.
@@ -55,6 +76,14 @@ type Config struct {
 	DefaultFrameInterval float64
 	// FFmpegPath is the shared decoder used by analysis and evaluation.
 	FFmpegPath string
+	// SegmentIndexer receives completed scenes when optional multimodal
+	// recommendation indexing is enabled.
+	SegmentIndexer SceneSegmentIndexer
+	// VoyageAnalyzer enables direct text-to-video taxonomy retrieval.
+	VoyageAnalyzer VoyageSceneAnalyzer
+	// TaxonomyClient is shared by local and Voyage-only analysis.
+	TaxonomyClient     *taxonomy.Client
+	TaxonomyCategories []string
 }
 
 // NewService builds the analysis service.
@@ -77,15 +106,77 @@ func NewService(repo models.Repository, db *store.DB, cfg Config) *Service {
 	}
 
 	return &Service{
-		repo:            repo,
-		db:              db,
-		writer:          NewWriter(repo, db),
-		provider:        cfg.Provider,
-		rules:           cfg.Rules,
-		params:          params,
-		mergeSecs:       merge,
-		defaultInterval: interval,
-		ffmpegPath:      ffmpegPath,
+		repo:               repo,
+		db:                 db,
+		writer:             NewWriter(repo, db),
+		provider:           cfg.Provider,
+		rules:              cfg.Rules,
+		params:             params,
+		mergeSecs:          merge,
+		defaultInterval:    interval,
+		ffmpegPath:         ffmpegPath,
+		segmentIndexer:     cfg.SegmentIndexer,
+		voyageAnalyzer:     cfg.VoyageAnalyzer,
+		taxonomyClient:     cfg.TaxonomyClient,
+		taxonomyCategories: append([]string(nil), cfg.TaxonomyCategories...),
+	}
+}
+
+// TaxonomyStatus describes the active taxonomy snapshot.
+type TaxonomyStatus struct {
+	Endpoint             string
+	Entries              int
+	RefreshedAt          time.Time
+	CandidatesByCategory []string
+}
+
+// RefreshTaxonomy forces a complete fetch without restarting the AI server.
+func (s *Service) RefreshTaxonomy(ctx context.Context, endpoint, apiKey string) (TaxonomyStatus, error) {
+	client, categories := s.taxonomyContext()
+	if client == nil {
+		return TaxonomyStatus{}, errors.New("taxonomy analysis is not active")
+	}
+	cache, err := client.Refresh(ctx, endpoint, apiKey)
+	if err != nil {
+		return TaxonomyStatus{}, err
+	}
+	return taxonomyStatus(categories, cache), nil
+}
+
+// TaxonomyStatus returns the active cache without triggering network access.
+func (s *Service) TaxonomyStatus() TaxonomyStatus {
+	client, categories := s.taxonomyContext()
+	if client == nil {
+		return TaxonomyStatus{}
+	}
+	return taxonomyStatus(categories, client.Status())
+}
+
+func (s *Service) taxonomyContext() (*taxonomy.Client, []string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	client := s.taxonomyClient
+	categories := append([]string(nil), s.taxonomyCategories...)
+	if analyzer, ok := s.provider.(*llamaprov.TaxonomyAnalyzer); ok {
+		if client == nil {
+			client = analyzer.Client
+		}
+		if len(categories) == 0 {
+			categories = append(categories, analyzer.Categories...)
+		}
+	}
+	if len(categories) == 0 {
+		categories = llamaprov.DefaultTaxonomyCategories()
+	}
+	return client, categories
+}
+
+func taxonomyStatus(categories []string, cache taxonomy.Cache) TaxonomyStatus {
+	return TaxonomyStatus{
+		Endpoint:             cache.Endpoint,
+		Entries:              len(cache.Entries),
+		RefreshedAt:          cache.UpdatedAt,
+		CandidatesByCategory: categories,
 	}
 }
 
@@ -102,6 +193,23 @@ func (s *Service) Provider() aitag.Provider {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.provider
+}
+
+// SupportsVoyageReranking reports whether the active taxonomy analyzer has a
+// configured Voyage reranker.
+func (s *Service) SupportsVoyageReranking() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	analyzer, ok := s.provider.(*llamaprov.TaxonomyAnalyzer)
+	return ok && analyzer.Reranker != nil
+}
+
+// SupportsVoyageTagging reports whether direct Voyage video-to-taxonomy
+// retrieval can run without the local VLM.
+func (s *Service) SupportsVoyageTagging() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.voyageAnalyzer != nil && s.voyageAnalyzer.CanTag()
 }
 
 // Close releases the provider's resources: ONNX sessions, model memory and
@@ -159,14 +267,19 @@ type AnalyzeRequest struct {
 
 // AnalyzeResult summarises what an analysis produced.
 type AnalyzeResult struct {
-	SceneID  int              `json:"scene_id"`
-	RunID    int64            `json:"run_id"`
-	Provider string           `json:"provider"`
-	Duration float64          `json:"duration"`
-	Spans    int              `json:"spans"`
-	Markers  int              `json:"markers"`
-	Elapsed  float64          `json:"elapsed_seconds"`
-	Write    *WritebackResult `json:"writeback,omitempty"`
+	SceneID            int                      `json:"scene_id"`
+	RunID              int64                    `json:"run_id"`
+	Provider           string                   `json:"provider"`
+	Duration           float64                  `json:"duration"`
+	Spans              int                      `json:"spans"`
+	Markers            int                      `json:"markers"`
+	Elapsed            float64                  `json:"elapsed_seconds"`
+	Error              string                   `json:"error,omitempty"`
+	Frames             int                      `json:"frames"`
+	Write              *WritebackResult         `json:"writeback,omitempty"`
+	Supports           []llamaprov.LabelSupport `json:"supports,omitempty"`
+	VoyageSegments     int                      `json:"voyage_segments,omitempty"`
+	VoyageSegmentError string                   `json:"voyage_segment_error,omitempty"`
 }
 
 // AnalyzeScene runs the whole pipeline over one scene.
@@ -205,13 +318,46 @@ func (s *Service) AnalyzeScene(ctx context.Context, req AnalyzeRequest, sink ait
 	// Ordering is a precondition of clustering, not an assumption about the
 	// provider: an unsorted set silently produces overlapping markers.
 	aitag.SortSpans(result.Spans)
+	supports := labelSupportsFromMetric(result.Metrics["label_supports"])
+	if len(supports) > 0 {
+		aggregated, aggregateErr := s.aggregateSupportParents(ctx, supports, s.TaxonomyStatus().Endpoint)
+		if aggregateErr != nil {
+			logger.Warnf("could not aggregate AI label support through tag parents for scene %d: %v", req.SceneID, aggregateErr)
+		} else {
+			if result.Metrics == nil {
+				result.Metrics = make(map[string]any)
+			}
+			result.Metrics["label_supports_with_parents"] = aggregated
+		}
+	}
+
+	var voyageSegments int
+	var voyageSegmentError string
+	if s.segmentIndexer != nil {
+		voyageSegments, err = s.indexSceneSegments(ctx, req.SceneID, path, result.Duration)
+		if err != nil {
+			voyageSegmentError = err.Error()
+			logger.Errorf("could not index Voyage segments for scene %d: %v", req.SceneID, err)
+		}
+		if result.Metrics == nil {
+			result.Metrics = make(map[string]any)
+		}
+		result.Metrics["voyage_segments"] = voyageSegments
+		if voyageSegmentError != "" {
+			result.Metrics["voyage_segment_error"] = voyageSegmentError
+		}
+	}
 
 	out := &AnalyzeResult{
-		SceneID:  req.SceneID,
-		Provider: provider.Name(),
-		Duration: result.Duration,
-		Spans:    aitag.CountSpans(result.Spans),
+		SceneID:            req.SceneID,
+		Provider:           provider.Name(),
+		Duration:           result.Duration,
+		Spans:              aitag.CountSpans(result.Spans),
+		VoyageSegments:     voyageSegments,
+		VoyageSegmentError: voyageSegmentError,
 	}
+	out.Frames = metricInt(result.Metrics["frames"])
+	out.Supports = supports
 
 	runID, err := s.storeRun(ctx, provider.Name(), req.SceneID, req.Options, result)
 	if err != nil {
@@ -234,13 +380,19 @@ func (s *Service) AnalyzeScene(ctx context.Context, req AnalyzeRequest, sink ait
 		}
 	}
 
-	if !req.SkipWriteback && rules != nil {
-		markers := aitag.Cluster(result, rules, params)
+	if !req.SkipWriteback && (rules != nil || req.Writeback.ApplySceneTags) {
+		var markers []aitag.Marker
+		if rules != nil {
+			markers = aitag.Cluster(result, rules, params)
+		}
 		out.Markers = len(markers)
+		if req.Writeback.ApplySceneTags {
+			req.Writeback.SceneTagNames = detectedSceneTagNames(result.Spans, markers)
+		}
 
 		write, err := s.writer.Write(ctx, provider.Name(), req.SceneID, runID, markers, frameInterval, req.Writeback)
 		if err != nil {
-			return out, fmt.Errorf("write markers: %w", err)
+			return out, fmt.Errorf("write analysis results: %w", err)
 		}
 		out.Write = &write
 	}
@@ -256,6 +408,35 @@ func (s *Service) AnalyzeScene(ctx context.Context, req AnalyzeRequest, sink ait
 	// (the native one) needs it.
 	_ = mergeSecs
 	return out, nil
+}
+
+func detectedSceneTagNames(spans aitag.SpansByCategory, markers []aitag.Marker) []string {
+	renamed := make(map[string]string, len(markers))
+	for _, marker := range markers {
+		if marker.Tag != "" && marker.RenamedTag != "" {
+			renamed[marker.Tag] = marker.RenamedTag
+		}
+	}
+
+	names := map[string]bool{}
+	for _, labels := range spans {
+		for label, detections := range labels {
+			if len(detections) == 0 {
+				continue
+			}
+			if name := renamed[label]; name != "" {
+				names[name] = true
+			} else {
+				names[label] = true
+			}
+		}
+	}
+	ret := make([]string, 0, len(names))
+	for name := range names {
+		ret = append(ret, name)
+	}
+	sort.Strings(ret)
+	return ret
 }
 
 // RegenerateMarkers rebuilds markers from stored spans, without re-analysing.
@@ -375,11 +556,31 @@ func (s *Service) storeRun(ctx context.Context, service string, sceneID int, opt
 			Type:          nonEmpty(m.Type),
 			Categories:    m.Categories,
 			FrameInterval: &interval,
+			Extra:         m.Extra,
 		})
 	}
 
 	frameInterval := result.FrameInterval
 	duration := result.Duration
+	metrics := make(map[string]any, len(result.Metrics)+2)
+	for key, value := range result.Metrics {
+		metrics[key] = value
+	}
+	metrics["frames_sampled"] = metricInt(result.Metrics["frames"])
+	metrics["taxonomy_entries"] = s.TaxonomyStatus().Entries
+
+	supports := labelSupportsFromMetric(result.Metrics["label_supports"])
+	storedSupports := make([]store.StoredLabelSupport, len(supports))
+	for i, support := range supports {
+		storedSupports[i] = store.StoredLabelSupport{
+			Tag:       support.Tag,
+			StashID:   support.StashID,
+			Frames:    support.Frames,
+			SpanCount: support.SpanCount,
+			FirstAt:   support.FirstAt,
+			LastAt:    support.LastAt,
+		}
+	}
 
 	return s.db.StoreSceneRun(ctx, store.SceneRunInput{
 		Service: service,
@@ -389,6 +590,7 @@ func (s *Service) storeRun(ctx context.Context, service string, sceneID int, opt
 			"threshold":      opts.Threshold,
 			"vr_video":       opts.VR,
 			"duration":       duration,
+			"metrics":        metrics,
 		},
 		Timespans:        timespans,
 		FrameInterval:    &frameInterval,
@@ -396,7 +598,79 @@ func (s *Service) storeRun(ctx context.Context, service string, sceneID int, opt
 		SchemaVersion:    result.SchemaVersion,
 		Models:           models,
 		ResolveReference: s.tagResolver(ctx),
+		LabelSupports:    storedSupports,
 	})
+}
+func (s *Service) indexSceneSegments(ctx context.Context, sceneID int, videoPath string, duration float64) (int, error) {
+	if s.segmentIndexer == nil {
+		return 0, nil
+	}
+	return s.segmentIndexer.IndexScene(ctx, sceneID, videoPath, duration)
+}
+
+func metricInt(value any) int {
+	switch value := value.(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	case float32:
+		return int(value)
+	default:
+		return 0
+	}
+}
+
+func labelSupportsFromMetric(value any) []llamaprov.LabelSupport {
+	switch supports := value.(type) {
+	case []llamaprov.LabelSupport:
+		return append([]llamaprov.LabelSupport(nil), supports...)
+	case []map[string]any:
+		ret := make([]llamaprov.LabelSupport, 0, len(supports))
+		for _, support := range supports {
+			ret = append(ret, llamaprov.LabelSupport{
+				Tag:       stringMetric(support["tag"]),
+				StashID:   stringMetric(support["stash_id"]),
+				Frames:    metricInt(support["frames"]),
+				SpanCount: metricInt(support["span_count"]),
+				FirstAt:   metricFloat(support["first_at"]),
+				LastAt:    metricFloat(support["last_at"]),
+			})
+		}
+		return ret
+	case []any:
+		ret := make([]llamaprov.LabelSupport, 0, len(supports))
+		for _, raw := range supports {
+			if support, ok := raw.(map[string]any); ok {
+				ret = append(ret, labelSupportsFromMetric([]map[string]any{support})...)
+			}
+		}
+		return ret
+	default:
+		return nil
+	}
+}
+
+func metricFloat(value any) float64 {
+	switch value := value.(type) {
+	case int:
+		return float64(value)
+	case int64:
+		return float64(value)
+	case float64:
+		return value
+	case float32:
+		return float64(value)
+	default:
+		return 0
+	}
+}
+
+func stringMetric(value any) string {
+	ret, _ := value.(string)
+	return ret
 }
 
 // tagResolver maps a provider label to a Stash tag id for the aggregates.
@@ -405,7 +679,7 @@ func (s *Service) storeRun(ctx context.Context, service string, sceneID int, opt
 // nothing gets timespans but no aggregate - the raw record is kept either way.
 func (s *Service) tagResolver(ctx context.Context) func(label, category string) *int {
 	return func(label, category string) *int {
-		id, err := s.writer.resolveTag(ctx, label, false)
+		id, _, err := s.writer.resolveTag(ctx, label, false)
 		if err != nil {
 			logger.Debugf("could not resolve AI label %q: %v", label, err)
 			return nil
@@ -414,13 +688,14 @@ func (s *Service) tagResolver(ctx context.Context) func(label, category string) 
 	}
 }
 
-// scenePath returns the primary file path of a scene.
-func (s *Service) scenePath(ctx context.Context, sceneID int) (string, error) {
+// sceneVideo returns the primary video path and probed duration.
+func (s *Service) sceneVideo(ctx context.Context, sceneID int) (string, float64, error) {
 	if s.repo.Scene == nil {
-		return "", ErrNoFile
+		return "", 0, ErrNoFile
 	}
 
 	var path string
+	var duration float64
 	err := txn.WithReadTxn(ctx, s.repo.TxnManager, func(ctx context.Context) error {
 		scene, err := s.repo.Scene.Find(ctx, sceneID)
 		if err != nil {
@@ -434,16 +709,23 @@ func (s *Service) scenePath(ctx context.Context, sceneID int) (string, error) {
 		}
 		if primary := scene.Files.Primary(); primary != nil {
 			path = primary.Path
+			duration = primary.Duration
 		}
 		return nil
 	})
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	if path == "" {
-		return "", ErrNoFile
+		return "", 0, ErrNoFile
 	}
-	return path, nil
+	return path, duration, nil
+}
+
+// scenePath returns the primary file path of a scene.
+func (s *Service) scenePath(ctx context.Context, sceneID int) (string, error) {
+	path, _, err := s.sceneVideo(ctx, sceneID)
+	return path, err
 }
 
 func nonEmpty(s string) *string {

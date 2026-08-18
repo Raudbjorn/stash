@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 )
@@ -25,17 +26,19 @@ const (
 // other timestamp in this schema, because the frontend reads them as plain
 // numbers and sorts on them.
 type TaskHistoryEntry struct {
-	TaskID      string   `json:"task_id"`
-	ActionID    string   `json:"action_id"`
-	Service     string   `json:"service"`
-	Status      string   `json:"status"`
-	SubmittedAt float64  `json:"submitted_at"`
-	StartedAt   *float64 `json:"started_at"`
-	FinishedAt  *float64 `json:"finished_at"`
-	DurationMS  *int64   `json:"duration_ms"`
-	ItemsSent   *int64   `json:"items_sent"`
-	ItemID      *string  `json:"item_id"`
-	Error       *string  `json:"error"`
+	TaskID      string         `json:"task_id"`
+	ActionID    string         `json:"action_id"`
+	Service     string         `json:"service"`
+	Status      string         `json:"status"`
+	SubmittedAt float64        `json:"submitted_at"`
+	StartedAt   *float64       `json:"started_at"`
+	FinishedAt  *float64       `json:"finished_at"`
+	DurationMS  *int64         `json:"duration_ms"`
+	ItemsSent   *int64         `json:"items_sent"`
+	ItemID      *string        `json:"item_id"`
+	Error       *string        `json:"error"`
+	InputParams map[string]any `json:"input_params,omitempty"`
+	Result      any            `json:"result,omitempty"`
 }
 
 // InsertTaskHistory records a terminal task, ignoring a task already present.
@@ -43,6 +46,15 @@ type TaskHistoryEntry struct {
 // Insertion and pruning share one transaction so the table cannot be observed
 // over its high-water mark.
 func (db *DB) InsertTaskHistory(ctx context.Context, e TaskHistoryEntry) error {
+	paramsJSON, err := marshalTaskHistoryValue(e.InputParams)
+	if err != nil {
+		return fmt.Errorf("encode task history parameters for %s: %w", e.TaskID, err)
+	}
+	resultJSON, err := marshalTaskHistoryValue(e.Result)
+	if err != nil {
+		return fmt.Errorf("encode task history result for %s: %w", e.TaskID, err)
+	}
+
 	return db.InTx(ctx, func(tx *sql.Tx) error {
 		var exists int
 		err := tx.QueryRowContext(ctx,
@@ -57,11 +69,11 @@ func (db *DB) InsertTaskHistory(ctx context.Context, e TaskHistoryEntry) error {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO task_history
 			 (task_id, action_id, service, status, submitted_at, started_at, finished_at,
-			  duration_ms, items_sent, item_id, error, created_at)
-			 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+			  duration_ms, items_sent, item_id, error, input_params, result_json, created_at)
+			 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			e.TaskID, e.ActionID, e.Service, e.Status,
 			e.SubmittedAt, e.StartedAt, e.FinishedAt,
-			e.DurationMS, e.ItemsSent, e.ItemID, e.Error, NowMillis(),
+			e.DurationMS, e.ItemsSent, e.ItemID, e.Error, paramsJSON, resultJSON, NowMillis(),
 		); err != nil {
 			return fmt.Errorf("insert task history for %s: %w", e.TaskID, err)
 		}
@@ -111,7 +123,8 @@ func (db *DB) ListTaskHistory(ctx context.Context, f TaskHistoryFilter) ([]TaskH
 	}
 
 	query := `SELECT task_id, action_id, service, status, submitted_at, started_at,
-	                 finished_at, duration_ms, items_sent, item_id, error
+	                 finished_at, duration_ms, items_sent, item_id, error,
+	                 input_params, result_json
 	          FROM task_history`
 	var args []any
 	var where []string
@@ -146,10 +159,11 @@ func (db *DB) ListTaskHistory(ctx context.Context, f TaskHistoryFilter) ([]TaskH
 		var e TaskHistoryEntry
 		var started, finished sql.NullFloat64
 		var duration, items sql.NullInt64
-		var itemID, errText sql.NullString
+		var itemID, errText, paramsJSON, resultJSON sql.NullString
 
 		if err := rows.Scan(&e.TaskID, &e.ActionID, &e.Service, &e.Status,
-			&e.SubmittedAt, &started, &finished, &duration, &items, &itemID, &errText); err != nil {
+			&e.SubmittedAt, &started, &finished, &duration, &items, &itemID, &errText,
+			&paramsJSON, &resultJSON); err != nil {
 			return nil, fmt.Errorf("scan task history: %w", err)
 		}
 
@@ -159,12 +173,33 @@ func (db *DB) ListTaskHistory(ctx context.Context, f TaskHistoryFilter) ([]TaskH
 		e.ItemsSent = Int64Ptr(items)
 		e.ItemID = StringPtr(itemID)
 		e.Error = StringPtr(errText)
+		if paramsJSON.Valid {
+			if err := json.Unmarshal([]byte(paramsJSON.String), &e.InputParams); err != nil {
+				return nil, fmt.Errorf("decode task history parameters for %s: %w", e.TaskID, err)
+			}
+		}
+		if resultJSON.Valid {
+			if err := json.Unmarshal([]byte(resultJSON.String), &e.Result); err != nil {
+				return nil, fmt.Errorf("decode task history result for %s: %w", e.TaskID, err)
+			}
+		}
 		out = append(out, e)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate task history: %w", err)
 	}
 	return out, nil
+}
+
+func marshalTaskHistoryValue(value any) (any, error) {
+	if value == nil {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	return string(encoded), nil
 }
 
 // CountTaskHistory reports the number of stored rows, for tests and diagnostics.

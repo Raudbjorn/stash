@@ -17,13 +17,13 @@ import (
 const maxResponseBytes = 1 << 20
 
 type completionRequest struct {
-	Model          string         `json:"model"`
-	Messages       []message      `json:"messages"`
-	Temperature    float64        `json:"temperature"`
-	Stream         bool           `json:"stream"`
-	CachePrompt    bool           `json:"cache_prompt"`
-	MaxTokens      int            `json:"max_tokens"`
-	ResponseFormat responseFormat `json:"response_format"`
+	Model          string          `json:"model"`
+	Messages       []message       `json:"messages"`
+	Temperature    float64         `json:"temperature"`
+	Stream         bool            `json:"stream"`
+	CachePrompt    bool            `json:"cache_prompt"`
+	MaxTokens      int             `json:"max_tokens"`
+	ResponseFormat *responseFormat `json:"response_format,omitempty"`
 }
 
 type message struct {
@@ -68,6 +68,86 @@ func (p *Provider) ClassifyFrame(ctx context.Context, rgb []byte, width, height 
 	return p.classifyFrame(ctx, rgb, width, height)
 }
 
+// Describe captions one frame without constraining the response to JSON.
+func (p *Provider) Describe(ctx context.Context, frame aitag.Frame) (string, error) {
+	if err := p.waitUntilReady(ctx); err != nil {
+		return "", err
+	}
+	dataURL, err := encodeFrameDataURL(frame)
+	if err != nil {
+		return "", err
+	}
+	content, err := p.complete(ctx, completionRequest{
+		Model: p.pair.Name,
+		Messages: []message{{
+			Role: "user",
+			Content: []contentPart{
+				{Type: "text", Text: "Describe the image in one short paragraph. Use concrete nouns; do not invent."},
+				{Type: "image_url", ImageURL: &imageURL{URL: dataURL}},
+			},
+		}},
+		Temperature: 0,
+		Stream:      false,
+		CachePrompt: true,
+		MaxTokens:   256,
+	})
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(content)), nil
+}
+
+// Verify returns strict yes/no decisions for only the supplied candidates.
+func (p *Provider) Verify(ctx context.Context, frame aitag.Frame, labels []string) (map[string]bool, error) {
+	if err := p.waitUntilReady(ctx); err != nil {
+		return nil, err
+	}
+	labels, err := normalizeLabels(labels)
+	if err != nil {
+		return nil, err
+	}
+	built, err := buildDecisionTemplate(labels, "For each label, decide whether it is visibly present in the image. Labels: ")
+	if err != nil {
+		return nil, err
+	}
+	dataURL, err := encodeFrameDataURL(frame)
+	if err != nil {
+		return nil, err
+	}
+	content, err := p.complete(ctx, completionRequest{
+		Model: p.pair.Name,
+		Messages: []message{{
+			Role: "user",
+			Content: []contentPart{
+				{Type: "text", Text: built.prompt},
+				{Type: "image_url", ImageURL: &imageURL{URL: dataURL}},
+			},
+		}},
+		Temperature: 0,
+		Stream:      false,
+		CachePrompt: true,
+		MaxTokens:   built.maxTokens,
+		ResponseFormat: &responseFormat{
+			Type: "json_schema",
+			JSONSchema: jsonSchema{
+				Name: "frame_candidates", Strict: true, Schema: built.schema,
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return parseDecisions(content, labels)
+}
+
+func encodeFrameDataURL(frame aitag.Frame) (string, error) {
+	png, err := aitag.EncodePNG(frame.RGB, frame.Width, frame.Height)
+	if err != nil {
+		return "", err
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(png), nil
+}
+
 // CompleteJSON performs one bounded strict-schema text completion.
 func (p *Provider) CompleteJSON(ctx context.Context, systemPrompt, userPrompt, schemaName string, schema json.RawMessage, maxTokens int, target any) error {
 	if maxTokens <= 0 || maxTokens > 1024 {
@@ -100,7 +180,7 @@ func (p *Provider) CompleteJSON(ctx context.Context, systemPrompt, userPrompt, s
 		Stream:      false,
 		CachePrompt: true,
 		MaxTokens:   maxTokens,
-		ResponseFormat: responseFormat{
+		ResponseFormat: &responseFormat{
 			Type: "json_schema",
 			JSONSchema: jsonSchema{
 				Name: strings.TrimSpace(schemaName), Strict: true, Schema: schema,
@@ -146,7 +226,7 @@ func (p *Provider) classifyFrame(ctx context.Context, rgb []byte, width, height 
 		Stream:      false,
 		CachePrompt: true,
 		MaxTokens:   p.template.maxTokens,
-		ResponseFormat: responseFormat{
+		ResponseFormat: &responseFormat{
 			Type: "json_schema",
 			JSONSchema: jsonSchema{
 				Name: "frame_labels", Strict: true, Schema: p.template.schema,
@@ -157,7 +237,7 @@ func (p *Provider) classifyFrame(ctx context.Context, rgb []byte, width, height 
 	if err != nil {
 		return nil, err
 	}
-	return p.parseDecisions(content)
+	return parseDecisions(content, p.labels)
 }
 
 func (p *Provider) complete(ctx context.Context, payload completionRequest) ([]byte, error) {
@@ -197,16 +277,16 @@ func (p *Provider) complete(ctx context.Context, payload completionRequest) ([]b
 	return []byte(content), nil
 }
 
-func (p *Provider) parseDecisions(content []byte) (map[string]bool, error) {
+func parseDecisions(content []byte, labels []string) (map[string]bool, error) {
 	var decoded map[string]string
 	if err := json.Unmarshal(content, &decoded); err != nil {
 		return nil, fmt.Errorf("decode llama VLM decisions: %w", err)
 	}
-	if len(decoded) != len(p.labels) {
-		return nil, fmt.Errorf("llama VLM returned %d labels, want %d", len(decoded), len(p.labels))
+	if len(decoded) != len(labels) {
+		return nil, fmt.Errorf("llama VLM returned %d labels, want %d", len(decoded), len(labels))
 	}
-	decisions := make(map[string]bool, len(p.labels))
-	for _, label := range p.labels {
+	decisions := make(map[string]bool, len(labels))
+	for _, label := range labels {
 		decision, ok := decoded[label]
 		if !ok {
 			return nil, fmt.Errorf("llama VLM response is missing label %q", label)

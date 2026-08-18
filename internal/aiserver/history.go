@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/stashapp/stash/internal/aiserver/store"
+	"github.com/stashapp/stash/internal/aiserver/tagging"
 	"github.com/stashapp/stash/internal/aiserver/task"
 )
 
@@ -52,6 +53,10 @@ func (h historySink) RecordTask(ctx context.Context, rec task.Record, childCount
 	if rec.Context.IsDetailView && rec.Context.EntityID != nil && *rec.Context.EntityID != "" {
 		id := *rec.Context.EntityID
 		entry.ItemID = &id
+	}
+	if rec.ActionID == tagging.ActionID {
+		entry.InputParams = rec.Params
+		entry.Result = rec.Result
 	}
 
 	return h.db.InsertTaskHistory(ctx, entry)
