@@ -35,6 +35,7 @@ import (
 	"github.com/stashapp/stash/internal/aiserver/tagging"
 	"github.com/stashapp/stash/internal/aiserver/task"
 	"github.com/stashapp/stash/internal/manager/config"
+	"github.com/stashapp/stash/pkg/aitag/llamaprov"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
 )
@@ -378,6 +379,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// rather than an error: a missing model or an unreachable inference server
 	// disables analysis and leaves the scheduler, the interactions pipeline and
 	// the recommenders running.
+	taxonomyCategories := effectiveTaxonomyCategories(s.deps.Config.GetAITaggingTaxonomyCategories())
 	taggingSettings := tagging.Settings{
 		Provider:              s.deps.Config.GetAITaggingProvider(),
 		ServerURL:             s.deps.Config.GetAITaggingServerURL(),
@@ -396,7 +398,7 @@ func (s *Server) Start(ctx context.Context) error {
 		VLMVoyageEndpoint:     s.deps.Config.GetAITaggingVLMVoyageEndpoint(),
 		TaxonomyEndpoint:      s.deps.Config.GetAITaggingTaxonomyEndpoint(),
 		TaxonomyAPIKey:        s.deps.Config.GetAITaggingTaxonomyAPIKey(),
-		TaxonomyCategories:    s.deps.Config.GetAITaggingTaxonomyCategories(),
+		TaxonomyCategories:    taxonomyCategories,
 		TaxonomyMaxCandidates: s.deps.Config.GetAITaggingTaxonomyMaxCandidates(),
 		FFmpegPath:            s.deps.Config.GetFFMpegPath(),
 		FrameInterval:         s.deps.Config.GetAITaggingFrameInterval(),
@@ -653,3 +655,10 @@ func (s *Server) DB() *store.DB {
 
 // Repo exposes Stash's repository to the AI subsystem's own packages.
 func (s *Server) Repo() models.Repository { return s.deps.Repo }
+
+func effectiveTaxonomyCategories(configured []string) []string {
+	if len(configured) == 0 {
+		return llamaprov.DefaultTaxonomyCategories()
+	}
+	return append([]string(nil), configured...)
+}

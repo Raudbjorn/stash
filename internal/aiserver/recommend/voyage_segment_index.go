@@ -2,7 +2,9 @@ package recommend
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -78,13 +80,17 @@ func (v *VoyageSegmentIndex) Build(ctx context.Context, sceneID int, videoPath, 
 
 	ret := make([]SegmentCache, 0, len(segments))
 	for _, segment := range segments {
-		if item, ok := cached[segment.Start]; ok && item.SegmentEnd == segment.End && len(item.Vectors) > 0 {
-			ret = append(ret, SegmentCache{SceneID: sceneID, Start: segment.Start, End: segment.End, Vector: append([]float32(nil), item.Vectors...)})
-			continue
-		}
 		video, err := v.segmentVideo(ctx, videoPath, segment.Start, segment.End)
 		if err != nil {
 			return nil, err
+		}
+		inputHash := voyageEmbeddingInputHash(transcript, video)
+		if item, ok := cached[segment.Start]; ok &&
+			item.SegmentEnd == segment.End &&
+			item.InputHash == inputHash &&
+			len(item.Vectors) > 0 {
+			ret = append(ret, SegmentCache{SceneID: sceneID, Start: segment.Start, End: segment.End, Vector: append([]float32(nil), item.Vectors...)})
+			continue
 		}
 		vector, err := v.embed(ctx, transcript, video)
 		if err != nil {
@@ -93,6 +99,7 @@ func (v *VoyageSegmentIndex) Build(ctx context.Context, sceneID int, videoPath, 
 		if err := v.DB.StoreEmbeddings(ctx, voyageSegmentService, store.StoredEmbeddings{
 			SceneID: sceneID, Model: model, Dim: len(vector), FrameInterval: segment.End - segment.Start,
 			Times: []float64{segment.Start}, Vectors: vector, SegmentStart: segment.Start, SegmentEnd: segment.End,
+			InputHash: inputHash,
 		}); err != nil {
 			return nil, err
 		}
@@ -100,6 +107,15 @@ func (v *VoyageSegmentIndex) Build(ctx context.Context, sceneID int, videoPath, 
 		ret = append(ret, item)
 	}
 	return ret, nil
+}
+
+func voyageEmbeddingInputHash(transcript string, video []byte) string {
+	hash := sha256.New()
+	_, _ = hash.Write([]byte(strconv.Itoa(len(transcript))))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(transcript))
+	_, _ = hash.Write(video)
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 // IndexScene populates the read-only segment cache after scene analysis.

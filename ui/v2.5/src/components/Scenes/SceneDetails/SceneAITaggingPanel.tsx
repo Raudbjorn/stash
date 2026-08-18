@@ -83,6 +83,7 @@ export const SceneAITaggingPanel: React.FC<ISceneAITaggingPanelProps> = ({
 
   const { data, loading, refetch } = useSceneAITaggingSpans(
     sceneId,
+    selectedService,
     isVisible ? ANALYSIS_POLL_INTERVAL_MS : 0
   );
   const activeTasks = data?.aiTasks ?? [];

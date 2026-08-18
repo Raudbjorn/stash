@@ -250,14 +250,15 @@ func TestSegmentMigrationPreservesExistingEmbeddings(t *testing.T) {
 
 	var start, end float64
 	var vectors []byte
+	var inputHash string
 	if err := conn.QueryRowContext(ctx,
-		`SELECT segment_start, segment_end, vectors FROM ai_scene_embeddings
+		`SELECT segment_start, segment_end, vectors, input_hash FROM ai_scene_embeddings
 		 WHERE service='native' AND scene_id=7 AND model='model'`,
-	).Scan(&start, &end, &vectors); err != nil {
+	).Scan(&start, &end, &vectors, &inputHash); err != nil {
 		t.Fatal(err)
 	}
-	if start != 2 || end != 8 || len(vectors) != 4 {
-		t.Fatalf("migrated row start=%v end=%v vectors=%x", start, end, vectors)
+	if start != 2 || end != 8 || len(vectors) != 4 || inputHash != "" {
+		t.Fatalf("migrated row start=%v end=%v vectors=%x input_hash=%q", start, end, vectors, inputHash)
 	}
 
 	indexColumns := []string{}

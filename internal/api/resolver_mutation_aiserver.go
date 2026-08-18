@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/stashapp/stash/internal/aiserver/action"
 	"github.com/stashapp/stash/internal/aiserver/tagging"
@@ -64,6 +65,22 @@ func (r *mutationResolver) ConfigureAIServer(ctx context.Context, input AIServer
 	embeddingEndpoint, err := url.ParseRequestURI(input.TaggingVLMVoyageEmbeddingEndpoint)
 	if err != nil || embeddingEndpoint.Host == "" || (embeddingEndpoint.Scheme != "http" && embeddingEndpoint.Scheme != "https") {
 		return nil, errors.New("taggingVLMVoyageEmbeddingEndpoint must be an absolute HTTP(S) URL")
+	}
+	taxonomyEndpoint := strings.TrimSpace(input.TaggingTaxonomyEndpoint)
+	taxonomyRequired := input.TaggingVLMVoyageVideoEnabled ||
+		(input.TaggingProvider != nil && *input.TaggingProvider == AITaggingProviderLlamaVlm &&
+			input.TaggingAnalyzeMode == "taxonomy")
+	if taxonomyRequired && taxonomyEndpoint == "" {
+		return nil, errors.New("taggingTaxonomyEndpoint is required for taxonomy analysis")
+	}
+	if taxonomyEndpoint != "" {
+		parsed, parseErr := url.ParseRequestURI(taxonomyEndpoint)
+		if parseErr != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return nil, errors.New("taggingTaxonomyEndpoint must be an absolute HTTP(S) URL")
+		}
+	}
+	if input.TaggingTaxonomyMaxCandidates < 0 {
+		return nil, errors.New("taggingTaxonomyMaxCandidates cannot be negative")
 	}
 
 	c.SetBool(config.AIEnabled, input.Enabled)

@@ -45,3 +45,18 @@ func TestAvailableVoyageModelValuesAreImmutable(t *testing.T) {
 		t.Fatal("available model values exposed mutable package state")
 	}
 }
+
+func TestTaggingResultServiceMapsAnalysisProfiles(t *testing.T) {
+	tests := map[string]string{
+		"local":            "llama_vlm",
+		"local_voyage":     "llama_vlm",
+		"voyage":           "voyage_multimodal",
+		"skier_aitagging":  "skier_aitagging",
+		"unknown-provider": "unknown-provider",
+	}
+	for selection, want := range tests {
+		if got := taggingResultService(selection, "llama_vlm"); got != want {
+			t.Errorf("selection %q mapped to %q, want %q", selection, got, want)
+		}
+	}
+}

@@ -137,6 +137,7 @@ type StoredEmbeddings struct {
 	Times         []float64
 	SegmentStart  float64
 	SegmentEnd    float64
+	InputHash     string
 	// Vectors is FrameCount*Dim values, frame-major.
 	Vectors []float32
 }
@@ -175,8 +176,8 @@ func (db *DB) StoreEmbeddings(ctx context.Context, service string, in StoredEmbe
 	_, err = db.sql.ExecContext(ctx,
 		`INSERT INTO ai_scene_embeddings
 		     (service, scene_id, model, dim, frame_count, frame_interval, times, vectors,
-		      segment_start, segment_end, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		      segment_start, segment_end, input_hash, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(service, scene_id, model, segment_start) DO UPDATE SET
 		     dim            = excluded.dim,
 		     frame_count    = excluded.frame_count,
@@ -184,9 +185,10 @@ func (db *DB) StoreEmbeddings(ctx context.Context, service string, in StoredEmbe
 		     times          = excluded.times,
 		     vectors        = excluded.vectors,
 		     segment_end    = excluded.segment_end,
+		     input_hash     = excluded.input_hash,
 		     created_at     = excluded.created_at`,
 		service, in.SceneID, in.Model, in.Dim, in.FrameCount(), in.FrameInterval,
-		string(times), blob, in.SegmentStart, segmentEnd, NowMillis())
+		string(times), blob, in.SegmentStart, segmentEnd, in.InputHash, NowMillis())
 	return err
 }
 
@@ -199,11 +201,11 @@ func (db *DB) GetEmbeddings(ctx context.Context, service string, sceneID int, mo
 	)
 
 	err := db.sql.QueryRowContext(ctx,
-		`SELECT dim, frame_interval, times, vectors, segment_start, segment_end
+		`SELECT dim, frame_interval, times, vectors, segment_start, segment_end, input_hash
 		 FROM ai_scene_embeddings
 		 WHERE service = ? AND scene_id = ? AND model = ? AND segment_start = 0`,
 		service, sceneID, model).Scan(
-		&out.Dim, &out.FrameInterval, &timesJSON, &blob, &out.SegmentStart, &out.SegmentEnd,
+		&out.Dim, &out.FrameInterval, &timesJSON, &blob, &out.SegmentStart, &out.SegmentEnd, &out.InputHash,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -248,7 +250,7 @@ func (db *DB) EmbeddedScenes(ctx context.Context, service, model string) ([]int,
 // GetEmbeddingSegments returns every cached segment for a scene/model.
 func (db *DB) GetEmbeddingSegments(ctx context.Context, service string, sceneID int, model string) ([]StoredEmbeddings, error) {
 	rows, err := db.sql.QueryContext(ctx,
-		`SELECT dim, frame_interval, times, vectors, segment_start, segment_end
+		`SELECT dim, frame_interval, times, vectors, segment_start, segment_end, input_hash
 		 FROM ai_scene_embeddings
 		 WHERE service = ? AND scene_id = ? AND model = ?
 		 ORDER BY segment_start`, service, sceneID, model)
@@ -271,6 +273,7 @@ func (db *DB) GetEmbeddingSegments(ctx context.Context, service string, sceneID 
 			&blob,
 			&item.SegmentStart,
 			&item.SegmentEnd,
+			&item.InputHash,
 		); err != nil {
 			return nil, err
 		}

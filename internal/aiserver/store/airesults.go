@@ -640,11 +640,10 @@ type LabelledSpan struct {
 // was detected: an analysis whose labels have no matching tags would appear to
 // have found nothing at all, which is the opposite of what they need to know.
 //
-// runID restricts the read to a single analysis. Pass 0 for every run, which is
-// what a "show me everything ever detected" view wants - but NOT what marker
-// regeneration wants: analysing a scene three times would otherwise feed
-// three overlapping copies of every span into the clustering and shift every
-// marker boundary.
+// runID restricts the read to a single analysis. Zero selects the latest
+// completed run for the service and scene. This prevents repeated analyses
+// from producing overlapping duplicate spans in marker regeneration and UI
+// reads.
 func (db *DB) GetSceneSpansByLabel(ctx context.Context, service string, sceneID int, runID int64) (map[string]map[string][]LabelledSpan, error) {
 	query := `SELECT t.category, t.str_value, t.value_id, t.start_s, t.end_s, t.value_json
 		 FROM ai_result_timespans t
@@ -656,6 +655,15 @@ func (db *DB) GetSceneSpansByLabel(ctx context.Context, service string, sceneID 
 	if runID > 0 {
 		query += ` AND t.run_id = ?`
 		args = append(args, runID)
+	} else {
+		query += ` AND t.run_id = (
+			SELECT latest.id
+			FROM ai_model_runs latest
+			WHERE latest.service = ? AND latest.entity_type = 'scene' AND latest.entity_id = ?
+			ORDER BY (latest.completed_at IS NULL) ASC, latest.completed_at DESC, latest.id DESC
+			LIMIT 1
+		)`
+		args = append(args, service, sceneID)
 	}
 	query += ` ORDER BY t.category, t.str_value, t.start_s`
 

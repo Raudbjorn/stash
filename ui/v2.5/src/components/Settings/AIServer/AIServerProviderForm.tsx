@@ -67,6 +67,10 @@ export const AIServerProviderForm: React.FC<AIServerProviderFormProps> = ({
   );
   const [openAIKey, setOpenAIKey] = useState("");
   const [voyageAPIKey, setVoyageAPIKey] = useState("");
+  const [taxonomyAPIKey, setTaxonomyAPIKey] = useState("");
+  const [taxonomyCategories, setTaxonomyCategories] = useState(
+    config.taggingTaxonomyCategories.join(", ")
+  );
   const [saving, setSaving] = useState(false);
   // The status query polls every 5s with fetchPolicy "no-cache", so `config`
   // is a fresh object on every tick even when nothing changed. Re-seeding the
@@ -78,6 +82,7 @@ export const AIServerProviderForm: React.FC<AIServerProviderFormProps> = ({
   useEffect(() => {
     if (dirty.current) return;
     setForm(toInput(enabled, config));
+    setTaxonomyCategories(config.taggingTaxonomyCategories.join(", "));
   }, [enabled, config]);
 
   function update(patch: Partial<AiServerConfigInput>) {
@@ -90,11 +95,17 @@ export const AIServerProviderForm: React.FC<AIServerProviderFormProps> = ({
     try {
       await mutateConfigureAIServer({
         ...form,
-        taggingOpenAIKey: openAIKey ? openAIKey : undefined,
+        taggingOpenAIKey: openAIKey || undefined,
         taggingVLMVoyageAPIKey: voyageAPIKey || undefined,
+        taggingTaxonomyAPIKey: taxonomyAPIKey || undefined,
+        taggingTaxonomyCategories: taxonomyCategories
+          .split(",")
+          .map((category) => category.trim())
+          .filter(Boolean),
       });
       setOpenAIKey("");
       setVoyageAPIKey("");
+      setTaxonomyAPIKey("");
       dirty.current = false;
       Toast.success(intl.formatMessage({ id: "config.ai_server.saved" }));
       onSaved();
@@ -106,6 +117,10 @@ export const AIServerProviderForm: React.FC<AIServerProviderFormProps> = ({
   }
 
   const provider = form.taggingProvider ?? undefined;
+  const taxonomySettingsVisible =
+    (provider === AiTaggingProvider.LlamaVlm &&
+      form.taggingAnalyzeMode === "taxonomy") ||
+    form.taggingVLMVoyageVideoEnabled;
 
   return (
     <>
@@ -298,6 +313,72 @@ export const AIServerProviderForm: React.FC<AIServerProviderFormProps> = ({
               onChange={(e) =>
                 update({
                   taggingVLMContext: Number(e.currentTarget.value) || 0,
+                })
+              }
+            />
+          </Setting>
+        </>
+      )}
+      {taxonomySettingsVisible && (
+        <>
+          <Setting
+            headingID="config.ai_server.taxonomy_endpoint"
+            subHeadingID="config.ai_server.taxonomy_endpoint_description"
+          >
+            <Form.Control
+              className="text-input"
+              type="url"
+              required
+              value={form.taggingTaxonomyEndpoint}
+              onChange={(event) =>
+                update({ taggingTaxonomyEndpoint: event.currentTarget.value })
+              }
+            />
+          </Setting>
+          <Setting
+            headingID="config.ai_server.taxonomy_api_key"
+            subHeadingID="config.ai_server.taxonomy_api_key_description"
+          >
+            <Form.Control
+              className="text-input"
+              type="password"
+              placeholder={
+                config.taggingTaxonomyAPIKeySet
+                  ? intl.formatMessage({
+                      id: "config.ai_server.taxonomy_api_key_set",
+                    })
+                  : ""
+              }
+              value={taxonomyAPIKey}
+              onChange={(event) => setTaxonomyAPIKey(event.currentTarget.value)}
+            />
+          </Setting>
+          <Setting
+            headingID="config.ai_server.taxonomy_categories"
+            subHeadingID="config.ai_server.taxonomy_categories_description"
+          >
+            <Form.Control
+              className="text-input"
+              value={taxonomyCategories}
+              onChange={(event) => {
+                dirty.current = true;
+                setTaxonomyCategories(event.currentTarget.value);
+              }}
+            />
+          </Setting>
+          <Setting
+            headingID="config.ai_server.taxonomy_max_candidates"
+            subHeadingID="config.ai_server.taxonomy_max_candidates_description"
+          >
+            <Form.Control
+              className="text-input"
+              type="number"
+              min={0}
+              value={form.taggingTaxonomyMaxCandidates}
+              onChange={(event) =>
+                update({
+                  taggingTaxonomyMaxCandidates:
+                    Number.parseInt(event.currentTarget.value, 10) || 0,
                 })
               }
             />

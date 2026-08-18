@@ -28,18 +28,35 @@ func TestVoyageSegmentIndexBuildsThreeFixedSegments(t *testing.T) {
 	}
 }
 
-func TestVoyageSegmentIndexUsesDatabaseCache(t *testing.T) {
+func TestVoyageSegmentIndexCacheUsesExactEmbeddingInput(t *testing.T) {
 	index, calls := newTestVoyageSegmentIndex(t)
 	if _, err := index.Build(context.Background(), 42, "missing.mp4", "transcript", 90); err != nil {
 		t.Fatal(err)
 	}
 	firstCalls := calls.Load()
-	segments, err := index.Build(context.Background(), 42, "missing.mp4", "different transcript", 90)
-	if err != nil {
+	if _, err := index.Build(context.Background(), 42, "missing.mp4", "transcript", 90); err != nil {
 		t.Fatal(err)
 	}
-	if len(segments) != 3 || calls.Load() != firstCalls {
-		t.Fatalf("cache build segments=%d calls=%d, want 3/%d", len(segments), calls.Load(), firstCalls)
+	if calls.Load() != firstCalls {
+		t.Fatalf("unchanged input made %d calls, want %d", calls.Load(), firstCalls)
+	}
+
+	if _, err := index.Build(context.Background(), 42, "missing.mp4", "different transcript", 90); err != nil {
+		t.Fatal(err)
+	}
+	afterTranscript := calls.Load()
+	if afterTranscript != firstCalls+3 {
+		t.Fatalf("changed transcript made %d calls, want %d", afterTranscript, firstCalls+3)
+	}
+
+	index.ExtractVideo = func(context.Context, string, float64, float64) ([]byte, error) {
+		return []byte("different mp4"), nil
+	}
+	if _, err := index.Build(context.Background(), 42, "missing.mp4", "different transcript", 90); err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != afterTranscript+3 {
+		t.Fatalf("changed video made %d calls, want %d", calls.Load(), afterTranscript+3)
 	}
 }
 

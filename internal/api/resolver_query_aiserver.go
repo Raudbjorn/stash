@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/stashapp/stash/internal/aiserver"
+	"github.com/stashapp/stash/internal/aiserver/recommend"
 	"github.com/stashapp/stash/internal/manager"
 	"github.com/stashapp/stash/pkg/aitag/assets"
 	"github.com/stashapp/stash/pkg/aitag/llamaprov"
@@ -228,7 +229,7 @@ func (r *queryResolver) AiServerTaxonomy(ctx context.Context) (*AIServerTaxonomy
 	}, nil
 }
 
-func (r *queryResolver) AiTaggingSpans(ctx context.Context, sceneID string) ([]*AITaggingSpanGroup, error) {
+func (r *queryResolver) AiTaggingSpans(ctx context.Context, sceneID string, service string, runID *int) ([]*AITaggingSpanGroup, error) {
 	mgr := manager.GetInstance()
 	db := mgr.AIServer.DB()
 	if db == nil {
@@ -240,12 +241,16 @@ func (r *queryResolver) AiTaggingSpans(ctx context.Context, sceneID string) ([]*
 		return nil, err
 	}
 
-	service := mgr.Config.GetAITaggingProvider()
-	if service == "" {
+	storedService := taggingResultService(service, mgr.Config.GetAITaggingProvider())
+	if storedService == "" {
 		return []*AITaggingSpanGroup{}, nil
 	}
+	var selectedRun int64
+	if runID != nil {
+		selectedRun = int64(*runID)
+	}
 
-	byCategory, err := db.GetSceneSpansByLabel(ctx, service, id, 0)
+	byCategory, err := db.GetSceneSpansByLabel(ctx, storedService, id, selectedRun)
 	if err != nil {
 		return nil, err
 	}
@@ -309,4 +314,15 @@ func (r *queryResolver) AiTaggingSceneSupports(ctx context.Context, sceneID int,
 		})
 	}
 	return ret, nil
+}
+
+func taggingResultService(selection, configuredProvider string) string {
+	switch selection {
+	case "voyage":
+		return recommend.VoyageProviderName
+	case "local", "local_voyage":
+		return configuredProvider
+	default:
+		return selection
+	}
 }

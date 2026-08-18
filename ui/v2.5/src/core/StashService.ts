@@ -3119,9 +3119,13 @@ export const refreshSceneAfterAI = (sceneID: string) => {
   client.cache.gc();
 };
 
-export const useSceneAITaggingSpans = (sceneID: string, pollInterval = 0) =>
+export const useSceneAITaggingSpans = (
+  sceneID: string,
+  service: string,
+  pollInterval = 0
+) =>
   GQL.useSceneAiTaggingSpansQuery({
-    variables: { sceneID },
+    variables: { sceneID, service },
     fetchPolicy: "no-cache",
     pollInterval,
   });
