@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -68,11 +70,19 @@ func (v *VoyageSegmentIndex) Build(ctx context.Context, sceneID int, videoPath, 
 		return nil, errors.New("voyage segment duration must be positive")
 	}
 	model := v.cacheModel()
-	segments := v.segments(ctx, videoPath, duration)
 	stored, err := v.DB.GetEmbeddingSegments(ctx, voyageSegmentService, sceneID, model)
 	if err != nil {
 		return nil, err
 	}
+	sourceFingerprint, err := v.sourceFingerprint(videoPath, transcript, duration)
+	if err != nil {
+		return nil, err
+	}
+	if ret, ok := cachedVoyageSegments(sceneID, stored, sourceFingerprint, duration); ok {
+		return ret, nil
+	}
+
+	segments := v.segments(ctx, videoPath, duration)
 	cached := make(map[float64]store.StoredEmbeddings, len(stored))
 	for _, item := range stored {
 		cached[item.SegmentStart] = item
@@ -80,17 +90,17 @@ func (v *VoyageSegmentIndex) Build(ctx context.Context, sceneID int, videoPath, 
 
 	ret := make([]SegmentCache, 0, len(segments))
 	for _, segment := range segments {
-		video, err := v.segmentVideo(ctx, videoPath, segment.Start, segment.End)
-		if err != nil {
-			return nil, err
-		}
-		inputHash := voyageEmbeddingInputHash(transcript, video)
+		inputHash := voyageSegmentInputHash(sourceFingerprint, segment.Start, segment.End)
 		if item, ok := cached[segment.Start]; ok &&
 			item.SegmentEnd == segment.End &&
 			item.InputHash == inputHash &&
 			len(item.Vectors) > 0 {
 			ret = append(ret, SegmentCache{SceneID: sceneID, Start: segment.Start, End: segment.End, Vector: append([]float32(nil), item.Vectors...)})
 			continue
+		}
+		video, err := v.segmentVideo(ctx, videoPath, segment.Start, segment.End)
+		if err != nil {
+			return nil, err
 		}
 		vector, err := v.embed(ctx, transcript, video)
 		if err != nil {
@@ -109,13 +119,81 @@ func (v *VoyageSegmentIndex) Build(ctx context.Context, sceneID int, videoPath, 
 	return ret, nil
 }
 
-func voyageEmbeddingInputHash(transcript string, video []byte) string {
+// sourceFingerprint is deliberately computable from filesystem metadata. A
+// cache hit must not decode the source merely to prove that it is unchanged.
+// The version prefix invalidates content-hash entries written by older builds.
+func (v *VoyageSegmentIndex) sourceFingerprint(videoPath, transcript string, duration float64) (string, error) {
+	absolutePath, err := filepath.Abs(videoPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve Voyage video source %q: %w", videoPath, err)
+	}
+	info, err := os.Stat(absolutePath)
+	if err != nil {
+		return "", fmt.Errorf("stat Voyage video source %q: %w", videoPath, err)
+	}
+	segmentSecs := v.SegmentSecs
+	if segmentSecs <= 0 {
+		segmentSecs = defaultVoyageSegmentSecs
+	}
+
 	hash := sha256.New()
+	_, _ = hash.Write([]byte("voyage-source-v2"))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(absolutePath))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(strconv.FormatInt(info.Size(), 10)))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(strconv.FormatInt(info.ModTime().UnixNano(), 10)))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(strconv.FormatFloat(segmentSecs, 'g', -1, 64)))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(strconv.FormatFloat(duration, 'g', -1, 64)))
+	_, _ = hash.Write([]byte{0})
 	_, _ = hash.Write([]byte(strconv.Itoa(len(transcript))))
 	_, _ = hash.Write([]byte{0})
 	_, _ = hash.Write([]byte(transcript))
-	_, _ = hash.Write(video)
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func voyageSegmentInputHash(sourceFingerprint string, start, end float64) string {
+	hash := sha256.New()
+	_, _ = hash.Write([]byte("voyage-segment-v2"))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(sourceFingerprint))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(strconv.FormatFloat(start, 'g', -1, 64)))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(strconv.FormatFloat(end, 'g', -1, 64)))
 	return hex.EncodeToString(hash.Sum(nil))
+}
+
+// cachedVoyageSegments accepts only a contiguous set covering the full video.
+// That proof lets Build return before both shot detection and transcoding.
+func cachedVoyageSegments(sceneID int, stored []store.StoredEmbeddings, sourceFingerprint string, duration float64) ([]SegmentCache, bool) {
+	if len(stored) == 0 {
+		return nil, false
+	}
+	ret := make([]SegmentCache, 0, len(stored))
+	nextStart := 0.0
+	for _, item := range stored {
+		if item.InputHash != voyageSegmentInputHash(sourceFingerprint, item.SegmentStart, item.SegmentEnd) ||
+			len(item.Vectors) == 0 {
+			continue
+		}
+		if item.SegmentStart != nextStart ||
+			item.SegmentEnd <= item.SegmentStart ||
+			item.SegmentEnd > duration {
+			return nil, false
+		}
+		ret = append(ret, SegmentCache{
+			SceneID: sceneID,
+			Start:   item.SegmentStart,
+			End:     item.SegmentEnd,
+			Vector:  append([]float32(nil), item.Vectors...),
+		})
+		nextStart = item.SegmentEnd
+	}
+	return ret, len(ret) > 0 && nextStart == duration
 }
 
 // IndexScene populates the read-only segment cache after scene analysis.
