@@ -74,7 +74,7 @@ func TestSceneMetadataAcceptedRemoteMatchWritesStashID(t *testing.T) {
 		State:          SceneMetadataPlanAccepted, CreatedAt: time.Now().UTC(),
 		RemoteCandidates: []RemoteSceneCandidate{{
 			Endpoint: endpoint, RemoteID: remoteID,
-			Provenance: "fingerprint", Decision: "accept",
+			Provenance: "fingerprint", Decision: metadata.SceneCandidateAccept,
 		}},
 		Suggested: []SuggestedField{{
 			Kind: sceneMetadataActionRemoteScene,

@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -462,6 +463,47 @@ func TestSelectSceneMetadataRemoteCandidateCreatesAcceptedAction(t *testing.T) {
 	stashIDs := fresh.StashIDs.List()
 	if len(stashIDs) != 1 || stashIDs[0].StashID != "remote-1" {
 		t.Fatalf("scene stash IDs = %+v", stashIDs)
+	}
+}
+
+func TestSelectSceneMetadataRemoteCandidateSwitchesAccepted(t *testing.T) {
+	repository := newTestRepository(t)
+	scene := createTestScene(t, repository, "Remote Switch")
+	plan := &AnalysisPlan{
+		RunID: "remote-switch-run", SceneID: scene.ID,
+		StaleSceneHash: staleSceneHash(scene, nil, nil, nil, nil),
+		State:          SceneMetadataPlanProposed, CreatedAt: time.Now().UTC(),
+		RemoteCandidates: []RemoteSceneCandidate{
+			{Endpoint: "https://stash.example/graphql", RemoteID: "remote-1", Title: "Remote One", Decision: "accept"},
+			{Endpoint: "https://stash.example/graphql", RemoteID: "remote-2", Title: "Remote Two", Decision: "review"},
+		},
+	}
+	job := &analyzeSceneMetadataJob{repository: repository}
+	if err := job.persistAnalysisPlan(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+	accepted := findSceneMetadataPlanActions(t, repository, plan.RunID, scene.ID)
+	if len(accepted) != 0 {
+		t.Fatalf("setup accepted = %+v", accepted)
+	}
+	manager := &Manager{Repository: repository}
+	if _, err := manager.SelectSceneMetadataRemoteCandidate(
+		context.Background(), plan.RunID, scene.ID,
+		"https://stash.example/graphql", "remote-2",
+	); err != nil {
+		t.Fatal(err)
+	}
+	actions := findSceneMetadataPlanActions(t, repository, plan.RunID, scene.ID)
+	if len(actions) != 1 || actions[0].Kind != sceneMetadataActionRemoteScene ||
+		actions[0].State != string(SceneMetadataPlanAccepted) {
+		t.Fatalf("switched actions = %+v", actions)
+	}
+	var payload sceneMetadataActionPayload
+	if err := json.Unmarshal([]byte(actions[0].PayloadJSON), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.RemoteID != "remote-2" {
+		t.Fatalf("switched payload = %+v", payload)
 	}
 }
 

@@ -311,13 +311,19 @@ type SceneMetadataCandidateContribution {
   reason: String!
 }
 
+enum SceneMetadataRemoteCandidateDecision {
+  accept
+  review
+  reject
+}
+
 type SceneMetadataRemoteSceneCandidate {
   endpoint: String!
   remoteID: String!
   title: String!
   provenance: String!
   score: Float!
-  decision: String!
+  decision: SceneMetadataRemoteCandidateDecision!
   contributions: [SceneMetadataCandidateContribution!]!
 }
 

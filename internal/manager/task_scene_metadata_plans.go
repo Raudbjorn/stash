@@ -97,6 +97,32 @@ func (s SceneMetadataPlanState) MarshalGQL(writer io.Writer) {
 	fmt.Fprintf(writer, "%q", strings.ToUpper(string(s)))
 }
 
+type RemoteSceneCandidateDecision string
+
+const (
+	RemoteCandidateDecisionAccept RemoteSceneCandidateDecision = "accept"
+	RemoteCandidateDecisionReview RemoteSceneCandidateDecision = "review"
+	RemoteCandidateDecisionReject RemoteSceneCandidateDecision = "reject"
+)
+
+func (s *RemoteSceneCandidateDecision) UnmarshalGQL(value interface{}) error {
+	raw, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("remote scene candidate decision must be a string")
+	}
+	switch RemoteSceneCandidateDecision(strings.ToLower(raw)) {
+	case RemoteCandidateDecisionAccept, RemoteCandidateDecisionReview, RemoteCandidateDecisionReject:
+		*s = RemoteSceneCandidateDecision(strings.ToLower(raw))
+		return nil
+	default:
+		return fmt.Errorf("%q is not a valid remote scene candidate decision", raw)
+	}
+}
+
+func (s RemoteSceneCandidateDecision) MarshalGQL(writer io.Writer) {
+	fmt.Fprintf(writer, "%q", strings.ToUpper(string(s)))
+}
+
 const (
 	sceneMetadataActionPerformerIDs    = "performer_ids"
 	sceneMetadataActionCreatePerformer = "create_performer"
@@ -132,7 +158,7 @@ type RemoteSceneCandidate struct {
 	Title         string
 	Provenance    string
 	Score         float64
-	Decision      string
+	Decision      RemoteSceneCandidateDecision
 	Contributions []CandidateContribution
 }
 
@@ -300,7 +326,7 @@ func (j *analyzeSceneMetadataJob) discoverRemoteScenes(ctx context.Context, scen
 		matches = append(matches, remoteSceneMatch{
 			candidate: RemoteSceneCandidate{
 				Endpoint: endpoint, RemoteID: remoteID, Title: title,
-				Provenance: provenance, Decision: "review",
+				Provenance: provenance, Decision: RemoteCandidateDecisionReview,
 			},
 			remote: remote,
 		})
@@ -380,7 +406,7 @@ func (j *analyzeSceneMetadataJob) discoverRemoteScenes(ctx context.Context, scen
 		}
 	}
 	if chosen != nil {
-		chosen.candidate.Decision = "accept"
+		chosen.candidate.Decision = RemoteCandidateDecisionAccept
 	}
 	candidates := make([]RemoteSceneCandidate, 0, len(matches))
 	for idx := range matches {
@@ -459,7 +485,7 @@ func (j *analyzeSceneMetadataJob) rankRemoteSceneMatches(scene *models.Scene, pr
 	for _, scored := range scores {
 		match := matches[scored.Index]
 		match.candidate.Score = scored.Score
-		match.candidate.Decision = scored.Decision
+		match.candidate.Decision = RemoteSceneCandidateDecision(scored.Decision)
 		match.candidate.Contributions = make([]CandidateContribution, 0, len(scored.Contributions))
 		for _, contribution := range scored.Contributions {
 			match.candidate.Contributions = append(match.candidate.Contributions, CandidateContribution{
@@ -498,7 +524,7 @@ func (j *analyzeSceneMetadataJob) localPerformerNames(ids []int) map[string]stru
 }
 
 func remoteSceneMatchIsSafe(matches []remoteSceneMatch) bool {
-	return len(matches) > 0 && matches[0].candidate.Decision == metadata.SceneCandidateAccept
+	return len(matches) > 0 && matches[0].candidate.Decision == RemoteCandidateDecisionAccept
 }
 
 func stringValue(value *string) string {
@@ -682,7 +708,7 @@ func dedupAnalysisPlanSuggestions(suggestions []SuggestedField) []SuggestedField
 			var payload sceneMetadataActionPayload
 			if err := json.Unmarshal([]byte(suggestion.PayloadJSON), &payload); err == nil &&
 				payload.Performer != nil {
-				key := strings.ToLower(strings.TrimSpace(payload.Performer.Name))
+				key := metadata.NormalizeKey(payload.Performer.Name)
 				if _, exists := seenNames[key]; exists {
 					continue
 				}

@@ -42,6 +42,7 @@ type SceneMetadataPlanWriter interface {
 	CreateSceneMetadataPlanAction(ctx context.Context, action *SceneMetadataPlanActionRecord) error
 	SetSceneMetadataPlanState(ctx context.Context, runID string, sceneID int, state string, appliedAt *time.Time) error
 	SetSceneMetadataPlanActionStates(ctx context.Context, runID string, sceneID int, ids []int, fromState, toState string) (int, error)
+	PurgeSceneMetadataPlansBefore(ctx context.Context, cutoff time.Time, keepStates []string) (int, error)
 }
 
 type SceneMetadataPlanReaderWriter interface {

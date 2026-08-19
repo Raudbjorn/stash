@@ -3191,6 +3191,14 @@ export const useSceneMetadataPlans = (sceneIds: string[], skip = false) =>
     skip,
   });
 
+export const useSceneMetadataAppliedPlans = (sceneIds: string[], skip = false) =>
+  GQL.useSceneMetadataAppliedPlansQuery({
+    variables: { sceneIds },
+    fetchPolicy: "no-cache",
+    pollInterval: 0,
+    skip,
+  });
+
 export const mutateAcceptSceneMetadataProposalAction = (
   runId: string,
   sceneId: string,

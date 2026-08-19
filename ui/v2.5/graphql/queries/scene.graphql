@@ -157,3 +157,13 @@ query SceneMetadataPlans($sceneIds: [ID!], $runId: String, $limit: Int) {
     appliedAt
   }
 }
+
+query SceneMetadataAppliedPlans($sceneIds: [ID!]) {
+  sceneMetadataPlans(sceneIds: $sceneIds, state: APPLIED, latestOnly: true) {
+    runID
+    sceneID
+    state
+    createdAt
+    appliedAt
+  }
+}

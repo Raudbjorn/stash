@@ -9,6 +9,7 @@ import {
   mutateApplySceneMetadataPlan,
   mutateRejectSceneMetadataProposalAction,
   mutateSelectSceneMetadataRemoteCandidate,
+  useSceneMetadataAppliedPlans,
   useSceneMetadataPlans,
 } from "src/core/StashService";
 import { useToast } from "src/hooks/Toast";
@@ -132,6 +133,10 @@ export const SceneMetadataPlanReviewModal: React.FC<
     sceneIds,
     !show
   );
+  const { data: appliedData } = useSceneMetadataAppliedPlans(
+    sceneIds,
+    !show || Boolean(data?.sceneMetadataPlans?.length)
+  );
   const runs = useMemo(() => {
     const grouped = new Map<string, Plan[]>();
     for (const plan of data?.sceneMetadataPlans ?? []) {
@@ -245,13 +250,34 @@ export const SceneMetadataPlanReviewModal: React.FC<
         </div>
       ) : null}
       {!loading && runs.length === 0 ? (
-        <Alert variant="info" className="mb-0">
-          {intl.formatMessage({
-            id: "scene_metadata.review.empty",
-            defaultMessage:
-              "No metadata proposals are available for the selected scenes. This view refreshes while analysis jobs run.",
-          })}
-        </Alert>
+        appliedData?.sceneMetadataPlans.length ? (
+          <Alert variant="success" className="mb-0">
+            {intl.formatMessage(
+              {
+                id: "scene_metadata.review.last_applied",
+                defaultMessage:
+                  "Your last analysis was applied automatically on {appliedAt}.",
+              },
+              {
+                appliedAt: intl.formatDate(
+                  new Date(
+                    appliedData.sceneMetadataPlans[0].appliedAt ??
+                      appliedData.sceneMetadataPlans[0].createdAt,
+                  ),
+                  { dateStyle: "medium", timeStyle: "short" },
+                ),
+              },
+            )}
+          </Alert>
+        ) : (
+          <Alert variant="info" className="mb-0">
+            {intl.formatMessage({
+              id: "scene_metadata.review.empty",
+              defaultMessage:
+                "No metadata proposals are available for the selected scenes. This view refreshes while analysis jobs run.",
+            })}
+          </Alert>
+        )
       ) : null}
       {runs.map(({ runID, plans }) => {
         const applicablePlans = plans.filter(
@@ -296,7 +322,7 @@ export const SceneMetadataPlanReviewModal: React.FC<
               <Button
                 size="sm"
                 variant="primary"
-                disabled={applicablePlans.length === 0 || busyKey !== undefined}
+                disabled={applicablePlans.length === 0 || proposedCount > 0 || busyKey !== undefined}
                 onClick={() => void applyRun(runID, plans)}
               >
                 {busyKey === `apply:${runID}` ? (
