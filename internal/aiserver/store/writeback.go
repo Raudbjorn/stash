@@ -295,6 +295,14 @@ func (db *DB) DeleteEmbeddings(ctx context.Context, service string, sceneID int)
 	return err
 }
 
+// DeleteEmbeddingSegments removes one scene/model segment cache.
+func (db *DB) DeleteEmbeddingSegments(ctx context.Context, service string, sceneID int, model string) error {
+	_, err := db.sql.ExecContext(ctx,
+		`DELETE FROM ai_scene_embeddings WHERE service = ? AND scene_id = ? AND model = ?`,
+		service, sceneID, model)
+	return err
+}
+
 // encodeFloat32s packs vectors as little-endian float32.
 //
 // Explicit rather than unsafe: the database file is read by other tools and

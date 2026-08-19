@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -67,35 +69,41 @@ func (v *VoyageSegmentIndex) Build(ctx context.Context, sceneID int, videoPath, 
 	if duration <= 0 {
 		return nil, errors.New("voyage segment duration must be positive")
 	}
+
+	sourceFingerprint, err := v.sourceFingerprint(videoPath, transcript, duration)
+	if err != nil {
+		return nil, err
+	}
 	model := v.cacheModel()
-	segments := v.segments(ctx, videoPath, duration)
 	stored, err := v.DB.GetEmbeddingSegments(ctx, voyageSegmentService, sceneID, model)
 	if err != nil {
 		return nil, err
 	}
-	cached := make(map[float64]store.StoredEmbeddings, len(stored))
-	for _, item := range stored {
-		cached[item.SegmentStart] = item
+	if cached, ok := cachedVoyageSegments(sceneID, sourceFingerprint, duration, v.dimension(), stored); ok {
+		return cached, nil
 	}
 
+	// A complete cache hit returns above, before shot detection or segment
+	// transcoding. Clear incomplete or stale rows so an interrupted rebuild
+	// cannot masquerade as a complete cache on the next run.
+	if len(stored) > 0 {
+		if err := v.DB.DeleteEmbeddingSegments(ctx, voyageSegmentService, sceneID, model); err != nil {
+			return nil, err
+		}
+	}
+
+	segments := v.segments(ctx, videoPath, duration)
 	ret := make([]SegmentCache, 0, len(segments))
 	for _, segment := range segments {
 		video, err := v.segmentVideo(ctx, videoPath, segment.Start, segment.End)
 		if err != nil {
 			return nil, err
 		}
-		inputHash := voyageEmbeddingInputHash(transcript, video)
-		if item, ok := cached[segment.Start]; ok &&
-			item.SegmentEnd == segment.End &&
-			item.InputHash == inputHash &&
-			len(item.Vectors) > 0 {
-			ret = append(ret, SegmentCache{SceneID: sceneID, Start: segment.Start, End: segment.End, Vector: append([]float32(nil), item.Vectors...)})
-			continue
-		}
 		vector, err := v.embed(ctx, transcript, video)
 		if err != nil {
 			return nil, fmt.Errorf("embed scene %d segment %.3f-%.3f: %w", sceneID, segment.Start, segment.End, err)
 		}
+		inputHash := voyageSegmentInputHash(sourceFingerprint, segment.Start, segment.End)
 		if err := v.DB.StoreEmbeddings(ctx, voyageSegmentService, store.StoredEmbeddings{
 			SceneID: sceneID, Model: model, Dim: len(vector), FrameInterval: segment.End - segment.Start,
 			Times: []float64{segment.Start}, Vectors: vector, SegmentStart: segment.Start, SegmentEnd: segment.End,
@@ -103,19 +111,83 @@ func (v *VoyageSegmentIndex) Build(ctx context.Context, sceneID int, videoPath, 
 		}); err != nil {
 			return nil, err
 		}
-		item := SegmentCache{SceneID: sceneID, Start: segment.Start, End: segment.End, Vector: vector}
-		ret = append(ret, item)
+		ret = append(ret, SegmentCache{SceneID: sceneID, Start: segment.Start, End: segment.End, Vector: vector})
 	}
 	return ret, nil
 }
 
-func voyageEmbeddingInputHash(transcript string, video []byte) string {
+func (v *VoyageSegmentIndex) sourceFingerprint(videoPath, transcript string, duration float64) (string, error) {
+	info, err := os.Stat(videoPath)
+	if err != nil {
+		return "", fmt.Errorf("stat Voyage source video: %w", err)
+	}
+	absolutePath, err := filepath.Abs(videoPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve Voyage source video path: %w", err)
+	}
+	segmentSecs := v.SegmentSecs
+	if segmentSecs <= 0 {
+		segmentSecs = defaultVoyageSegmentSecs
+	}
+	transcriptHash := sha256.Sum256([]byte(transcript))
+	payload, err := json.Marshal(struct {
+		Version        int     `json:"version"`
+		Path           string  `json:"path"`
+		Size           int64   `json:"size"`
+		ModifiedNanos  int64   `json:"modified_nanos"`
+		Duration       float64 `json:"duration"`
+		SegmentSeconds float64 `json:"segment_seconds"`
+		TranscriptHash string  `json:"transcript_hash"`
+	}{
+		Version:        2,
+		Path:           filepath.Clean(absolutePath),
+		Size:           info.Size(),
+		ModifiedNanos:  info.ModTime().UnixNano(),
+		Duration:       duration,
+		SegmentSeconds: segmentSecs,
+		TranscriptHash: hex.EncodeToString(transcriptHash[:]),
+	})
+	if err != nil {
+		return "", fmt.Errorf("encode Voyage source fingerprint: %w", err)
+	}
+	digest := sha256.Sum256(payload)
+	return hex.EncodeToString(digest[:]), nil
+}
+
+func voyageSegmentInputHash(sourceFingerprint string, start, end float64) string {
 	hash := sha256.New()
-	_, _ = hash.Write([]byte(strconv.Itoa(len(transcript))))
+	_, _ = hash.Write([]byte(sourceFingerprint))
 	_, _ = hash.Write([]byte{0})
-	_, _ = hash.Write([]byte(transcript))
-	_, _ = hash.Write(video)
+	_, _ = hash.Write([]byte(strconv.FormatFloat(start, 'g', -1, 64)))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(strconv.FormatFloat(end, 'g', -1, 64)))
 	return hex.EncodeToString(hash.Sum(nil))
+}
+
+func cachedVoyageSegments(sceneID int, sourceFingerprint string, duration float64, dimension int, stored []store.StoredEmbeddings) ([]SegmentCache, bool) {
+	if len(stored) == 0 {
+		return nil, false
+	}
+	ret := make([]SegmentCache, 0, len(stored))
+	nextStart := 0.0
+	for _, item := range stored {
+		if item.SegmentStart != nextStart ||
+			item.SegmentEnd <= item.SegmentStart ||
+			item.SegmentEnd > duration ||
+			item.Dim != dimension ||
+			len(item.Vectors) != dimension ||
+			item.InputHash != voyageSegmentInputHash(sourceFingerprint, item.SegmentStart, item.SegmentEnd) {
+			return nil, false
+		}
+		ret = append(ret, SegmentCache{
+			SceneID: sceneID,
+			Start:   item.SegmentStart,
+			End:     item.SegmentEnd,
+			Vector:  append([]float32(nil), item.Vectors...),
+		})
+		nextStart = item.SegmentEnd
+	}
+	return ret, nextStart == duration
 }
 
 // IndexScene populates the read-only segment cache after scene analysis.

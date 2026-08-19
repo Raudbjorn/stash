@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -17,11 +18,16 @@ import (
 )
 
 func TestVoyageTagIndexMatchesAndCachesSceneAndTaxonomyVectors(t *testing.T) {
-	db, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "ai.db"))
+	dir := t.TempDir()
+	db, err := store.Open(context.Background(), filepath.Join(dir, "ai.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+	videoPath := filepath.Join(dir, "video.mp4")
+	if err := os.WriteFile(videoPath, []byte("mp4"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	cache := &taxonomy.Cache{
 		UpdatedAt: time.Now(),
@@ -90,7 +96,7 @@ func TestVoyageTagIndexMatchesAndCachesSceneAndTaxonomyVectors(t *testing.T) {
 		},
 	}
 
-	result, err := index.AnalyzeVideoTags(context.Background(), 42, "missing.mp4", 60, 0.9, aitag.Sink(func(aitag.Progress) {}))
+	result, err := index.AnalyzeVideoTags(context.Background(), 42, videoPath, 60, 0.9, aitag.Sink(func(aitag.Progress) {}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +114,7 @@ func TestVoyageTagIndexMatchesAndCachesSceneAndTaxonomyVectors(t *testing.T) {
 		t.Fatalf("document calls=%d query calls=%d, want 2/1", documentCalls.Load(), queryCalls.Load())
 	}
 
-	if _, err := index.AnalyzeVideoTags(context.Background(), 42, "missing.mp4", 60, 0.9, aitag.Sink(func(aitag.Progress) {})); err != nil {
+	if _, err := index.AnalyzeVideoTags(context.Background(), 42, videoPath, 60, 0.9, aitag.Sink(func(aitag.Progress) {})); err != nil {
 		t.Fatal(err)
 	}
 	if documentCalls.Load() != 2 || queryCalls.Load() != 1 {

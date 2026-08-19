@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -13,8 +14,8 @@ import (
 )
 
 func TestVoyageSegmentIndexBuildsThreeFixedSegments(t *testing.T) {
-	index, calls := newTestVoyageSegmentIndex(t)
-	segments, err := index.Build(context.Background(), 42, "missing.mp4", "transcript", 90)
+	index, calls, videoPath, _ := newTestVoyageSegmentIndex(t)
+	segments, err := index.Build(context.Background(), 42, videoPath, "transcript", 90)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,20 +29,24 @@ func TestVoyageSegmentIndexBuildsThreeFixedSegments(t *testing.T) {
 	}
 }
 
-func TestVoyageSegmentIndexCacheUsesExactEmbeddingInput(t *testing.T) {
-	index, calls := newTestVoyageSegmentIndex(t)
-	if _, err := index.Build(context.Background(), 42, "missing.mp4", "transcript", 90); err != nil {
+func TestVoyageSegmentIndexCacheUsesStableSourceFingerprint(t *testing.T) {
+	index, calls, videoPath, extracts := newTestVoyageSegmentIndex(t)
+	if _, err := index.Build(context.Background(), 42, videoPath, "transcript", 90); err != nil {
 		t.Fatal(err)
 	}
 	firstCalls := calls.Load()
-	if _, err := index.Build(context.Background(), 42, "missing.mp4", "transcript", 90); err != nil {
+	firstExtracts := extracts.Load()
+	if _, err := index.Build(context.Background(), 42, videoPath, "transcript", 90); err != nil {
 		t.Fatal(err)
 	}
 	if calls.Load() != firstCalls {
 		t.Fatalf("unchanged input made %d calls, want %d", calls.Load(), firstCalls)
 	}
+	if extracts.Load() != firstExtracts {
+		t.Fatalf("cache hit extracted %d segments, want %d", extracts.Load(), firstExtracts)
+	}
 
-	if _, err := index.Build(context.Background(), 42, "missing.mp4", "different transcript", 90); err != nil {
+	if _, err := index.Build(context.Background(), 42, videoPath, "different transcript", 90); err != nil {
 		t.Fatal(err)
 	}
 	afterTranscript := calls.Load()
@@ -49,10 +54,10 @@ func TestVoyageSegmentIndexCacheUsesExactEmbeddingInput(t *testing.T) {
 		t.Fatalf("changed transcript made %d calls, want %d", afterTranscript, firstCalls+3)
 	}
 
-	index.ExtractVideo = func(context.Context, string, float64, float64) ([]byte, error) {
-		return []byte("different mp4"), nil
+	if err := os.WriteFile(videoPath, []byte("different mp4"), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := index.Build(context.Background(), 42, "missing.mp4", "different transcript", 90); err != nil {
+	if _, err := index.Build(context.Background(), 42, videoPath, "different transcript", 90); err != nil {
 		t.Fatal(err)
 	}
 	if calls.Load() != afterTranscript+3 {
@@ -60,13 +65,18 @@ func TestVoyageSegmentIndexCacheUsesExactEmbeddingInput(t *testing.T) {
 	}
 }
 
-func newTestVoyageSegmentIndex(t *testing.T) (*VoyageSegmentIndex, *atomic.Int32) {
+func newTestVoyageSegmentIndex(t *testing.T) (*VoyageSegmentIndex, *atomic.Int32, string, *atomic.Int32) {
 	t.Helper()
-	db, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "ai.db"))
+	dir := t.TempDir()
+	db, err := store.Open(context.Background(), filepath.Join(dir, "ai.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+	videoPath := filepath.Join(dir, "video.mp4")
+	if err := os.WriteFile(videoPath, []byte("mp4"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -97,11 +107,13 @@ func newTestVoyageSegmentIndex(t *testing.T) (*VoyageSegmentIndex, *atomic.Int32
 	}))
 	t.Cleanup(server.Close)
 
+	var extracts atomic.Int32
 	return &VoyageSegmentIndex{
 		APIKey: "secret", Model: "voyage-multimodal-3.5", Endpoint: server.URL,
 		SegmentSecs: 30, DB: db, Client: server.Client(), FFmpegPath: "ffmpeg-not-installed-for-test",
-		ExtractVideo: func(context.Context, string, float64, float64) ([]byte, error) {
-			return []byte("mp4"), nil
+		ExtractVideo: func(_ context.Context, path string, _, _ float64) ([]byte, error) {
+			extracts.Add(1)
+			return os.ReadFile(path)
 		},
-	}, &calls
+	}, &calls, videoPath, &extracts
 }
