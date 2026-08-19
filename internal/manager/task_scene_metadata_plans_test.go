@@ -423,3 +423,70 @@ func TestSceneMetadataPlanPersistDeduplicatesCreatePerformer(t *testing.T) {
 		t.Fatalf("plan suggestions not deduped in place: %+v", plan.Suggested)
 	}
 }
+
+func TestPurgeSceneMetadataPlansKeepsSiblingRunActions(t *testing.T) {
+	repository := newTestRepository(t)
+	kept := createTestScene(t, repository, "Kept Scene")
+	purged := createTestScene(t, repository, "Purged Scene")
+	job := &analyzeSceneMetadataJob{repository: repository}
+	runID := "shared-run"
+	old := time.Now().UTC().Add(-48 * time.Hour)
+	title := "Kept Title"
+	for _, plan := range []*AnalysisPlan{
+		{
+			RunID: runID, SceneID: kept.ID,
+			StaleSceneHash: staleSceneHash(kept, nil, nil, nil, nil),
+			State:          SceneMetadataPlanProposed, CreatedAt: old,
+			Suggested: []SuggestedField{{
+				Kind: sceneMetadataActionTitle, PayloadJSON: actionPayload(sceneMetadataActionPayload{Title: &title}),
+				State: SceneMetadataPlanProposed,
+			}},
+		},
+		{
+			RunID: runID, SceneID: purged.ID,
+			StaleSceneHash: staleSceneHash(purged, nil, nil, nil, nil),
+			State:          SceneMetadataPlanApplied, CreatedAt: old,
+			Suggested: []SuggestedField{{
+				Kind: sceneMetadataActionTitle, PayloadJSON: actionPayload(sceneMetadataActionPayload{Title: &title}),
+				State: SceneMetadataPlanApplied,
+			}},
+		},
+	} {
+		if err := job.persistAnalysisPlan(context.Background(), plan); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manager := &Manager{Repository: repository}
+	count, err := manager.PurgeSceneMetadataPlans(context.Background(), 24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("purged = %d, want 1", count)
+	}
+	if record := findSceneMetadataPlanRecord(t, repository, runID, kept.ID); record.State != string(SceneMetadataPlanProposed) {
+		t.Fatalf("kept plan = %+v", record)
+	}
+	var purgedRecord *models.SceneMetadataPlanRecord
+	if err := repository.WithReadTxn(context.Background(), func(ctx context.Context) error {
+		var err error
+		purgedRecord, err = repository.SceneMetadataPlan.FindSceneMetadataPlan(ctx, runID, purged.ID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if purgedRecord != nil {
+		t.Fatalf("purged plan still present: %+v", purgedRecord)
+	}
+	var actions []models.SceneMetadataPlanActionRecord
+	if err := repository.WithReadTxn(context.Background(), func(ctx context.Context) error {
+		var err error
+		actions, err = repository.SceneMetadataPlan.FindSceneMetadataPlanActions(ctx, runID, kept.ID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(actions) != 1 || actions[0].State != string(SceneMetadataPlanProposed) {
+		t.Fatalf("kept actions = %+v", actions)
+	}
+}

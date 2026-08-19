@@ -3239,6 +3239,12 @@ export const mutateApplySceneMetadataPlan = (
     variables: { runId, sceneIds },
   });
 
+export const mutatePurgeSceneMetadataPlans = (olderThanSeconds: number) =>
+  client.mutate<GQL.PurgeSceneMetadataPlansMutation>({
+    mutation: GQL.PurgeSceneMetadataPlansDocument,
+    variables: { olderThanSeconds },
+  });
+
 export const useSceneMetadataModels = () =>
   GQL.useSceneMetadataModelsQuery({
     fetchPolicy: "no-cache",

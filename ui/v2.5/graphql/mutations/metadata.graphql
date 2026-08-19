@@ -125,3 +125,7 @@ mutation SelectSceneMetadataRemoteCandidate(
 mutation ApplySceneMetadataPlan($runId: String!, $sceneIds: [ID!]!) {
   applySceneMetadataPlan(runId: $runId, sceneIds: $sceneIds)
 }
+
+mutation PurgeSceneMetadataPlans($olderThanSeconds: Int!) {
+  purgeSceneMetadataPlans(olderThanSeconds: $olderThanSeconds)
+}

@@ -267,43 +267,30 @@ func (s *SceneMetadataPlanStore) PurgeSceneMetadataPlansBefore(ctx context.Conte
 		keepStates = []string{"proposed", "accepted"}
 	}
 	var targets []struct {
-		runID   string
-		sceneID int
+		RunID   string `db:"run_id"`
+		SceneID int    `db:"scene_id"`
 	}
 	if err := queryFunc(ctx, dialect.From(sceneMetadataPlansTable).
 		Select(goqu.I("run_id"), goqu.I("scene_id")).
 		Where(goqu.I("created_at").Lt(cutoff)).
 		Where(goqu.I("state").NotIn(keepStates)), false, func(rows *sqlx.Rows) error {
-		for rows.Next() {
-			var runID string
-			var sceneID int
-			if err := rows.Scan(&runID, &sceneID); err != nil {
-				return err
-			}
-			targets = append(targets, struct {
-				runID   string
-				sceneID int
-			}{runID, sceneID})
+		var row struct {
+			RunID   string `db:"run_id"`
+			SceneID int    `db:"scene_id"`
 		}
+		if err := rows.StructScan(&row); err != nil {
+			return err
+		}
+		targets = append(targets, row)
 		return nil
 	}); err != nil {
 		return 0, err
 	}
-	if len(targets) == 0 {
-		return 0, nil
-	}
-	runIDs := make([]string, 0, len(targets))
-	seen := make(map[string]struct{}, len(targets))
-	for _, p := range targets {
-		if _, ok := seen[p.runID]; ok {
-			continue
+	for _, target := range targets {
+		if _, err := exec(ctx, dialect.Delete(sceneMetadataPlanActionsTable).Prepared(true).
+			Where(goqu.Ex{"run_id": target.RunID, "scene_id": target.SceneID})); err != nil {
+			return 0, err
 		}
-		seen[p.runID] = struct{}{}
-		runIDs = append(runIDs, p.runID)
-	}
-	if _, err := exec(ctx, dialect.Delete(sceneMetadataPlanActionsTable).Prepared(true).
-		Where(goqu.I("run_id").In(runIDs))); err != nil {
-		return 0, err
 	}
 	result, err := exec(ctx, dialect.Delete(sceneMetadataPlansTable).Prepared(true).
 		Where(goqu.I("created_at").Lt(cutoff)).

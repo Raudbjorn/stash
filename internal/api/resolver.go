@@ -70,15 +70,6 @@ func (r *Resolver) getOllamaService() *ollama.Service {
 	return r.ollamaService
 }
 
-func (r *Resolver) SceneMetadataRemoteSceneCandidate() SceneMetadataRemoteSceneCandidateResolver {
-	return &sceneMetadataRemoteSceneCandidateResolver{}
-}
-
-type sceneMetadataRemoteSceneCandidateResolver struct{}
-func (*sceneMetadataRemoteSceneCandidateResolver) Decision(_ context.Context, obj *manager.RemoteSceneCandidate) (manager.RemoteSceneCandidateDecision, error) {
-	return obj.Decision, nil
-}
-
 func (r *Resolver) scraperCache() *scraper.Cache {
 	return manager.GetInstance().ScraperCache
 }

@@ -158,6 +158,13 @@ func (r *mutationResolver) ApplySceneMetadataPlan(ctx context.Context, runID str
 	return manager.GetInstance().ApplySceneMetadataPlans(ctx, runID, sceneIDs)
 }
 
+func (r *mutationResolver) PurgeSceneMetadataPlans(ctx context.Context, olderThanSeconds int) (int, error) {
+	if olderThanSeconds < 1 {
+		return 0, fmt.Errorf("olderThanSeconds must be at least 1")
+	}
+	return manager.GetInstance().PurgeSceneMetadataPlans(ctx, time.Duration(olderThanSeconds)*time.Second)
+}
+
 func (r *mutationResolver) MetadataIdentify(ctx context.Context, input identify.Options) (string, error) {
 	t := manager.CreateIdentifyJob(input)
 	jobID := manager.GetInstance().JobManager.Add(ctx, "Identifying...", t)

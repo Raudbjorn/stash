@@ -583,6 +583,8 @@ type Mutation {
   selectSceneMetadataRemoteCandidate(runId: String!, sceneId: ID!, endpoint: String!, remoteId: String!): Boolean!
   "Atomically apply accepted actions from persisted scene metadata plans."
   applySceneMetadataPlan(runId: String!, sceneIds: [ID!]!): Boolean!
+  "Purge applied, rejected, and stale scene metadata plans older than olderThanSeconds. Returns deleted plan count."
+  purgeSceneMetadataPlans(olderThanSeconds: Int!): Int!
   "Clean metadata. Returns the job ID"
   metadataClean(input: CleanMetadataInput!): ID!
   "Clean generated files. Returns the job ID"

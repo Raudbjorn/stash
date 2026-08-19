@@ -204,14 +204,22 @@ export const SceneMetadataPlanReviewModal: React.FC<
     const key = `apply:${runID}`;
     setBusyKey(key);
     try {
-      await mutateApplySceneMetadataPlan(runID, acceptedSceneIDs);
-      Toast.success(
-        intl.formatMessage({
-          id: "scene_metadata.review.applied",
-          defaultMessage: "Accepted metadata changes applied",
-        })
-      );
-      await refetch();
+      const result = await mutateApplySceneMetadataPlan(runID, acceptedSceneIDs);
+      if (result.data?.applySceneMetadataPlan) {
+        Toast.success(
+          intl.formatMessage({
+            id: "scene_metadata.review.applied",
+            defaultMessage: "Accepted metadata changes applied",
+          })
+        );
+      } else {
+        Toast.success(
+          intl.formatMessage({
+            id: "scene_metadata.review.nothing_to_apply",
+            defaultMessage: "No accepted changes to apply",
+          })
+        );
+      }
     } catch (mutationError) {
       Toast.error(mutationError);
     } finally {
