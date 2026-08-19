@@ -736,11 +736,17 @@ export const LibraryTasks: React.FC = () => {
     setAutoTagOptions(s);
   }
 
+  function persistAnalyzeSceneMetadataOptions(
+    options: IAnalyzeSceneMetadataTaskDefaults
+  ) {
+    configureDefaults({ analyzeSceneMetadata: options });
+  }
+
   function onSetAnalyzeSceneMetadataOptions(
     partial: Partial<IAnalyzeSceneMetadataTaskDefaults>
   ) {
     const nextOptions = { ...analyzeSceneMetadataOptions, ...partial };
-    configureDefaults({ analyzeSceneMetadata: nextOptions });
+    persistAnalyzeSceneMetadataOptions(nextOptions);
     setAnalyzeSceneMetadataOptions(nextOptions);
   }
 
@@ -846,6 +852,9 @@ export const LibraryTasks: React.FC = () => {
   }
 
   async function runAnalyzeSceneMetadata() {
+    // Re-save the complete selection at launch as well as on each change.
+    // This retries any failed or superseded debounced UI-config write.
+    persistAnalyzeSceneMetadataOptions(analyzeSceneMetadataOptions);
     try {
       // A previously-persisted true value must not silently be sent once the
       // AI server is unavailable - the checkbox being disabled in the UI is
@@ -953,11 +962,31 @@ export const LibraryTasks: React.FC = () => {
     const general = configuration?.general;
 
     try {
+      // taskDefaults is an untyped persisted map and can contain fields from
+      // older releases. GraphQL rejects unknown input fields with HTTP 400,
+      // so copy only the current GenerateMetadataInput contract.
       await mutateMetadataGenerate({
-        ...generateOptions,
+        covers: generateOptions.covers,
+        sprites: generateOptions.sprites,
+        previews: generateOptions.previews,
+        imagePreviews: generateOptions.imagePreviews,
+        markers: generateOptions.markers,
+        markerImagePreviews: generateOptions.markerImagePreviews,
+        markerScreenshots: generateOptions.markerScreenshots,
+        transcodes: generateOptions.transcodes,
+        forceTranscodes: generateOptions.forceTranscodes,
+        phashes: generateOptions.phashes,
+        interactiveHeatmapsSpeeds: generateOptions.interactiveHeatmapsSpeeds,
+        imagePhashes: generateOptions.imagePhashes,
+        imageThumbnails: generateOptions.imageThumbnails,
+        clipPreviews: generateOptions.clipPreviews,
+        contactSheets: generateOptions.contactSheets,
+        subtitles: generateOptions.subtitles,
+        subtitleLanguage: generateOptions.subtitleLanguage,
+        dubbing: generateOptions.dubbing,
+        overwrite: generateOptions.overwrite,
         paths,
         previewOptions: {
-          ...generateOptions.previewOptions,
           previewSegments:
             general?.previewSegments ??
             generateOptions.previewOptions?.previewSegments,
