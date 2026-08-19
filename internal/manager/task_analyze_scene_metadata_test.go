@@ -1026,7 +1026,7 @@ func TestAnalyzeSceneMetadataDryRun(t *testing.T) {
 	var plans []models.SceneMetadataPlanRecord
 	if err := r.WithReadTxn(context.Background(), func(ctx context.Context) error {
 		var err error
-		plans, err = r.SceneMetadataPlan.FindSceneMetadataPlans(ctx, []int{scene.ID}, nil)
+		plans, err = r.SceneMetadataPlan.FindSceneMetadataPlans(ctx, []int{scene.ID}, nil, nil, nil)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -1134,11 +1134,11 @@ func TestAnalyzeSceneMetadataExecuteHonorsSelectedSceneIDs(t *testing.T) {
 	var selectedPlans, excludedPlans []models.SceneMetadataPlanRecord
 	if err := r.WithReadTxn(context.Background(), func(ctx context.Context) error {
 		var err error
-		selectedPlans, err = r.SceneMetadataPlan.FindSceneMetadataPlans(ctx, selectedInts, nil)
+		selectedPlans, err = r.SceneMetadataPlan.FindSceneMetadataPlans(ctx, selectedInts, nil, nil, nil)
 		if err != nil {
 			return err
 		}
-		excludedPlans, err = r.SceneMetadataPlan.FindSceneMetadataPlans(ctx, []int{excluded.ID}, nil)
+		excludedPlans, err = r.SceneMetadataPlan.FindSceneMetadataPlans(ctx, []int{excluded.ID}, nil, nil, nil)
 		return err
 	}); err != nil {
 		t.Fatal(err)

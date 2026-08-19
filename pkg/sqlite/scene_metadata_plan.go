@@ -80,13 +80,19 @@ func (s *SceneMetadataPlanStore) UpsertSceneMetadataPlan(ctx context.Context, pl
 	return nil
 }
 
-func (s *SceneMetadataPlanStore) FindSceneMetadataPlans(ctx context.Context, sceneIDs []int, state *string) ([]models.SceneMetadataPlanRecord, error) {
+func (s *SceneMetadataPlanStore) FindSceneMetadataPlans(ctx context.Context, sceneIDs []int, runID *string, state *string, limit *int) ([]models.SceneMetadataPlanRecord, error) {
 	query := dialect.From(sceneMetadataPlansTable).Select(goqu.Star()).Order(goqu.I("created_at").Desc(), goqu.I("scene_id").Asc())
 	if len(sceneIDs) > 0 {
 		query = query.Where(goqu.I("scene_id").In(sceneIDs))
 	}
+	if runID != nil {
+		query = query.Where(goqu.I("run_id").Eq(*runID))
+	}
 	if state != nil {
 		query = query.Where(goqu.I("state").Eq(*state))
+	}
+	if limit != nil && *limit > 0 {
+		query = query.Limit(uint(*limit))
 	}
 	var result []models.SceneMetadataPlanRecord
 	if err := queryFunc(ctx, query.Prepared(true), false, func(rows *sqlx.Rows) error {
@@ -105,13 +111,16 @@ func (s *SceneMetadataPlanStore) FindSceneMetadataPlans(ctx context.Context, sce
 	}
 	return result, nil
 }
-func (s *SceneMetadataPlanStore) FindLatestSceneMetadataPlans(ctx context.Context, sceneIDs []int, state *string) ([]models.SceneMetadataPlanRecord, error) {
+func (s *SceneMetadataPlanStore) FindLatestSceneMetadataPlans(ctx context.Context, sceneIDs []int, runID *string, state *string) ([]models.SceneMetadataPlanRecord, error) {
 	latestRun := dialect.From(sceneMetadataPlansTable).
 		Select(goqu.I("run_id")).
 		Order(goqu.I("created_at").Desc()).
 		Limit(1)
 	if len(sceneIDs) > 0 {
 		latestRun = latestRun.Where(goqu.I("scene_id").In(sceneIDs))
+	}
+	if runID != nil {
+		latestRun = latestRun.Where(goqu.I("run_id").Eq(*runID))
 	}
 	if state != nil {
 		latestRun = latestRun.Where(goqu.I("state").Eq(*state))
@@ -125,6 +134,9 @@ func (s *SceneMetadataPlanStore) FindLatestSceneMetadataPlans(ctx context.Contex
 		Order(goqu.I("scene_id").Asc())
 	if len(sceneIDs) > 0 {
 		query = query.Where(goqu.I("scene_id").In(sceneIDs))
+	}
+	if runID != nil {
+		query = query.Where(goqu.I("run_id").Eq(*runID))
 	}
 	if state != nil {
 		query = query.Where(goqu.I("state").Eq(*state))

@@ -660,6 +660,7 @@ func (j *analyzeSceneMetadataJob) persistAnalysisPlan(ctx context.Context, plan 
 		ModelFingerprint: plan.ModelFingerprint, PolicyVersion: plan.PolicyVersion,
 		State: string(plan.State), CreatedAt: plan.CreatedAt, AppliedAt: plan.AppliedAt,
 	}
+	plan.Suggested = dedupAnalysisPlanSuggestions(plan.Suggested)
 	actions := make([]models.SceneMetadataPlanActionRecord, 0, len(plan.Suggested))
 	for _, suggestion := range plan.Suggested {
 		reasons, _ := json.Marshal(suggestion.ReasonCodes)
@@ -673,11 +674,32 @@ func (j *analyzeSceneMetadataJob) persistAnalysisPlan(ctx context.Context, plan 
 	})
 }
 
+func dedupAnalysisPlanSuggestions(suggestions []SuggestedField) []SuggestedField {
+	seenNames := make(map[string]struct{}, len(suggestions))
+	deduped := make([]SuggestedField, 0, len(suggestions))
+	for _, suggestion := range suggestions {
+		if suggestion.Kind == sceneMetadataActionCreatePerformer {
+			var payload sceneMetadataActionPayload
+			if err := json.Unmarshal([]byte(suggestion.PayloadJSON), &payload); err == nil &&
+				payload.Performer != nil {
+				key := strings.ToLower(strings.TrimSpace(payload.Performer.Name))
+				if _, exists := seenNames[key]; exists {
+					continue
+				}
+				seenNames[key] = struct{}{}
+			}
+		}
+		deduped = append(deduped, suggestion)
+	}
+	return deduped
+}
 func (s *Manager) SceneMetadataPlans(
 	ctx context.Context,
 	sceneIDs []string,
+	runID *string,
 	state *SceneMetadataPlanState,
 	latestOnly bool,
+	limit *int,
 ) ([]*AnalysisPlan, error) {
 	ids, err := stringslice.StringSliceToIntSlice(sceneIDs)
 	if err != nil {
@@ -695,9 +717,9 @@ func (s *Manager) SceneMetadataPlans(
 	if err := s.Repository.WithReadTxn(ctx, func(ctx context.Context) error {
 		var err error
 		if latestOnly {
-			records, err = s.Repository.SceneMetadataPlan.FindLatestSceneMetadataPlans(ctx, ids, stateFilter)
+			records, err = s.Repository.SceneMetadataPlan.FindLatestSceneMetadataPlans(ctx, ids, runID, stateFilter)
 		} else {
-			records, err = s.Repository.SceneMetadataPlan.FindSceneMetadataPlans(ctx, ids, stateFilter)
+			records, err = s.Repository.SceneMetadataPlan.FindSceneMetadataPlans(ctx, ids, runID, stateFilter, limit)
 		}
 		if err != nil || len(records) == 0 {
 			return err

@@ -258,7 +258,7 @@ func TestSceneMetadataPlansLatestOnlyReturnsNewestRun(t *testing.T) {
 	}
 	manager := &Manager{Repository: repository}
 	plans, err := manager.SceneMetadataPlans(
-		context.Background(), []string{fmt.Sprint(scene.ID)}, nil, true,
+		context.Background(), []string{fmt.Sprint(scene.ID)}, nil, nil, true, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -287,7 +287,7 @@ func TestSceneMetadataPlansLatestOnlyReturnsNewestRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	plans, err = manager.SceneMetadataPlans(
-		context.Background(), []string{fmt.Sprint(scene.ID)}, nil, true,
+		context.Background(), []string{fmt.Sprint(scene.ID)}, nil, nil, true, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -308,12 +308,118 @@ func TestSceneMetadataPlansLatestOnlyReturnsNewestRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	plans, err = manager.SceneMetadataPlans(
-		context.Background(), []string{fmt.Sprint(scene.ID)}, nil, true,
+		context.Background(), []string{fmt.Sprint(scene.ID)}, nil, nil, true, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(plans) != 0 {
 		t.Fatalf("latest actionable plans after applying every run = %+v", plans)
+	}
+}
+
+func TestSceneMetadataPlansRunIDFilterIsolatesRuns(t *testing.T) {
+	repository := newTestRepository(t)
+	scene := createTestScene(t, repository, "RunID Filter Scene")
+	job := &analyzeSceneMetadataJob{repository: repository}
+	for _, runID := range []string{"alpha-run", "beta-run"} {
+		if err := job.persistAnalysisPlan(context.Background(), &AnalysisPlan{
+			RunID: runID, SceneID: scene.ID,
+			StaleSceneHash: staleSceneHash(scene, nil, nil, nil, nil),
+			State:          SceneMetadataPlanProposed,
+			CreatedAt:      time.Now().UTC(),
+			Suggested: []SuggestedField{{
+				Kind:        sceneMetadataActionTitle,
+				PayloadJSON: actionPayload(sceneMetadataActionPayload{}),
+				State:       SceneMetadataPlanProposed,
+			}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manager := &Manager{Repository: repository}
+	target := "beta-run"
+	plans, err := manager.SceneMetadataPlans(
+		context.Background(), []string{fmt.Sprint(scene.ID)}, &target, nil, false, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plans) != 1 || plans[0].RunID != "beta-run" {
+		t.Fatalf("run-id filtered plans = %+v", plans)
+	}
+}
+
+func TestSceneMetadataPlansHistoryRespectsLimit(t *testing.T) {
+	repository := newTestRepository(t)
+	scene := createTestScene(t, repository, "Limit Scene")
+	job := &analyzeSceneMetadataJob{repository: repository}
+	for index := 0; index < 5; index++ {
+		if err := job.persistAnalysisPlan(context.Background(), &AnalysisPlan{
+			RunID: fmt.Sprintf("run-%02d", index), SceneID: scene.ID,
+			StaleSceneHash: staleSceneHash(scene, nil, nil, nil, nil),
+			State:          SceneMetadataPlanProposed,
+			CreatedAt:      time.Now().UTC().Add(time.Duration(index) * time.Minute),
+			Suggested: []SuggestedField{{
+				Kind:        sceneMetadataActionTitle,
+				PayloadJSON: actionPayload(sceneMetadataActionPayload{}),
+				State:       SceneMetadataPlanProposed,
+			}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manager := &Manager{Repository: repository}
+	limit := 2
+	plans, err := manager.SceneMetadataPlans(
+		context.Background(), []string{fmt.Sprint(scene.ID)}, nil, nil, false, &limit,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plans) != 2 {
+		t.Fatalf("limit-filtered plans = %+v", plans)
+	}
+	if plans[0].RunID != "run-04" || plans[1].RunID != "run-03" {
+		t.Fatalf("limit order = %+v", plans)
+	}
+}
+
+func TestSceneMetadataPlanPersistDeduplicatesCreatePerformer(t *testing.T) {
+	repository := newTestRepository(t)
+	scene := createTestScene(t, repository, "Dedup Scene")
+	job := &analyzeSceneMetadataJob{repository: repository}
+	performerA := models.NewPerformer()
+	performerA.Name = "Dedup Performer"
+	performerB := models.NewPerformer()
+	performerB.Name = "  dedup performer "
+	plan := &AnalysisPlan{
+		RunID: "dedup-run", SceneID: scene.ID,
+		StaleSceneHash: staleSceneHash(scene, nil, nil, nil, nil),
+		State:          SceneMetadataPlanProposed,
+		CreatedAt:      time.Now().UTC(),
+		Suggested: []SuggestedField{
+			{Kind: sceneMetadataActionCreatePerformer, PayloadJSON: actionPayload(sceneMetadataActionPayload{Performer: &performerA}), State: SceneMetadataPlanProposed},
+			{Kind: sceneMetadataActionCreatePerformer, PayloadJSON: actionPayload(sceneMetadataActionPayload{Performer: &performerB}), State: SceneMetadataPlanProposed},
+		},
+	}
+	if err := job.persistAnalysisPlan(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+	var actions []models.SceneMetadataPlanActionRecord
+	if err := repository.WithReadTxn(context.Background(), func(ctx context.Context) error {
+		var err error
+		actions, err = repository.SceneMetadataPlan.FindSceneMetadataPlanActions(
+			ctx, "dedup-run", scene.ID,
+		)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("persisted actions = %+v, want exactly one deduplicate", actions)
+	}
+	if plan.Suggested != nil && len(plan.Suggested) != 1 {
+		t.Fatalf("plan suggestions not deduped in place: %+v", plan.Suggested)
 	}
 }

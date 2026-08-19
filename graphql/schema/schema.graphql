@@ -265,7 +265,7 @@ type Query {
   "Returns the active entity model installation and runtime status."
   sceneMetadataModelStatus: SceneMetadataModelStatus!
   "Returns persisted scene metadata analysis plans."
-  sceneMetadataPlans(sceneIds: [ID!], state: SceneMetadataPlanState, latestOnly: Boolean! = false): [SceneMetadataAnalysisPlan!]!
+  sceneMetadataPlans(sceneIds: [ID!], runID: String, state: SceneMetadataPlanState, latestOnly: Boolean! = false, limit: Int): [SceneMetadataAnalysisPlan!]!
 
   # Job status
   jobQueue: [Job!]

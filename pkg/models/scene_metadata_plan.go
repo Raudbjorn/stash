@@ -30,8 +30,8 @@ type SceneMetadataPlanActionRecord struct {
 }
 
 type SceneMetadataPlanReader interface {
-	FindSceneMetadataPlans(ctx context.Context, sceneIDs []int, state *string) ([]SceneMetadataPlanRecord, error)
-	FindLatestSceneMetadataPlans(ctx context.Context, sceneIDs []int, state *string) ([]SceneMetadataPlanRecord, error)
+	FindSceneMetadataPlans(ctx context.Context, sceneIDs []int, runID *string, state *string, limit *int) ([]SceneMetadataPlanRecord, error)
+	FindLatestSceneMetadataPlans(ctx context.Context, sceneIDs []int, runID *string, state *string) ([]SceneMetadataPlanRecord, error)
 	FindSceneMetadataPlan(ctx context.Context, runID string, sceneID int) (*SceneMetadataPlanRecord, error)
 	FindSceneMetadataPlanActions(ctx context.Context, runID string, sceneID int) ([]SceneMetadataPlanActionRecord, error)
 	FindSceneMetadataPlanActionsForRuns(ctx context.Context, runIDs []string, sceneIDs []int) ([]SceneMetadataPlanActionRecord, error)
