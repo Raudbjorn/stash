@@ -19,26 +19,24 @@ type studioResolutionStatus string
 
 const (
 	studioResolutionExisting   studioResolutionStatus = "existing"
-	studioResolutionCreated    studioResolutionStatus = "created"
+	studioResolutionProposed   studioResolutionStatus = "proposed"
 	studioResolutionUnverified studioResolutionStatus = "unverified"
-	studioResolutionDryRun     studioResolutionStatus = "dry_run"
 	studioResolutionCancelled  studioResolutionStatus = "cancelled"
 	studioResolutionAmbiguous  studioResolutionStatus = "ambiguous"
 )
 
 const (
-	studioReasonSingleExactLibraryMatch  = "single_exact_library_match"
-	studioReasonMultipleLibraryMatches   = "multiple_exact_library_matches"
-	studioReasonVerifierFailed           = "verifier_failed"
-	studioReasonProviderNoResult         = "provider_no_result"
-	studioReasonProviderUnavailable      = "provider_unavailable"
-	studioReasonProviderResultsConflict  = "provider_results_conflict"
-	studioReasonLocalAIUnavailable       = "local_ai_unavailable"
-	studioReasonLocalAIInvalid           = "local_ai_invalid"
-	studioReasonLocalAIRejected          = "local_ai_rejected"
-	studioReasonDryRun                   = "dry_run"
-	studioReasonCancelled                = "cancelled"
-	studioReasonCreatedAfterVerification = "created_after_verification"
+	studioReasonSingleExactLibraryMatch = "single_exact_library_match"
+	studioReasonMultipleLibraryMatches  = "multiple_exact_library_matches"
+	studioReasonVerifierFailed          = "verifier_failed"
+	studioReasonProviderNoResult        = "provider_no_result"
+	studioReasonProviderUnavailable     = "provider_unavailable"
+	studioReasonProviderResultsConflict = "provider_results_conflict"
+	studioReasonLocalAIUnavailable      = "local_ai_unavailable"
+	studioReasonLocalAIInvalid          = "local_ai_invalid"
+	studioReasonLocalAIRejected         = "local_ai_rejected"
+	studioReasonCancelled               = "cancelled"
+	studioReasonVerifiedNewStudio       = "verified_new_studio"
 )
 
 type studioResolution struct {
@@ -48,6 +46,7 @@ type studioResolution struct {
 	MatchingIDs []int
 	ProviderID  string
 	Reason      string
+	Proposed    *models.CreateStudioInput
 }
 
 type studioIdentity struct {
@@ -521,12 +520,6 @@ func (j *analyzeSceneMetadataJob) resolveStudioCandidate(ctx context.Context, sc
 		resolution.Reason = studioReasonSingleExactLibraryMatch
 		return resolution, nil
 	}
-	if j.input.DryRun {
-		resolution.Status = studioResolutionDryRun
-		resolution.MatchingIDs = matchingIDs
-		resolution.Reason = studioReasonDryRun
-		return resolution, nil
-	}
 	if len(library) > 1 {
 		resolution.Status = studioResolutionAmbiguous
 		resolution.MatchingIDs = matchingIDs
@@ -557,14 +550,15 @@ func (j *analyzeSceneMetadataJob) resolveStudioCandidate(ctx context.Context, sc
 	}
 	resolution.ProviderID = providerID
 
-	id, ok, created, reason := j.adoptScrapedStudio(ctx, candidate, library, scraped)
+	id, proposed, ok, reason := planScrapedStudio(candidate, library, scraped)
 	if ok {
 		resolution.StudioID = id
-		resolution.MatchingIDs = append(matchingIDs, id)
-		if created {
-			resolution.Status = studioResolutionCreated
-		} else {
+		if id != 0 {
+			resolution.MatchingIDs = append(matchingIDs, id)
 			resolution.Status = studioResolutionExisting
+		} else {
+			resolution.Status = studioResolutionProposed
+			resolution.Proposed = proposed
 		}
 		resolution.Reason = reason
 		return resolution, nil
@@ -574,42 +568,24 @@ func (j *analyzeSceneMetadataJob) resolveStudioCandidate(ctx context.Context, sc
 	return resolution, nil
 }
 
-func (j *analyzeSceneMetadataJob) adoptScrapedStudio(ctx context.Context, candidate string, library []studioIdentity, scraped *models.ScrapedStudio) (int, bool, bool, string) {
+func planScrapedStudio(candidate string, library []studioIdentity, scraped *models.ScrapedStudio) (int, *models.CreateStudioInput, bool, string) {
 	if scraped == nil {
-		return 0, false, false, studioReasonProviderNoResult
+		return 0, nil, false, studioReasonProviderNoResult
 	}
 	if !studioCandidateMatchesScraped(candidate, scraped) {
-		return 0, false, false, studioReasonProviderResultsConflict
+		return 0, nil, false, studioReasonProviderResultsConflict
 	}
 	if len(library) == 1 {
-		return library[0].ID, true, false, studioReasonSingleExactLibraryMatch
+		return library[0].ID, nil, true, studioReasonSingleExactLibraryMatch
 	}
 	if id, ok := matchScrapedStudioToLibrary(scraped, library); ok {
-		return id, true, false, studioReasonSingleExactLibraryMatch
+		return id, nil, true, studioReasonSingleExactLibraryMatch
 	}
 	input := scraped.ToStudio("", map[string]bool{})
 	if input.Name == "" {
 		input.Name = candidate
 	}
-	if err := j.repository.WithTxn(ctx, func(ctx context.Context) error {
-		return j.repository.Studio.Create(ctx, input)
-	}); err != nil {
-		logger.Warnf("[scene metadata] studio resolution candidate=%q create_error=%v", candidate, err)
-		return 0, false, false, studioReasonVerifierFailed
-	}
-	var newID int
-	if err := j.repository.WithReadTxn(ctx, func(ctx context.Context) error {
-		created, err := j.repository.Studio.FindByName(ctx, input.Name, true)
-		if err != nil || created == nil {
-			return err
-		}
-		newID = created.ID
-		return nil
-	}); err != nil || newID == 0 {
-		logger.Warnf("[scene metadata] studio resolution candidate=%q lookup_error=%v", candidate, err)
-		return 0, false, false, studioReasonVerifierFailed
-	}
-	return newID, true, true, studioReasonCreatedAfterVerification
+	return 0, input, true, studioReasonVerifiedNewStudio
 }
 
 func studioCandidateMatchesScraped(candidate string, scraped *models.ScrapedStudio) bool {

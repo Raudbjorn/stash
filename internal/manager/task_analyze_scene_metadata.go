@@ -12,6 +12,7 @@ import (
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
 	"github.com/stashapp/stash/pkg/scene/metadata"
+	"github.com/stashapp/stash/pkg/scene/metadata/entity"
 	"github.com/stashapp/stash/pkg/scraper"
 	"github.com/stashapp/stash/pkg/sliceutil/stringslice"
 )
@@ -35,6 +36,12 @@ type AnalyzeSceneMetadataInput struct {
 	// When both are empty, network verification is disabled.
 	PerformerVerifierScraperIDs        []string `json:"performerVerifierScraperIDs"`
 	PerformerVerifierStashBoxEndpoints []string `json:"performerVerifierStashBoxEndpoints"`
+	// ProviderPolicies is the explicit ordered authority policy for configured
+	// metadata providers. Registration order is never used as authority.
+	ProviderPolicies []ProviderPolicy `json:"providerPolicies"`
+	// ReplaceLocalPerformersFromRemote is an additional destructive-operation
+	// gate. It defaults false even when a provider's performer mode is replace.
+	ReplaceLocalPerformersFromRemote bool `json:"replaceLocalPerformersFromRemote"`
 	// PerformerConfidenceThreshold is the minimum plausibility score for a
 	// newly-discovered (not-yet-in-library) performer name to be looked up
 	// via scrapers and, if confirmed, created. Defaults to 0.6.
@@ -70,12 +77,16 @@ type AnalyzeSceneMetadataInput struct {
 }
 
 func (s *Manager) AnalyzeSceneMetadata(ctx context.Context, input AnalyzeSceneMetadataInput) int {
+	assignments := s.Config.GetSceneMetadataEntityModelAssignments()
 	j := &analyzeSceneMetadataJob{
 		repository:           s.Repository,
 		input:                input,
 		ffprobe:              s.FFProbe,
 		completer:            sceneMetadataCompleter(s.AIServer, s.Config),
 		configuredStashBoxes: s.Config.GetStashBoxes(),
+		runID:                newSceneMetadataRunID(),
+		policyVersion:        sceneMetadataPolicyVersion(input),
+		modelFingerprint:     SceneMetadataModelFingerprint(assignments[entity.RoleEntityExtraction]),
 	}
 
 	return s.JobManager.Add(ctx, "Analyzing scene metadata...", j)
@@ -91,10 +102,15 @@ type analyzeSceneMetadataJob struct {
 	input                       AnalyzeSceneMetadataInput
 	scraperCache                performerScraperCache
 	scenePerformerLookup        scenePerformerLookup
+	sceneFingerprintFinders     []configuredSceneFingerprintFinder
+	identifyRemoteScene         func(context.Context, *models.Scene) (*models.ScrapedScene, string, error)
 	ffprobe                     *ffmpeg.FFProbe
 	performerRecords            []metadata.NamedAliases
 	studioRecords               []metadata.NamedAliases
 	groupRecords                []metadata.NamedAliases
+	performerExactIndex         *metadata.ExactIndex
+	studioExactIndex            *metadata.ExactIndex
+	groupExactIndex             *metadata.ExactIndex
 	performerVerifierScrapers   []*scraper.Scraper
 	studioVerifierScrapers      []*scraper.Scraper
 	useBuiltinStudioURLScraper  bool
@@ -103,6 +119,9 @@ type analyzeSceneMetadataJob struct {
 	studioVerifierStashBoxes    []studioStashBoxVerifier
 	completer                   structuredTextCompleter
 	lastVerifierScraperIDs      []string
+	runID                       string
+	policyVersion               string
+	modelFingerprint            string
 }
 
 func (j *analyzeSceneMetadataJob) Execute(ctx context.Context, progress *job.Progress) error {
@@ -141,6 +160,9 @@ func (j *analyzeSceneMetadataJob) Execute(ctx context.Context, progress *job.Pro
 		}
 		return fmt.Errorf("loading metadata entity indexes: %w", err)
 	}
+	j.performerExactIndex = metadata.BuildExactIndex(j.performerRecords)
+	j.studioExactIndex = metadata.BuildExactIndex(j.studioRecords)
+	j.groupExactIndex = metadata.BuildExactIndex(j.groupRecords)
 
 	progress.SetTotal(len(scenes))
 
@@ -380,18 +402,18 @@ func (j *analyzeSceneMetadataJob) processScene(ctx context.Context, sc *models.S
 		FilenameStem: filenameStem, SceneTitle: sc.Title, Details: sc.Details,
 		UseDetails: j.input.UseDetails, NFO: nfo, Container: container,
 	})
-	authoritativePerformerIDs, hasAuthoritativePerformers := j.authoritativeScenePerformerIDs(ctx, sc)
-	if len(sources) == 0 && !hasAuthoritativePerformers {
-		return nil
+	authority, hasAuthoritativePerformers := j.authoritativeScenePerformerIDs(ctx, sc)
+	authoritativePerformerIDs := authority.IDs
+	if hasAuthoritativePerformers && authority.Mode == ProviderFieldModeMerge {
+		authoritativePerformerIDs = sortedUniqueInts(append(append([]int(nil), existingPerformerIDs...), authority.IDs...))
 	}
-
 	var analysis metadata.Analysis
 	if len(sources) > 0 {
 		var exactSpans []metadata.Span
 		for _, source := range sources {
-			exactSpans = append(exactSpans, metadata.FindExactNamedSpans(source, j.performerRecords, metadata.EntityLabelPerformer)...)
-			exactSpans = append(exactSpans, metadata.FindExactNamedSpans(source, j.studioRecords, metadata.EntityLabelStudio)...)
-			exactSpans = append(exactSpans, metadata.FindExactNamedSpans(source, j.groupRecords, metadata.EntityLabelMovie)...)
+			exactSpans = append(exactSpans, j.performerExactIndex.Scan(source, metadata.EntityLabelPerformer)...)
+			exactSpans = append(exactSpans, j.studioExactIndex.Scan(source, metadata.EntityLabelStudio)...)
+			exactSpans = append(exactSpans, j.groupExactIndex.Scan(source, metadata.EntityLabelMovie)...)
 		}
 		var err error
 		analysis, err = (metadata.Analyzer{}).Analyze(ctx, metadata.Inputs{
@@ -403,68 +425,184 @@ func (j *analyzeSceneMetadataJob) processScene(ctx context.Context, sc *models.S
 		}
 	}
 
-	resolvedPerformerIDs := authoritativePerformerIDs
-	if !hasAuthoritativePerformers {
-		var performerCandidates []string
-		for _, candidate := range analysis.PerformerCandidates {
-			if candidate.ExistingEntityID != nil || candidate.Confidence >= j.performerLookupThreshold() {
-				performerCandidates = append(performerCandidates, candidate.Value)
+	actionState := SceneMetadataPlanProposed
+	planState := SceneMetadataPlanProposed
+	if !j.input.DryRun {
+		actionState = SceneMetadataPlanAccepted
+		planState = SceneMetadataPlanAccepted
+	}
+	var suggestions []SuggestedField
+	var reasonCodes []string
+	addSuggestion := func(kind string, payload sceneMetadataActionPayload, reasons ...string) {
+		suggestions = append(suggestions, SuggestedField{
+			Kind: kind, PayloadJSON: actionPayload(payload),
+			State: actionState, ReasonCodes: append([]string(nil), reasons...),
+		})
+		reasonCodes = append(reasonCodes, reasons...)
+	}
+	remoteCandidates, chosenRemote, chosenRemoteScene, err := j.discoverRemoteScenes(ctx, sc, primary)
+	if err != nil {
+		return fmt.Errorf("discovering remote scenes: %w", err)
+	}
+	remoteDateSuggested := false
+	remoteTitleSuggested := false
+	remoteStudioSuggested := false
+	ambiguity := false
+	if chosenRemote != nil && chosenRemoteScene != nil {
+		if policy, found := j.providerPolicy(chosenRemote.Endpoint); found {
+			if policy.PerformerMode == ProviderFieldModeMerge {
+				if ids, complete := j.matchAuthoritativePerformers(ctx, chosenRemote.Endpoint, chosenRemoteScene.Performers); complete {
+					authoritativePerformerIDs = sortedUniqueInts(append(append([]int(nil), existingPerformerIDs...), ids...))
+					hasAuthoritativePerformers = true
+				}
+			}
+			if chosenRemoteScene.Date != nil &&
+				((policy.DateMode == ProviderFieldModeMerge && sc.Date == nil) || policy.DateMode == ProviderFieldModeReplace) {
+				if parsed, parseErr := models.ParseDate(strings.TrimSpace(*chosenRemoteScene.Date)); parseErr == nil &&
+					(sc.Date == nil || !sc.Date.Time.Equal(parsed.Time)) {
+					value := parsed.String()
+					addSuggestion(sceneMetadataActionDate, sceneMetadataActionPayload{Date: &value}, "provider_"+policy.DateMode.String()+"_date")
+					remoteDateSuggested = true
+				}
+			}
+			if chosenRemoteScene.Title != nil &&
+				((policy.TitleMode == ProviderFieldModeMerge && isDefaultSceneTitle(sc.Title, primary)) || policy.TitleMode == ProviderFieldModeReplace) {
+				value := strings.TrimSpace(*chosenRemoteScene.Title)
+				if value != "" && !strings.EqualFold(strings.TrimSpace(sc.Title), value) {
+					addSuggestion(sceneMetadataActionTitle, sceneMetadataActionPayload{Title: &value}, "provider_"+policy.TitleMode.String()+"_title")
+					remoteTitleSuggested = true
+				}
+			}
+			if chosenRemoteScene.Studio != nil &&
+				((policy.StudioMode == ProviderFieldModeMerge && sc.StudioID == nil) || policy.StudioMode == ProviderFieldModeReplace) {
+				var identities []studioIdentity
+				if readErr := j.repository.WithReadTxn(ctx, func(ctx context.Context) error {
+					var lookupErr error
+					identities, lookupErr = findExactStudioIdentities(ctx, j.repository.Studio, chosenRemoteScene.Studio.Name)
+					return lookupErr
+				}); readErr != nil {
+					return fmt.Errorf("matching provider studio: %w", readErr)
+				}
+				switch len(identities) {
+				case 0:
+					input := chosenRemoteScene.Studio.ToStudio(chosenRemote.Endpoint, map[string]bool{})
+					addSuggestion(sceneMetadataActionCreateStudio, sceneMetadataActionPayload{Studio: input}, "provider_"+policy.StudioMode.String()+"_studio")
+					remoteStudioSuggested = true
+				case 1:
+					if sc.StudioID == nil || *sc.StudioID != identities[0].ID {
+						id := identities[0].ID
+						addSuggestion(sceneMetadataActionStudioID, sceneMetadataActionPayload{StudioID: &id}, "provider_"+policy.StudioMode.String()+"_studio")
+						remoteStudioSuggested = true
+					}
+				default:
+					ambiguity = true
+					reasonCodes = append(reasonCodes, "provider_studio_ambiguous")
+				}
 			}
 		}
-		resolutions, err := j.resolvePerformerCandidates(ctx, sc.ID, performerCandidates, sources)
+	}
+	if chosenRemote != nil {
+		addSuggestion(
+			sceneMetadataActionRemoteScene,
+			sceneMetadataActionPayload{
+				Endpoint: chosenRemote.Endpoint,
+				RemoteID: chosenRemote.RemoteID,
+			},
+			chosenRemote.Provenance,
+		)
+	}
+
+	resolvedPerformerIDs := authoritativePerformerIDs
+	var localCandidates []PerformerCandidate
+	if !hasAuthoritativePerformers {
+		var performerNames []string
+		for _, candidate := range analysis.PerformerCandidates {
+			if candidate.ExistingEntityID != nil || candidate.Confidence >= j.performerLookupThreshold() {
+				performerNames = append(performerNames, candidate.Value)
+			}
+		}
+		resolutions, err := j.resolvePerformerCandidates(ctx, sc.ID, performerNames, sources)
 		if err != nil {
 			return fmt.Errorf("resolving performer candidates: %w", err)
 		}
 		resolvedPerformerIDs = make([]int, 0, len(resolutions))
 		for _, resolution := range resolutions {
-			if resolution.Status == performerResolutionExisting || resolution.Status == performerResolutionCreated {
+			localCandidates = append(localCandidates, candidateFromResolution(resolution))
+			switch resolution.Status {
+			case performerResolutionExisting:
 				resolvedPerformerIDs = append(resolvedPerformerIDs, resolution.PerformerID)
+			case performerResolutionProposed:
+				addSuggestion(
+					sceneMetadataActionCreatePerformer,
+					sceneMetadataActionPayload{Performer: resolution.Proposed},
+					resolution.Reason,
+				)
+			case performerResolutionAmbiguous:
+				ambiguity = true
+				reasonCodes = append(reasonCodes, resolution.Reason)
 			}
 		}
 	}
 
-	partial := models.NewScenePartial()
-	sceneDirty := false
 	newPerformerIDs := resolvedPerformerIDs
 	if !hasAuthoritativePerformers {
 		newPerformerIDs = mergeIDs(existingPerformerIDs, resolvedPerformerIDs)
 	}
 	if !sameIDSet(newPerformerIDs, existingPerformerIDs) {
-		partial.PerformerIDs = &models.UpdateIDs{IDs: newPerformerIDs, Mode: models.RelationshipUpdateModeSet}
-		sceneDirty = true
+		addSuggestion(
+			sceneMetadataActionPerformerIDs,
+			sceneMetadataActionPayload{PerformerIDs: newPerformerIDs},
+			"resolved_performer_links",
+		)
 	}
-	if sc.StudioID == nil && analysis.StudioID != nil {
-		partial.StudioID = models.NewOptionalInt(*analysis.StudioID)
-		sceneDirty = true
+	if !remoteStudioSuggested && sc.StudioID == nil && analysis.StudioID != nil {
+		addSuggestion(
+			sceneMetadataActionStudioID,
+			sceneMetadataActionPayload{StudioID: analysis.StudioID},
+			"exact_library_studio_match",
+		)
 	}
-	if sc.StudioID == nil {
+	if !remoteStudioSuggested && sc.StudioID == nil && analysis.StudioID == nil {
 		if resolved, err := j.maybeResolveStudioCandidate(ctx, sc.ID, &analysis, sources); err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
 			logger.Warnf("[scene metadata] scene %d: studio resolver error: %v", sc.ID, err)
 		} else if resolved != nil {
-			partial.StudioID = models.NewOptionalInt(resolved.StudioID)
-			sceneDirty = true
+			switch resolved.Status {
+			case studioResolutionExisting:
+				id := resolved.StudioID
+				addSuggestion(
+					sceneMetadataActionStudioID,
+					sceneMetadataActionPayload{StudioID: &id},
+					resolved.Reason,
+				)
+			case studioResolutionProposed:
+				addSuggestion(
+					sceneMetadataActionCreateStudio,
+					sceneMetadataActionPayload{Studio: resolved.Proposed},
+					resolved.Reason,
+				)
+			case studioResolutionAmbiguous:
+				ambiguity = true
+				reasonCodes = append(reasonCodes, resolved.Reason)
+			}
 			logStudioResolution(sc.ID, *resolved)
 		}
 	}
-	if resolvedDate := analysis.Date; resolvedDate != nil {
+	if resolvedDate := analysis.Date; !remoteDateSuggested && resolvedDate != nil {
 		threshold := j.dateConfidenceThreshold()
 		sameExistingDate := sc.Date != nil && sc.Date.Time.Format("2006-01-02") == resolvedDate.Date.Format("2006-01-02")
-		switch {
-		case sc.Date == nil && resolvedDate.Confidence >= threshold:
-			partial.Date = models.NewOptionalDate(models.Date{Time: resolvedDate.Date})
-			sceneDirty = true
-		case sc.Date != nil && !sameExistingDate && j.input.OverwriteExistingDate && !resolvedDate.Contested && resolvedDate.Confidence >= dateOverwriteMinConfidence:
-			partial.Date = models.NewOptionalDate(models.Date{Time: resolvedDate.Date})
-			sceneDirty = true
+		if sc.Date == nil && resolvedDate.Confidence >= threshold ||
+			sc.Date != nil && !sameExistingDate && j.input.OverwriteExistingDate && !resolvedDate.Contested && resolvedDate.Confidence >= dateOverwriteMinConfidence {
+			value := resolvedDate.Date.Format("2006-01-02")
+			addSuggestion(sceneMetadataActionDate, sceneMetadataActionPayload{Date: &value}, "resolved_date")
 		}
 	}
-	if analysis.Title != nil && !strings.EqualFold(strings.TrimSpace(sc.Title), strings.TrimSpace(analysis.Title.Value)) &&
+	if !remoteTitleSuggested && analysis.Title != nil && !strings.EqualFold(strings.TrimSpace(sc.Title), strings.TrimSpace(analysis.Title.Value)) &&
 		(j.input.OverwriteExistingTitle || isDefaultSceneTitle(sc.Title, primary)) {
-		partial.Title = models.NewOptionalString(analysis.Title.Value)
-		sceneDirty = true
+		value := analysis.Title.Value
+		addSuggestion(sceneMetadataActionTitle, sceneMetadataActionPayload{Title: &value}, "resolved_title")
 	}
 	if analysis.Group != nil && analysis.Group.ExistingID != nil && analysis.Group.SceneIndex != nil {
 		groupID, sceneIndex := *analysis.Group.ExistingID, *analysis.Group.SceneIndex
@@ -487,9 +625,11 @@ func (j *analyzeSceneMetadataJob) processScene(ctx context.Context, sc *models.S
 			changed = true
 		}
 		if changed {
-			partial.GroupIDs = &models.UpdateGroupIDs{Groups: updated, Mode: models.RelationshipUpdateModeSet}
-			sceneDirty = true
+			addSuggestion(sceneMetadataActionGroups, sceneMetadataActionPayload{Groups: updated}, "resolved_group")
 		}
+	}
+	if fileDirty {
+		addSuggestion(sceneMetadataActionFileMetadata, sceneMetadataActionPayload{File: primary}, "container_metadata_probe")
 	}
 
 	if analysis.Diagnostics.ModelAvailable {
@@ -505,25 +645,29 @@ func (j *analyzeSceneMetadataJob) processScene(ctx context.Context, sc *models.S
 			"Settings > Tasks > Analyze scene metadata > Download and install entity model",
 		)
 	}
-	if !sceneDirty && !fileDirty {
-		return nil
+	if len(sources) == 0 {
+		reasonCodes = append(reasonCodes, "no_metadata_sources")
+	}
+	if j.runID == "" {
+		j.runID = newSceneMetadataRunID()
+	}
+	plan := &AnalysisPlan{
+		RunID: j.runID, SceneID: sc.ID, Sources: sourceExcerpts(sources),
+		LocalCandidates: localCandidates, RemoteCandidates: remoteCandidates,
+		Suggested: suggestions, ReasonCodes: sortedUniqueStrings(reasonCodes),
+		Ambiguity:      ambiguity,
+		StaleSceneHash: staleSceneHash(sc, existingPerformerIDs),
+		PolicyVersion:  j.policyVersion, ModelFingerprint: j.modelFingerprint,
+		State: planState, CreatedAt: time.Now().UTC(),
+	}
+	if err := j.persistAnalysisPlan(ctx, plan); err != nil {
+		return fmt.Errorf("persist scene metadata plan: %w", err)
 	}
 	if j.input.DryRun {
-		logger.Infof("[scene metadata] dry run: would update scene %d", sc.ID)
+		logger.Infof("[scene metadata] dry run: planned %d changes for scene %d", len(suggestions), sc.ID)
 		return nil
 	}
-	return r.WithTxn(ctx, func(ctx context.Context) error {
-		if fileDirty {
-			if err := r.File.Update(ctx, primary); err != nil {
-				return err
-			}
-		}
-		if sceneDirty {
-			_, err := r.Scene.UpdatePartial(ctx, sc.ID, partial)
-			return err
-		}
-		return nil
-	})
+	return j.ApplySceneMetadataPlan(ctx, j.runID, sc.ID)
 }
 
 func isDefaultSceneTitle(title string, primary *models.VideoFile) bool {
@@ -590,7 +734,9 @@ func (j *analyzeSceneMetadataJob) maybeResolveStudioCandidate(ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
-	if resolved.Status != studioResolutionExisting && resolved.Status != studioResolutionCreated {
+	if resolved.Status != studioResolutionExisting &&
+		resolved.Status != studioResolutionProposed &&
+		resolved.Status != studioResolutionAmbiguous {
 		logStudioResolution(sceneID, resolved)
 		return nil, nil
 	}

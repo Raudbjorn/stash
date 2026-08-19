@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stashapp/stash/pkg/job"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
 	"github.com/stashapp/stash/pkg/scene/metadata"
@@ -336,7 +337,7 @@ func TestScrapeVerifyPerformersIncludesStashBoxResultsAndFailures(t *testing.T) 
 	}
 }
 
-func TestAnalyzeSceneMetadataCreatesPerformerFromSelectedStashBox(t *testing.T) {
+func TestAnalyzeSceneMetadataPlansPerformerFromSelectedStashBox(t *testing.T) {
 	r := newTestRepository(t)
 	querier := &recordingStashBoxPerformerQuerier{
 		responses: []*models.ScrapedPerformer{
@@ -358,13 +359,14 @@ func TestAnalyzeSceneMetadataCreatesPerformerFromSelectedStashBox(t *testing.T) 
 		t.Fatal(err)
 	}
 	if len(resolutions) != 1 ||
-		resolutions[0].Status != performerResolutionCreated ||
-		resolutions[0].PerformerID == 0 ||
+		resolutions[0].Status != performerResolutionProposed ||
+		resolutions[0].Proposed == nil ||
+		resolutions[0].Proposed.Name != "Alice Example" ||
 		!reflect.DeepEqual(resolutions[0].ScraperIDs, []string{"stashbox:https://one.example/graphql"}) {
 		t.Fatalf("resolution = %+v", resolutions)
 	}
-	if got := performerCount(t, r); got != 1 {
-		t.Fatalf("performer count = %d, want 1", got)
+	if got := performerCount(t, r); got != 0 {
+		t.Fatalf("performer count = %d, want 0 before apply", got)
 	}
 	if want := []string{"Alice Example"}; !reflect.DeepEqual(querier.calls, want) {
 		t.Fatalf("Stash-box calls = %#v, want %#v", querier.calls, want)
@@ -510,7 +512,13 @@ func TestAnalyzeSceneMetadataReplacesPerformersFromAuthoritativeSceneID(t *testi
 
 	job := &analyzeSceneMetadataJob{
 		repository: r,
-		input:      AnalyzeSceneMetadataInput{UseDetails: true},
+		input: AnalyzeSceneMetadataInput{
+			UseDetails: true, ReplaceLocalPerformersFromRemote: true,
+			ProviderPolicies: []ProviderPolicy{{
+				Endpoint: endpoint, Priority: 0, PerformerMode: ProviderFieldModeReplace,
+				StudioMode: ProviderFieldModeObserve, DateMode: ProviderFieldModeObserve, TitleMode: ProviderFieldModeObserve,
+			}},
+		},
 		configuredStashBoxes: []*models.StashBox{{
 			Endpoint: endpoint,
 		}},
@@ -539,7 +547,7 @@ func TestAnalyzeSceneMetadataReplacesPerformersFromAuthoritativeSceneID(t *testi
 	}
 }
 
-func TestAnalyzeSceneMetadataCreatesMissingAuthoritativePerformer(t *testing.T) {
+func TestAnalyzeSceneMetadataPreservesAuthoritativeCastWhenRemotePerformerIsMissing(t *testing.T) {
 	r := newTestRepository(t)
 	const endpoint = "https://stashdb.org/graphql"
 	existingID := createTestPerformerWithStashID(t, r, "Existing Performer", endpoint, "existing")
@@ -559,7 +567,14 @@ func TestAnalyzeSceneMetadataCreatesMissingAuthoritativePerformer(t *testing.T) 
 	}
 
 	job := &analyzeSceneMetadataJob{
-		repository:           r,
+		repository: r,
+		input: AnalyzeSceneMetadataInput{
+			ReplaceLocalPerformersFromRemote: true,
+			ProviderPolicies: []ProviderPolicy{{
+				Endpoint: endpoint, Priority: 0, PerformerMode: ProviderFieldModeReplace,
+				StudioMode: ProviderFieldModeObserve, DateMode: ProviderFieldModeObserve, TitleMode: ProviderFieldModeObserve,
+			}},
+		},
 		configuredStashBoxes: []*models.StashBox{{Endpoint: endpoint}},
 		scenePerformerLookup: func(context.Context, models.StashBox, string) ([]*models.ScrapedPerformer, error) {
 			return []*models.ScrapedPerformer{
@@ -592,16 +607,57 @@ func TestAnalyzeSceneMetadataCreatesMissingAuthoritativePerformer(t *testing.T) 
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if len(matches) != 1 {
-		t.Fatalf("created performer matches = %d, want 1", len(matches))
+	if len(matches) != 0 || len(stashMatches) != 0 {
+		t.Fatalf("planner created missing authoritative performer: names=%v stash=%v", matches, stashMatches)
 	}
 	got := scenePerformerIDs(t, r, scene.ID)
-	want := []int{existingID, matches[0].ID}
+	want := []int{wrongID, existingID}
 	if !sameIDSet(got, want) {
-		t.Fatalf("scene performer IDs = %v, want %v", got, want)
+		t.Fatalf("scene performer IDs = %v, want preserved %v", got, want)
 	}
-	if len(stashMatches) != 1 || stashMatches[0].ID != matches[0].ID {
-		t.Fatalf("created performer Stash-box identity = %+v", stashMatches)
+}
+
+func TestAnalyzeSceneMetadataProviderPriorityControlsPerformerAuthority(t *testing.T) {
+	r := newTestRepository(t)
+	const (
+		firstEndpoint  = "https://first.example/graphql"
+		secondEndpoint = "https://theporndb.example/graphql"
+	)
+	firstID := createTestPerformerWithStashID(t, r, "First Authority", firstEndpoint, "first-performer")
+	secondID := createTestPerformerWithStashID(t, r, "Second Authority", secondEndpoint, "second-performer")
+	scene := models.NewScene()
+	scene.StashIDs = models.NewRelatedStashIDs([]models.StashID{
+		{Endpoint: firstEndpoint, StashID: "first-scene"},
+		{Endpoint: secondEndpoint, StashID: "second-scene"},
+	})
+	lookup := func(_ context.Context, box models.StashBox, _ string) ([]*models.ScrapedPerformer, error) {
+		if box.Endpoint == firstEndpoint {
+			return []*models.ScrapedPerformer{scrapedPerformer("First Authority", func(p *models.ScrapedPerformer) {
+				p.RemoteSiteID = stringPointer("first-performer")
+			})}, nil
+		}
+		return []*models.ScrapedPerformer{scrapedPerformer("Second Authority", func(p *models.ScrapedPerformer) {
+			p.RemoteSiteID = stringPointer("second-performer")
+		})}, nil
+	}
+	job := &analyzeSceneMetadataJob{
+		repository: r,
+		input: AnalyzeSceneMetadataInput{ProviderPolicies: []ProviderPolicy{
+			{Endpoint: firstEndpoint, Priority: 0, PerformerMode: ProviderFieldModeMerge},
+			{Endpoint: secondEndpoint, Priority: 1, PerformerMode: ProviderFieldModeMerge},
+		}},
+		configuredStashBoxes: []*models.StashBox{{Endpoint: secondEndpoint}, {Endpoint: firstEndpoint}},
+		scenePerformerLookup: lookup,
+	}
+	first, ok := job.authoritativeScenePerformerIDs(context.Background(), &scene)
+	if !ok || len(first.IDs) != 1 || first.IDs[0] != firstID {
+		t.Fatalf("first authority = %+v, found %v", first, ok)
+	}
+	job.input.ProviderPolicies[0].Priority = 1
+	job.input.ProviderPolicies[1].Priority = 0
+	second, ok := job.authoritativeScenePerformerIDs(context.Background(), &scene)
+	if !ok || len(second.IDs) != 1 || second.IDs[0] != secondID {
+		t.Fatalf("second authority = %+v, found %v", second, ok)
 	}
 }
 
@@ -764,7 +820,7 @@ func TestAnalyzeSceneMetadataIndistinguishableResults(t *testing.T) {
 	}
 }
 
-func TestAnalyzeSceneMetadataConcurrentPerformerResolution(t *testing.T) {
+func TestAnalyzeSceneMetadataConcurrentPerformerPlanningIsReadOnly(t *testing.T) {
 	r := newTestRepository(t)
 	verified := []scrapedPerformerIdentity{{ScraperID: "name", Name: "Concurrent Person", RemoteSiteID: "remote-person", URLs: []string{"https://example.com/concurrent"}}}
 	jobs := []*analyzeSceneMetadataJob{{repository: r}, {repository: r}}
@@ -777,7 +833,7 @@ func TestAnalyzeSceneMetadataConcurrentPerformerResolution(t *testing.T) {
 		go func(job *analyzeSceneMetadataJob) {
 			defer wait.Done()
 			<-start
-			resolution, err := job.resolveOrCreateVerifiedPerformer(context.Background(), "Concurrent Person", verified, nil)
+			resolution, err := job.planVerifiedPerformer(context.Background(), "Concurrent Person", verified, nil)
 			results <- resolution
 			errors <- err
 		}(job)
@@ -791,15 +847,13 @@ func TestAnalyzeSceneMetadataConcurrentPerformerResolution(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var ids []int
 	for resolution := range results {
-		ids = append(ids, resolution.PerformerID)
+		if resolution.Status != performerResolutionProposed || resolution.Proposed == nil {
+			t.Fatalf("resolution = %+v, want proposed", resolution)
+		}
 	}
-	if len(ids) != 2 || ids[0] == 0 || ids[0] != ids[1] {
-		t.Fatalf("concurrent IDs = %v", ids)
-	}
-	if got := performerCount(t, r); got != 1 {
-		t.Fatalf("performer count = %d, want 1", got)
+	if got := performerCount(t, r); got != 0 {
+		t.Fatalf("performer count = %d, want 0 before apply", got)
 	}
 }
 
@@ -950,8 +1004,8 @@ func TestAnalyzeSceneMetadataDryRun(t *testing.T) {
 	if err := job.processScene(context.Background(), scene); err != nil {
 		t.Fatal(err)
 	}
-	if len(cache.recordedCalls()) != 0 || completer.callCount() != 0 {
-		t.Fatalf("dry-run external calls = scraper %v, completer %d", cache.recordedCalls(), completer.callCount())
+	if len(cache.recordedCalls()) != 1 {
+		t.Fatalf("dry-run scraper calls = %v, want faithful verification", cache.recordedCalls())
 	}
 	if performerCount(t, r) != 2 || len(scenePerformerIDs(t, r, scene.ID)) != 0 {
 		t.Fatal("dry run changed performer or scene relationships")
@@ -968,6 +1022,17 @@ func TestAnalyzeSceneMetadataDryRun(t *testing.T) {
 	}
 	if !updated.Equal(before) {
 		t.Fatalf("dry-run updated_at changed: %v -> %v", before, updated)
+	}
+	var plans []models.SceneMetadataPlanRecord
+	if err := r.WithReadTxn(context.Background(), func(ctx context.Context) error {
+		var err error
+		plans, err = r.SceneMetadataPlan.FindSceneMetadataPlans(ctx, []int{scene.ID}, nil)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(plans) != 1 || plans[0].State != string(SceneMetadataPlanProposed) {
+		t.Fatalf("persisted dry-run plans = %+v, want one proposed plan", plans)
 	}
 }
 
@@ -1047,5 +1112,41 @@ func BenchmarkResolvePerformerCandidatesExact(b *testing.B) {
 				}
 			}
 		})
+	}
+}
+
+func TestAnalyzeSceneMetadataExecuteHonorsSelectedSceneIDs(t *testing.T) {
+	r := newTestRepository(t)
+	var selected []string
+	var selectedInts []int
+	for index := range 10 {
+		scene := createTestScene(t, r, fmt.Sprintf("Selected Scene %d", index))
+		selected = append(selected, fmt.Sprint(scene.ID))
+		selectedInts = append(selectedInts, scene.ID)
+	}
+	excluded := createTestScene(t, r, "Excluded Scene")
+	analyzerJob := newResolutionJob(r, AnalyzeSceneMetadataInput{
+		DryRun: true, SceneIDs: selected,
+	}, &recordingPerformerScraperCache{})
+	if err := analyzerJob.Execute(context.Background(), &job.Progress{}); err != nil {
+		t.Fatal(err)
+	}
+	var selectedPlans, excludedPlans []models.SceneMetadataPlanRecord
+	if err := r.WithReadTxn(context.Background(), func(ctx context.Context) error {
+		var err error
+		selectedPlans, err = r.SceneMetadataPlan.FindSceneMetadataPlans(ctx, selectedInts, nil)
+		if err != nil {
+			return err
+		}
+		excludedPlans, err = r.SceneMetadataPlan.FindSceneMetadataPlans(ctx, []int{excluded.ID}, nil)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(selectedPlans) != len(selected) {
+		t.Fatalf("selected plans = %d, want %d", len(selectedPlans), len(selected))
+	}
+	if len(excludedPlans) != 0 {
+		t.Fatalf("excluded scene produced plans: %+v", excludedPlans)
 	}
 }

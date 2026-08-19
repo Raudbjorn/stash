@@ -92,6 +92,24 @@ models:
     model: github.com/stashapp/stash/internal/manager.SceneMetadataModelStatus
   SceneMetadataModelRole:
     model: github.com/stashapp/stash/internal/manager.SceneMetadataModelRole
+  SceneMetadataPlanState:
+    model: github.com/stashapp/stash/internal/manager.SceneMetadataPlanState
+  SceneMetadataProviderFieldMode:
+    model: github.com/stashapp/stash/internal/manager.ProviderFieldMode
+  SceneMetadataProviderPolicyInput:
+    model: github.com/stashapp/stash/internal/manager.ProviderPolicy
+  SceneMetadataSourceExcerpt:
+    model: github.com/stashapp/stash/internal/manager.SourceExcerpt
+  SceneMetadataPerformerCandidate:
+    model: github.com/stashapp/stash/internal/manager.PerformerCandidate
+  SceneMetadataCandidateContribution:
+    model: github.com/stashapp/stash/internal/manager.CandidateContribution
+  SceneMetadataRemoteSceneCandidate:
+    model: github.com/stashapp/stash/internal/manager.RemoteSceneCandidate
+  SceneMetadataSuggestedField:
+    model: github.com/stashapp/stash/internal/manager.SuggestedField
+  SceneMetadataAnalysisPlan:
+    model: github.com/stashapp/stash/internal/manager.AnalysisPlan
   SystemStatusEnum:
     model: github.com/stashapp/stash/internal/manager.SystemStatusEnum
   ImportDuplicateEnum:

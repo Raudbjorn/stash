@@ -54,3 +54,36 @@ func TestStatusCachesValidationUntilSignatureChanges(t *testing.T) {
 	status = Status(cachePath, key)
 	assert.Equal(t, ModelInvalid, status.State)
 }
+
+func TestInspectModelStateSeparatesPresenceValidationAndActivation(t *testing.T) {
+	const key = "gliner-small-v2.1-int8"
+	contents := []byte("pinned model")
+	digest := sha256.Sum256(contents)
+	original := Catalog[0]
+	Catalog[0].Artifacts = []Artifact{{
+		RemotePath: "onnx/model_int8.onnx",
+		LocalPath:  "model.onnx",
+		Size:       int64(len(contents)),
+		SHA256:     hex.EncodeToString(digest[:]),
+	}}
+	t.Cleanup(func() { Catalog[0] = original })
+
+	cachePath := t.TempDir()
+	installer := Installer{ValidateModel: func(string) error { return nil }}
+	state, err := InspectModelState(cachePath, key, key, installer)
+	require.NoError(t, err)
+	assert.Equal(t, ModelState{Active: true}, state)
+
+	bundlePath := BundlePath(cachePath, key)
+	require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+	modelPath := ModelPath(cachePath, key)
+	require.NoError(t, os.WriteFile(modelPath, contents, 0o600))
+	state, err = InspectModelState(cachePath, key, key, installer)
+	require.NoError(t, err)
+	assert.Equal(t, ModelState{Present: true, Validated: true, Active: true}, state)
+
+	require.NoError(t, os.WriteFile(modelPath, []byte("broken model"), 0o600))
+	state, err = InspectModelState(cachePath, key, key, installer)
+	require.Error(t, err)
+	assert.Equal(t, ModelState{Present: true, Active: true}, state)
+}

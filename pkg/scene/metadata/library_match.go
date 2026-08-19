@@ -2,7 +2,6 @@ package metadata
 
 import (
 	"sort"
-	"strconv"
 	"strings"
 	"unicode"
 )
@@ -44,55 +43,84 @@ func lexicalTokens(text string) []textToken {
 	return tokens
 }
 
-// FindExactNamedSpans performs normalized whole-token matching and emits only
-// names/aliases that belong to one distinct library record. Substrings and
-// ambiguous aliases never link.
-func FindExactNamedSpans(source Source, records []NamedAliases, label string) []Span {
+type phrase struct {
+	Norm  string
+	Words []string
+	ID    int
+}
+
+// ExactIndex owns the normalized library names and aliases for repeated scans.
+type ExactIndex struct {
+	ByKey   map[string]map[int]struct{}
+	Phrases []phrase
+}
+
+// BuildExactIndex normalizes library records once. Phrases are longest-first,
+// then alphabetical, so overlapping shorter names cannot displace a longer
+// exact match.
+func BuildExactIndex(records []NamedAliases) *ExactIndex {
+	index := &ExactIndex{ByKey: make(map[string]map[int]struct{})}
+	add := func(value string, id int) {
+		key := NormalizeKey(value)
+		if key == "" {
+			return
+		}
+		ids := index.ByKey[key]
+		if ids == nil {
+			ids = make(map[int]struct{})
+			index.ByKey[key] = ids
+		}
+		ids[id] = struct{}{}
+	}
+	for _, record := range records {
+		add(record.Name, record.ID)
+		for _, alias := range record.Aliases {
+			add(alias, record.ID)
+		}
+	}
+
+	index.Phrases = make([]phrase, 0, len(index.ByKey))
+	for norm, ids := range index.ByKey {
+		item := phrase{Norm: norm, Words: strings.Fields(norm)}
+		if len(ids) == 1 {
+			for id := range ids {
+				item.ID = id
+			}
+		}
+		index.Phrases = append(index.Phrases, item)
+	}
+	sort.Slice(index.Phrases, func(i, j int) bool {
+		left, right := index.Phrases[i], index.Phrases[j]
+		if len(left.Words) != len(right.Words) {
+			return len(left.Words) > len(right.Words)
+		}
+		return left.Norm < right.Norm
+	})
+	return index
+}
+
+// Scan performs normalized whole-token matching and emits only names or aliases
+// owned by one distinct library record. Ambiguous aliases never link.
+func (i *ExactIndex) Scan(source Source, label string) []Span {
+	if i == nil {
+		return nil
+	}
 	tokens := lexicalTokens(source.RawText)
 	if len(tokens) == 0 {
 		return nil
 	}
-	type patternRecord struct {
-		words []string
-		ids   map[int]struct{}
-	}
-	patterns := make(map[string]*patternRecord)
-	for _, record := range records {
-		values := append([]string{record.Name}, record.Aliases...)
-		for _, value := range values {
-			key := NormalizeKey(value)
-			if key == "" {
-				continue
-			}
-			pattern := patterns[key]
-			if pattern == nil {
-				pattern = &patternRecord{words: strings.Fields(key), ids: make(map[int]struct{})}
-				patterns[key] = pattern
-			}
-			pattern.ids[record.ID] = struct{}{}
-		}
-	}
-	keys := make([]string, 0, len(patterns))
-	for key := range patterns {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
 
 	var ret []Span
-	seen := make(map[string]struct{})
-	for _, key := range keys {
-		pattern := patterns[key]
-		if len(pattern.ids) != 1 || len(pattern.words) == 0 || len(pattern.words) > len(tokens) {
+	occupied := make([]bool, len(tokens))
+	for _, item := range i.Phrases {
+		ids := i.ByKey[item.Norm]
+		if len(ids) != 1 || len(item.Words) == 0 || len(item.Words) > len(tokens) {
 			continue
 		}
-		id := 0
-		for candidateID := range pattern.ids {
-			id = candidateID
-		}
-		for start := 0; start+len(pattern.words) <= len(tokens); start++ {
+		for start := 0; start+len(item.Words) <= len(tokens); start++ {
 			matches := true
-			for offset, word := range pattern.words {
-				if tokens[start+offset].key != word {
+			for offset, word := range item.Words {
+				if occupied[start+offset] || tokens[start+offset].key != word {
 					matches = false
 					break
 				}
@@ -100,26 +128,29 @@ func FindExactNamedSpans(source Source, records []NamedAliases, label string) []
 			if !matches {
 				continue
 			}
-			end := start + len(pattern.words) - 1
-			dedupeKey := key + "\x00" + strconv.Itoa(id) + "\x00" + strconv.Itoa(tokens[start].byteStart)
-			if _, duplicate := seen[dedupeKey]; duplicate {
-				continue
+			end := start + len(item.Words) - 1
+			for tokenIndex := start; tokenIndex <= end; tokenIndex++ {
+				occupied[tokenIndex] = true
 			}
-			seen[dedupeKey] = struct{}{}
-			entityID := id
+			entityID := item.ID
 			ret = append(ret, Span{
 				Source: source, ByteStart: tokens[start].byteStart, ByteEnd: tokens[end].byteEnd,
 				RuneStart: tokens[start].runeStart, RuneEnd: tokens[end].runeEnd,
-				Text: source.RawText[tokens[start].byteStart:tokens[end].byteEnd], NormalizedKey: key,
+				Text: source.RawText[tokens[start].byteStart:tokens[end].byteEnd], NormalizedKey: item.Norm,
 				Label: label, Score: 1, Kind: EvidenceExactLibraryMatch, EntityID: &entityID,
 			})
 		}
 	}
-	sort.SliceStable(ret, func(i, j int) bool {
-		if ret[i].ByteStart != ret[j].ByteStart {
-			return ret[i].ByteStart < ret[j].ByteStart
+	sort.SliceStable(ret, func(left, right int) bool {
+		if ret[left].ByteStart != ret[right].ByteStart {
+			return ret[left].ByteStart < ret[right].ByteStart
 		}
-		return ret[i].ByteEnd > ret[j].ByteEnd
+		return ret[left].ByteEnd > ret[right].ByteEnd
 	})
 	return ret
+}
+
+// FindExactNamedSpans preserves the one-shot API for existing callers.
+func FindExactNamedSpans(source Source, records []NamedAliases, label string) []Span {
+	return BuildExactIndex(records).Scan(source, label)
 }

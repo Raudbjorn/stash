@@ -3,12 +3,11 @@ package manager
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
-	"github.com/stashapp/stash/pkg/performer"
-	"github.com/stashapp/stash/pkg/scene/metadata"
 	"github.com/stashapp/stash/pkg/stashbox"
 )
 
@@ -20,79 +19,98 @@ func lookupStashBoxScenePerformers(ctx context.Context, box models.StashBox, sce
 	return stashbox.NewClient(box).FindScenePerformersByID(ctx, sceneID)
 }
 
-// authoritativeScenePerformerIDs resolves the performer list attached to a
-// scene's existing Stash-box ID. It only returns an authoritative result when
-// every remote performer maps unambiguously to a local performer; partial
-// results must never erase correct local relationships.
-func (j *analyzeSceneMetadataJob) authoritativeScenePerformerIDs(ctx context.Context, scene *models.Scene) ([]int, bool) {
-	if scene == nil || len(scene.StashIDs.List()) == 0 {
-		return nil, false
+type authoritativePerformerResult struct {
+	IDs  []int
+	Mode ProviderFieldMode
+}
+
+// authoritativeScenePerformerIDs evaluates only explicit policies, ordered by
+// priority. Registration and scene relationship order are never authority.
+func (j *analyzeSceneMetadataJob) authoritativeScenePerformerIDs(ctx context.Context, scene *models.Scene) (authoritativePerformerResult, bool) {
+	if scene == nil || len(scene.StashIDs.List()) == 0 || len(j.input.ProviderPolicies) == 0 {
+		return authoritativePerformerResult{}, false
 	}
 
 	boxes := make(map[string]models.StashBox, len(j.configuredStashBoxes))
 	for _, box := range j.configuredStashBoxes {
-		if box == nil {
-			continue
+		if box != nil {
+			boxes[normalizeStashBoxEndpoint(box.Endpoint)] = *box
 		}
-		boxes[normalizeStashBoxEndpoint(box.Endpoint)] = *box
 	}
+	sceneIDs := make(map[string]string, len(scene.StashIDs.List()))
+	for _, sceneID := range scene.StashIDs.List() {
+		if strings.TrimSpace(sceneID.StashID) != "" {
+			sceneIDs[normalizeStashBoxEndpoint(sceneID.Endpoint)] = strings.TrimSpace(sceneID.StashID)
+		}
+	}
+	policies := append([]ProviderPolicy(nil), j.input.ProviderPolicies...)
+	sort.SliceStable(policies, func(left, right int) bool {
+		return policies[left].Priority < policies[right].Priority
+	})
 	lookup := j.scenePerformerLookup
 	if lookup == nil {
 		lookup = lookupStashBoxScenePerformers
 	}
 
-	for _, sceneStashID := range scene.StashIDs.List() {
-		box, found := boxes[normalizeStashBoxEndpoint(sceneStashID.Endpoint)]
-		if !found || strings.TrimSpace(sceneStashID.StashID) == "" {
+	for _, policy := range policies {
+		if policy.PerformerMode != ProviderFieldModeMerge &&
+			policy.PerformerMode != ProviderFieldModeReplace {
 			continue
 		}
-
-		remote, err := lookup(ctx, box, sceneStashID.StashID)
+		if policy.PerformerMode == ProviderFieldModeReplace && !j.input.ReplaceLocalPerformersFromRemote {
+			continue
+		}
+		endpoint := normalizeStashBoxEndpoint(policy.Endpoint)
+		box, configured := boxes[endpoint]
+		sceneID, exactSceneID := sceneIDs[endpoint]
+		if !configured || !exactSceneID {
+			continue
+		}
+		remote, err := lookup(ctx, box, sceneID)
 		if err != nil {
 			if ctx.Err() != nil {
-				return nil, false
+				return authoritativePerformerResult{}, false
 			}
-			logger.Warnf("[scene metadata] scene %d: authoritative performer lookup failed for %s: %v", scene.ID, box.Endpoint, err)
+			logger.Warnf("[scene metadata] scene %d: performer policy lookup failed for %s: %v", scene.ID, box.Endpoint, err)
 			continue
 		}
 		if len(remote) == 0 {
 			continue
 		}
-
 		ids, complete := j.matchAuthoritativePerformers(ctx, box.Endpoint, remote)
 		if complete {
-			return ids, true
+			return authoritativePerformerResult{IDs: ids, Mode: policy.PerformerMode}, true
 		}
-		logger.Warnf("[scene metadata] scene %d: authoritative performer list from %s could not be mapped completely; preserving current performers", scene.ID, box.Endpoint)
+		logger.Warnf("[scene metadata] scene %d: performer policy result from %s could not be mapped completely; preserving current performers", scene.ID, box.Endpoint)
 	}
+	return authoritativePerformerResult{}, false
+}
 
-	return nil, false
+func (j *analyzeSceneMetadataJob) providerPolicy(endpoint string) (ProviderPolicy, bool) {
+	normalized := normalizeStashBoxEndpoint(endpoint)
+	policies := append([]ProviderPolicy(nil), j.input.ProviderPolicies...)
+	sort.SliceStable(policies, func(left, right int) bool {
+		return policies[left].Priority < policies[right].Priority
+	})
+	for _, policy := range policies {
+		if normalizeStashBoxEndpoint(policy.Endpoint) == normalized {
+			return policy, true
+		}
+	}
+	return ProviderPolicy{}, false
 }
 
 func (j *analyzeSceneMetadataJob) matchAuthoritativePerformers(ctx context.Context, endpoint string, remote []*models.ScrapedPerformer) ([]int, bool) {
 	ids := make([]int, 0, len(remote))
 	seen := make(map[int]struct{}, len(remote))
-	var created []*models.Performer
-
-	err := j.repository.WithTxn(ctx, func(ctx context.Context) error {
+	err := j.repository.WithReadTxn(ctx, func(ctx context.Context) error {
 		for _, scraped := range remote {
 			id, found, err := j.matchAuthoritativePerformer(ctx, endpoint, scraped)
 			if err != nil {
 				return err
 			}
 			if !found {
-				if j.input.DryRun || scraped == nil || scraped.Name == nil || strings.TrimSpace(*scraped.Name) == "" {
-					return errAuthoritativePerformerNotFound
-				}
-				newPerformer := scraped.ToPerformer(endpoint, nil)
-				if err := performer.ValidateCreate(ctx, *newPerformer, j.repository.Performer); err != nil {
-					return err
-				}
-				if err := j.repository.Performer.Create(ctx, &models.CreatePerformerInput{Performer: newPerformer}); err != nil {
-					return err
-				}
-				created = append(created, newPerformer)
-				id = newPerformer.ID
+				return errAuthoritativePerformerNotFound
 			}
 			if _, duplicate := seen[id]; duplicate {
 				continue
@@ -102,16 +120,7 @@ func (j *analyzeSceneMetadataJob) matchAuthoritativePerformers(ctx context.Conte
 		}
 		return nil
 	})
-	if err != nil || len(ids) == 0 {
-		return ids, false
-	}
-	for _, p := range created {
-		j.performerRecords = append(j.performerRecords, metadata.NamedAliases{
-			ID: p.ID, Name: p.Name,
-		})
-		logger.Infof("[scene metadata] created authoritative performer %q from %s", p.Name, endpoint)
-	}
-	return ids, true
+	return ids, err == nil && len(ids) > 0
 }
 
 func (j *analyzeSceneMetadataJob) matchAuthoritativePerformer(ctx context.Context, endpoint string, scraped *models.ScrapedPerformer) (int, bool, error) {

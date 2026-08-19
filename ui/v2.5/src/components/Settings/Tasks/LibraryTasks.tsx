@@ -13,6 +13,7 @@ import {
   mutateSceneMetadataModelInstall,
   mutateSceneMetadataModelReload,
   mutateSceneMetadataModelUninstall,
+  mutateSceneMetadataModelRepair,
   useSceneMetadataModelAssignments,
   useSceneMetadataModels,
   useSceneMetadataModelStatus,
@@ -55,6 +56,8 @@ interface IAnalyzeSceneMetadataTaskDefaults {
   studioVerifierScraperIDs: string[];
   studioVerifierStashBoxEndpoints: string[];
   useLocalAIStudioProviderSelection: boolean;
+  providerPolicies: GQL.SceneMetadataProviderPolicyInput[];
+  replaceLocalPerformersFromRemote: boolean;
 }
 
 interface IAutoTagOptions {
@@ -141,16 +144,6 @@ const SceneMetadataModelsPanel: React.FC = () => {
       label:
         "config.tasks.analyze_scene_metadata.model.assign_entity_extraction",
     },
-    {
-      role: GQL.SceneMetadataModelRole.PerformerContext,
-      label:
-        "config.tasks.analyze_scene_metadata.model.assign_performer_context",
-    },
-    {
-      role: GQL.SceneMetadataModelRole.StudioProviderSelection,
-      label:
-        "config.tasks.analyze_scene_metadata.model.assign_studio_provider_selection",
-    },
   ];
 
   async function install(modelKey: string) {
@@ -182,6 +175,18 @@ const SceneMetadataModelsPanel: React.FC = () => {
     setBusyKey(modelKey);
     try {
       await mutateSceneMetadataModelUninstall(modelKey);
+      await Promise.all([refetchModels(), refetchStatus()]);
+    } catch (error) {
+      Toast.error(error);
+    } finally {
+      setBusyKey(undefined);
+    }
+  }
+
+  async function repair(modelKey: string) {
+    setBusyKey(modelKey);
+    try {
+      await mutateSceneMetadataModelRepair(modelKey);
       await Promise.all([refetchModels(), refetchStatus()]);
     } catch (error) {
       Toast.error(error);
@@ -271,7 +276,7 @@ const SceneMetadataModelsPanel: React.FC = () => {
 
       <div className="mb-4">
         {models.map((model) => {
-          const active = status?.activeKey === model.key;
+          const active = model.active;
           const assigned = assignedKeys.has(model.key);
           return (
             <div
@@ -301,14 +306,22 @@ const SceneMetadataModelsPanel: React.FC = () => {
               </div>
               <div className="d-flex align-items-center mb-1">
                 <Badge
-                  variant={model.installed ? "success" : "secondary"}
+                  variant={
+                    model.installed
+                      ? "success"
+                      : model.present && !model.validated
+                        ? "warning"
+                        : "secondary"
+                  }
                   className="mr-2"
                 >
                   <FormattedMessage
                     id={
                       model.installed
                         ? "config.tasks.analyze_scene_metadata.model.installed"
-                        : "config.tasks.analyze_scene_metadata.model.not_installed"
+                        : model.present && !model.validated
+                          ? "config.tasks.analyze_scene_metadata.model.present_not_validated"
+                          : "config.tasks.analyze_scene_metadata.model.not_installed"
                     }
                   />
                 </Badge>
@@ -317,7 +330,17 @@ const SceneMetadataModelsPanel: React.FC = () => {
                     <FormattedMessage id="config.tasks.analyze_scene_metadata.model.active" />
                   </Badge>
                 ) : null}
-                {!model.installed ? (
+                {model.present && !model.validated ? (
+                  <Button
+                    variant="warning"
+                    size="sm"
+                    type="button"
+                    disabled={busyKey !== undefined}
+                    onClick={() => repair(model.key)}
+                  >
+                    <FormattedMessage id="config.tasks.analyze_scene_metadata.model.repair" />
+                  </Button>
+                ) : !model.present ? (
                   <Button
                     variant="secondary"
                     size="sm"
@@ -332,7 +355,7 @@ const SceneMetadataModelsPanel: React.FC = () => {
                       values={{ model: model.key }}
                     />
                   </Button>
-                ) : !assigned ? (
+                ) : model.validated && !assigned ? (
                   <Button
                     variant="danger"
                     size="sm"
@@ -353,7 +376,7 @@ const SceneMetadataModelsPanel: React.FC = () => {
         {roleRows.map(({ role, label }) => {
           const assignment = assignments.find((item) => item.role === role);
           const assignableModels = models.filter(
-            (model) => model.installed || model.key === assignment?.modelKey
+            (model) => model.validated || model.key === assignment?.modelKey
           );
           return (
             <Form.Group controlId={`scene-metadata-model-${role}`} key={role}>
@@ -376,9 +399,9 @@ const SceneMetadataModelsPanel: React.FC = () => {
                   <option
                     value={model.key}
                     key={model.key}
-                    disabled={!model.installed}
+                    disabled={!model.validated}
                   >
-                    {model.installed
+                    {model.validated
                       ? model.displayName
                       : intl.formatMessage(
                           {
@@ -395,9 +418,11 @@ const SceneMetadataModelsPanel: React.FC = () => {
         <div className="text-muted small">
           <FormattedMessage id="config.tasks.analyze_scene_metadata.model.assign_requires_install_hint" />
         </div>
-        <div className="text-muted small">
-          <FormattedMessage id="config.tasks.analyze_scene_metadata.model.reserved_role_hint" />
-        </div>
+        {roleRows.length > 1 ? (
+          <div className="text-muted small">
+            <FormattedMessage id="config.tasks.analyze_scene_metadata.model.reserved_role_hint" />
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -478,6 +503,8 @@ export const LibraryTasks: React.FC = () => {
       studioVerifierScraperIDs: [],
       studioVerifierStashBoxEndpoints: [],
       useLocalAIStudioProviderSelection: false,
+      providerPolicies: [],
+      replaceLocalPerformersFromRemote: false,
     });
   const [
     analyzeSceneMetadataOptionsInitialized,
@@ -575,6 +602,8 @@ export const LibraryTasks: React.FC = () => {
       loading ||
       performerScrapersLoading ||
       performerScrapersError ||
+      studioScrapersLoading ||
+      studioScrapersError ||
       analyzeSceneMetadataOptionsInitialized
     ) {
       return;
@@ -609,6 +638,25 @@ export const LibraryTasks: React.FC = () => {
     const reconciledStudioIDs = requestedStudioIDs.filter((id) =>
       availableStudioIDs.has(id)
     );
+    const requestedProviderPolicies = persisted?.providerPolicies ?? [];
+    const requestedPolicyEndpoints = new Set(
+      requestedProviderPolicies.map((policy) => policy.endpoint)
+    );
+    const reconciledProviderPolicies = [
+      ...requestedProviderPolicies.filter((policy) =>
+        availableStashBoxEndpoints.has(policy.endpoint)
+      ),
+      ...stashBoxVerifierOptions
+        .filter((option) => !requestedPolicyEndpoints.has(option.value))
+        .map((option) => ({
+          endpoint: option.value,
+          priority: 0,
+          performerMode: GQL.SceneMetadataProviderFieldMode.Observe,
+          studioMode: GQL.SceneMetadataProviderFieldMode.Observe,
+          dateMode: GQL.SceneMetadataProviderFieldMode.Observe,
+          titleMode: GQL.SceneMetadataProviderFieldMode.Observe,
+        })),
+    ].map((policy, priority) => ({ ...policy, priority }));
     const nextOptions: IAnalyzeSceneMetadataTaskDefaults = {
       dryRun: persisted?.dryRun ?? true,
       performerVerifierScraperIDs: reconciledIDs,
@@ -624,6 +672,9 @@ export const LibraryTasks: React.FC = () => {
       studioVerifierStashBoxEndpoints: reconciledStudioStashBoxEndpoints,
       useLocalAIStudioProviderSelection:
         persisted?.useLocalAIStudioProviderSelection ?? false,
+      providerPolicies: reconciledProviderPolicies,
+      replaceLocalPerformersFromRemote:
+        persisted?.replaceLocalPerformersFromRemote ?? false,
     };
 
     setAnalyzeSceneMetadataOptions(nextOptions);
@@ -641,7 +692,9 @@ export const LibraryTasks: React.FC = () => {
         requestedStashBoxEndpoints.length ||
       reconciledStudioIDs.length !== requestedStudioIDs.length ||
       reconciledStudioStashBoxEndpoints.length !==
-        requestedStudioStashBoxEndpoints.length
+        requestedStudioStashBoxEndpoints.length ||
+      JSON.stringify(reconciledProviderPolicies) !==
+        JSON.stringify(requestedProviderPolicies)
     ) {
       saveUI({
         taskDefaults: {
@@ -689,6 +742,42 @@ export const LibraryTasks: React.FC = () => {
     const nextOptions = { ...analyzeSceneMetadataOptions, ...partial };
     configureDefaults({ analyzeSceneMetadata: nextOptions });
     setAnalyzeSceneMetadataOptions(nextOptions);
+  }
+
+  function updateProviderPolicy(
+    endpoint: string,
+    partial: Partial<GQL.SceneMetadataProviderPolicyInput>
+  ) {
+    onSetAnalyzeSceneMetadataOptions({
+      providerPolicies: analyzeSceneMetadataOptions.providerPolicies.map(
+        (policy) =>
+          policy.endpoint === endpoint ? { ...policy, ...partial } : policy
+      ),
+    });
+  }
+
+  function moveProviderPolicy(sourceEndpoint: string, targetEndpoint: string) {
+    if (!sourceEndpoint || sourceEndpoint === targetEndpoint) {
+      return;
+    }
+    const policies = [...analyzeSceneMetadataOptions.providerPolicies];
+    const sourceIndex = policies.findIndex(
+      (policy) => policy.endpoint === sourceEndpoint
+    );
+    const targetIndex = policies.findIndex(
+      (policy) => policy.endpoint === targetEndpoint
+    );
+    if (sourceIndex < 0 || targetIndex < 0) {
+      return;
+    }
+    const [source] = policies.splice(sourceIndex, 1);
+    policies.splice(targetIndex, 0, source);
+    onSetAnalyzeSceneMetadataOptions({
+      providerPolicies: policies.map((policy, priority) => ({
+        ...policy,
+        priority,
+      })),
+    });
   }
 
   function setDialogOpen(s: Partial<DialogOpenState>) {
@@ -1104,6 +1193,9 @@ export const LibraryTasks: React.FC = () => {
                   })
                 }
               />
+              <Form.Text className="text-muted">
+                <FormattedMessage id="config.tasks.analyze_scene_metadata.performer_confidence.note" />
+              </Form.Text>
             </Form.Group>
             <Form.Group
               className="col-md-6"
@@ -1186,6 +1278,115 @@ export const LibraryTasks: React.FC = () => {
               <FormattedMessage id="config.tasks.analyze_scene_metadata.studio_verifier_stash_boxes.help" />
             </Form.Text>
           </Form.Group>
+          <Form.Group controlId="analyze-scene-metadata-provider-policies">
+            <Form.Label>
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.provider_policies.label" />
+            </Form.Label>
+            <Form.Text className="text-muted d-block mb-2">
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.provider_policies.help" />
+            </Form.Text>
+            {analyzeSceneMetadataOptions.providerPolicies.map((policy) => (
+              <div
+                key={policy.endpoint}
+                className="border rounded p-2 mb-2"
+                draggable
+                onDragStart={(event) =>
+                  event.dataTransfer.setData("text/plain", policy.endpoint)
+                }
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  moveProviderPolicy(
+                    event.dataTransfer.getData("text/plain"),
+                    policy.endpoint
+                  );
+                }}
+              >
+                <div className="font-weight-bold mb-2">
+                  {stashBoxVerifierOptions.find(
+                    (option) => option.value === policy.endpoint
+                  )?.label ?? policy.endpoint}
+                </div>
+                <div className="row">
+                  {(
+                    [
+                      [
+                        "performerMode",
+                        "config.tasks.analyze_scene_metadata.provider_policies.performers",
+                      ],
+                      [
+                        "studioMode",
+                        "config.tasks.analyze_scene_metadata.provider_policies.studio",
+                      ],
+                      [
+                        "dateMode",
+                        "config.tasks.analyze_scene_metadata.provider_policies.date",
+                      ],
+                      [
+                        "titleMode",
+                        "config.tasks.analyze_scene_metadata.provider_policies.title",
+                      ],
+                    ] as const
+                  ).map(([field, label]) => (
+                    <Form.Group className="col-sm-6 col-lg-3 mb-1" key={field}>
+                      <Form.Label className="small mb-1">
+                        <FormattedMessage id={label} />
+                      </Form.Label>
+                      <Form.Control
+                        as="select"
+                        size="sm"
+                        value={policy[field]}
+                        onChange={(event) =>
+                          updateProviderPolicy(policy.endpoint, {
+                            [field]: event.currentTarget
+                              .value as GQL.SceneMetadataProviderFieldMode,
+                          })
+                        }
+                      >
+                        <option
+                          value={GQL.SceneMetadataProviderFieldMode.Observe}
+                        >
+                          {intl.formatMessage({
+                            id: "config.tasks.analyze_scene_metadata.provider_policies.observe",
+                          })}
+                        </option>
+                        <option
+                          value={GQL.SceneMetadataProviderFieldMode.Merge}
+                        >
+                          {intl.formatMessage({
+                            id: "config.tasks.analyze_scene_metadata.provider_policies.merge",
+                          })}
+                        </option>
+                        <option
+                          value={GQL.SceneMetadataProviderFieldMode.Replace}
+                        >
+                          {intl.formatMessage({
+                            id: "config.tasks.analyze_scene_metadata.provider_policies.replace",
+                          })}
+                        </option>
+                      </Form.Control>
+                    </Form.Group>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </Form.Group>
+          <Form.Check
+            id="analyze-scene-metadata-replace-local-performers"
+            checked={
+              analyzeSceneMetadataOptions.replaceLocalPerformersFromRemote
+            }
+            label={intl.formatMessage({
+              id: "config.tasks.analyze_scene_metadata.provider_policies.replace_performers",
+            })}
+            onChange={() =>
+              onSetAnalyzeSceneMetadataOptions({
+                replaceLocalPerformersFromRemote:
+                  !analyzeSceneMetadataOptions.replaceLocalPerformersFromRemote,
+              })
+            }
+            className="mb-2"
+          />
           <Form.Check
             id="analyze-scene-metadata-use-local-ai-studio-provider"
             checked={

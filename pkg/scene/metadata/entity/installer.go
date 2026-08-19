@@ -39,6 +39,25 @@ type Installer struct {
 	ValidateModel func(modelPath string) error
 }
 
+// ValidateModelSignature verifies the pinned bundle bytes and, when configured,
+// the runtime-visible ONNX graph interface.
+func (i Installer) ValidateModelSignature(cachePath, key string) error {
+	spec, ok := FindModel(key)
+	if !ok {
+		return fmt.Errorf("unknown scene metadata model key %q", key)
+	}
+	if err := cachedValidateBundle(BundlePath(cachePath, key), spec); err != nil {
+		return err
+	}
+	if i.ValidateModel == nil {
+		return nil
+	}
+	if err := i.ValidateModel(ModelPath(cachePath, key)); err != nil {
+		return fmt.Errorf("validate ONNX model: %w", err)
+	}
+	return nil
+}
+
 func (i Installer) Install(ctx context.Context, cachePath, key string, progress InstallProgress) (err error) {
 	spec, ok := FindModel(key)
 	if !ok {

@@ -94,6 +94,23 @@ func (t *SceneIdentifier) Identify(ctx context.Context, scene *models.Scene) err
 	return nil
 }
 
+// IdentifyCandidate runs the configured identification sources without
+// modifying the local scene. It is the planner-safe counterpart to Identify.
+func (t *SceneIdentifier) IdentifyCandidate(ctx context.Context, scene *models.Scene) (*models.ScrapedScene, string, error) {
+	result, err := t.scrapeScene(ctx, scene)
+	if err != nil {
+		return nil, "", err
+	}
+	if result == nil {
+		return nil, "", nil
+	}
+	provenance := result.source.RemoteSite
+	if provenance == "" {
+		provenance = result.source.Name
+	}
+	return result.result, provenance, nil
+}
+
 type scrapeResult struct {
 	result *models.ScrapedScene
 	source ScraperSource

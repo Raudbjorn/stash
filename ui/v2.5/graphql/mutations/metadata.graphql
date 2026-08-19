@@ -41,6 +41,10 @@ mutation SceneMetadataModelUninstall($modelKey: ID!) {
   sceneMetadataModelUninstall(modelKey: $modelKey)
 }
 
+mutation SceneMetadataModelRepair($key: String!) {
+  sceneMetadataModelRepair(key: $key)
+}
+
 mutation SceneMetadataModelAssign(
   $role: SceneMetadataModelRole!
   $modelKey: ID

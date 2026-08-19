@@ -3029,9 +3029,7 @@ export const mutateUninstallPythonPackages = (names: string[]) =>
     variables: { names },
   });
 
-export const mutateConfigurePythonIndexes = (
-  indexes: GQL.PythonIndexInput[]
-) =>
+export const mutateConfigurePythonIndexes = (indexes: GQL.PythonIndexInput[]) =>
   client.mutate<
     GQL.ConfigurePythonIndexesMutation,
     GQL.ConfigurePythonIndexesMutationVariables
@@ -3202,6 +3200,12 @@ export const mutateSceneMetadataModelUninstall = (modelKey: string) =>
   client.mutate<GQL.SceneMetadataModelUninstallMutation>({
     mutation: GQL.SceneMetadataModelUninstallDocument,
     variables: { modelKey },
+  });
+
+export const mutateSceneMetadataModelRepair = (key: string) =>
+  client.mutate<GQL.SceneMetadataModelRepairMutation>({
+    mutation: GQL.SceneMetadataModelRepairDocument,
+    variables: { key },
   });
 
 export const mutateSceneMetadataModelAssign = (

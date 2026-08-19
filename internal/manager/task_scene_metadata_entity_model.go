@@ -86,6 +86,9 @@ type SceneMetadataModel struct {
 	License     string
 	LicenseURL  string
 	Installed   bool
+	Present     bool
+	Validated   bool
+	Active      bool
 	LastError   *string
 }
 
@@ -104,24 +107,35 @@ type SceneMetadataModelStatus struct {
 
 func (s *Manager) SceneMetadataModels() []SceneMetadataModel {
 	cachePath := s.Config.GetCachePath()
+	activeKey := s.Config.GetSceneMetadataEntityModelAssignments()[entity.RoleEntityExtraction]
+	installer := entity.Installer{}
+	if libraryPath, ok := findOnnxRuntimeLibrary(); ok {
+		installer.ValidateModel = func(modelPath string) error {
+			return entity.ValidateModelSignature(libraryPath, modelPath)
+		}
+	}
 	result := make([]SceneMetadataModel, 0, len(entity.Catalog))
 	for _, spec := range entity.Catalog {
+		state, validationErr := entity.InspectModelState(cachePath, spec.Key, activeKey, installer)
 		status := entity.Status(cachePath, spec.Key)
-		_, statErr := os.Stat(entity.BundlePath(cachePath, spec.Key))
-		installed := statErr == nil
 		lastError := status.LastError
+		if validationErr != nil {
+			lastError = validationErr.Error()
+		}
 		if runtimeError := sceneMetadataEntityRuntimeError(spec.Key); runtimeError != "" {
 			lastError = runtimeError
 		}
 		var lastErrorPointer *string
-		if lastError != "" && (status.State != entity.ModelMissing || installed) {
+		if lastError != "" && (status.State != entity.ModelMissing || state.Present) {
 			lastErrorPointer = &lastError
 		}
 		result = append(result, SceneMetadataModel{
 			Key: spec.Key, DisplayName: spec.Display, Family: spec.Family,
 			Precision: spec.Precision, Size: int(spec.ApproxSize),
 			License: spec.License, LicenseURL: spec.LicenseURL,
-			Installed: installed, LastError: lastErrorPointer,
+			Installed: state.Present && state.Validated && state.Active,
+			Present:   state.Present, Validated: state.Validated, Active: state.Active,
+			LastError: lastErrorPointer,
 		})
 	}
 	return result
@@ -197,6 +211,39 @@ func (s *Manager) SceneMetadataModelUninstall(modelKey string) error {
 		return fmt.Errorf("remove scene metadata model %q: %w", modelKey, err)
 	}
 	return nil
+}
+
+// SceneMetadataModelRepair removes a present bundle only when validation
+// proves it is unusable. A valid bundle is never deleted.
+func (s *Manager) SceneMetadataModelRepair(modelKey string) (bool, error) {
+	if _, ok := entity.FindModel(modelKey); !ok {
+		return false, fmt.Errorf("unknown scene metadata model key %q", modelKey)
+	}
+	sceneMetadataEntitySwapMu.Lock()
+	defer sceneMetadataEntitySwapMu.Unlock()
+	unlock := sceneMetadataEntityInstallMu.lock(modelKey)
+	defer unlock()
+
+	installer := entity.Installer{}
+	if libraryPath, ok := findOnnxRuntimeLibrary(); ok {
+		installer.ValidateModel = func(modelPath string) error {
+			return entity.ValidateModelSignature(libraryPath, modelPath)
+		}
+	}
+	state, validationErr := entity.InspectModelState(
+		s.Config.GetCachePath(),
+		modelKey,
+		s.Config.GetSceneMetadataEntityModelAssignments()[entity.RoleEntityExtraction],
+		installer,
+	)
+	if !state.Present || validationErr == nil {
+		return false, nil
+	}
+	unloadSceneMetadataEntityExtractor(modelKey)
+	if err := os.RemoveAll(entity.BundlePath(s.Config.GetCachePath(), modelKey)); err != nil {
+		return false, fmt.Errorf("repair scene metadata model %q: %w", modelKey, err)
+	}
+	return true, nil
 }
 
 // lockSceneMetadataModelKeys takes the install lock for every distinct key in
