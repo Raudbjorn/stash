@@ -3,8 +3,10 @@ package recommend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -13,8 +15,8 @@ import (
 )
 
 func TestVoyageSegmentIndexBuildsThreeFixedSegments(t *testing.T) {
-	index, calls := newTestVoyageSegmentIndex(t)
-	segments, err := index.Build(context.Background(), 42, "missing.mp4", "transcript", 90)
+	index, calls, videoPath := newTestVoyageSegmentIndex(t)
+	segments, err := index.Build(context.Background(), 42, videoPath, "transcript", 90)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,20 +30,25 @@ func TestVoyageSegmentIndexBuildsThreeFixedSegments(t *testing.T) {
 	}
 }
 
-func TestVoyageSegmentIndexCacheUsesExactEmbeddingInput(t *testing.T) {
-	index, calls := newTestVoyageSegmentIndex(t)
-	if _, err := index.Build(context.Background(), 42, "missing.mp4", "transcript", 90); err != nil {
+func TestVoyageSegmentIndexCacheUsesSourceFingerprint(t *testing.T) {
+	index, calls, videoPath := newTestVoyageSegmentIndex(t)
+	if _, err := index.Build(context.Background(), 42, videoPath, "transcript", 90); err != nil {
 		t.Fatal(err)
 	}
 	firstCalls := calls.Load()
-	if _, err := index.Build(context.Background(), 42, "missing.mp4", "transcript", 90); err != nil {
+	extractVideo := index.ExtractVideo
+	index.ExtractVideo = func(context.Context, string, float64, float64) ([]byte, error) {
+		return nil, errors.New("cached build extracted video")
+	}
+	if _, err := index.Build(context.Background(), 42, videoPath, "transcript", 90); err != nil {
 		t.Fatal(err)
 	}
 	if calls.Load() != firstCalls {
 		t.Fatalf("unchanged input made %d calls, want %d", calls.Load(), firstCalls)
 	}
 
-	if _, err := index.Build(context.Background(), 42, "missing.mp4", "different transcript", 90); err != nil {
+	index.ExtractVideo = extractVideo
+	if _, err := index.Build(context.Background(), 42, videoPath, "different transcript", 90); err != nil {
 		t.Fatal(err)
 	}
 	afterTranscript := calls.Load()
@@ -49,10 +56,13 @@ func TestVoyageSegmentIndexCacheUsesExactEmbeddingInput(t *testing.T) {
 		t.Fatalf("changed transcript made %d calls, want %d", afterTranscript, firstCalls+3)
 	}
 
+	if err := os.WriteFile(videoPath, []byte("changed source metadata"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	index.ExtractVideo = func(context.Context, string, float64, float64) ([]byte, error) {
 		return []byte("different mp4"), nil
 	}
-	if _, err := index.Build(context.Background(), 42, "missing.mp4", "different transcript", 90); err != nil {
+	if _, err := index.Build(context.Background(), 42, videoPath, "different transcript", 90); err != nil {
 		t.Fatal(err)
 	}
 	if calls.Load() != afterTranscript+3 {
@@ -60,13 +70,19 @@ func TestVoyageSegmentIndexCacheUsesExactEmbeddingInput(t *testing.T) {
 	}
 }
 
-func newTestVoyageSegmentIndex(t *testing.T) (*VoyageSegmentIndex, *atomic.Int32) {
+func newTestVoyageSegmentIndex(t *testing.T) (*VoyageSegmentIndex, *atomic.Int32, string) {
 	t.Helper()
-	db, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "ai.db"))
+	tempDir := t.TempDir()
+	db, err := store.Open(context.Background(), filepath.Join(tempDir, "ai.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+
+	videoPath := filepath.Join(tempDir, "scene.mp4")
+	if err := os.WriteFile(videoPath, []byte("source metadata"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -97,11 +113,12 @@ func newTestVoyageSegmentIndex(t *testing.T) (*VoyageSegmentIndex, *atomic.Int32
 	}))
 	t.Cleanup(server.Close)
 
-	return &VoyageSegmentIndex{
+	index := &VoyageSegmentIndex{
 		APIKey: "secret", Model: "voyage-multimodal-3.5", Endpoint: server.URL,
 		SegmentSecs: 30, DB: db, Client: server.Client(), FFmpegPath: "ffmpeg-not-installed-for-test",
 		ExtractVideo: func(context.Context, string, float64, float64) ([]byte, error) {
 			return []byte("mp4"), nil
 		},
-	}, &calls
+	}
+	return index, &calls, videoPath
 }
