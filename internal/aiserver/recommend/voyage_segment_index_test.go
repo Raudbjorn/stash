@@ -70,6 +70,44 @@ func TestVoyageSegmentIndexCacheUsesSourceFingerprint(t *testing.T) {
 	}
 }
 
+func TestVoyageSegmentIndexShortenedDurationUsesFastPath(t *testing.T) {
+	index, calls, videoPath := newTestVoyageSegmentIndex(t)
+	ctx := context.Background()
+	if _, err := index.Build(ctx, 42, videoPath, "transcript", 90); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := index.Build(ctx, 42, videoPath, "transcript", 60); err != nil {
+		t.Fatal(err)
+	}
+	afterShortening := calls.Load()
+	if afterShortening != 5 {
+		t.Fatalf("shortened build made %d calls, want 5", afterShortening)
+	}
+
+	sourceFingerprint, err := index.sourceFingerprint(videoPath, "transcript", 60)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := index.DB.GetEmbeddingSegments(ctx, voyageSegmentService, 42, index.cacheModel())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if segments, ok := cachedVoyageSegments(42, stored, sourceFingerprint, 60); !ok || len(segments) != 2 {
+		t.Fatal("complete shortened cache remains ineligible for the fast path")
+	}
+
+	index.ExtractVideo = func(context.Context, string, float64, float64) ([]byte, error) {
+		return nil, errors.New("shortened cache extracted video")
+	}
+	segments, err := index.Build(ctx, 42, videoPath, "transcript", 60)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(segments) != 2 || calls.Load() != afterShortening {
+		t.Fatalf("cached shortened build returned %d segments and %d calls, want 2/%d", len(segments), calls.Load(), afterShortening)
+	}
+}
+
 func newTestVoyageSegmentIndex(t *testing.T) (*VoyageSegmentIndex, *atomic.Int32, string) {
 	t.Helper()
 	tempDir := t.TempDir()

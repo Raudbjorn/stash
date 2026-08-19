@@ -74,7 +74,7 @@ func (v *VoyageSegmentIndex) Build(ctx context.Context, sceneID int, videoPath, 
 	if err != nil {
 		return nil, err
 	}
-	sourceFingerprint, err := v.sourceFingerprint(videoPath, transcript)
+	sourceFingerprint, err := v.sourceFingerprint(videoPath, transcript, duration)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (v *VoyageSegmentIndex) Build(ctx context.Context, sceneID int, videoPath, 
 // sourceFingerprint is deliberately computable from filesystem metadata. A
 // cache hit must not decode the source merely to prove that it is unchanged.
 // The version prefix invalidates content-hash entries written by older builds.
-func (v *VoyageSegmentIndex) sourceFingerprint(videoPath, transcript string) (string, error) {
+func (v *VoyageSegmentIndex) sourceFingerprint(videoPath, transcript string, duration float64) (string, error) {
 	absolutePath, err := filepath.Abs(videoPath)
 	if err != nil {
 		return "", fmt.Errorf("resolve Voyage video source %q: %w", videoPath, err)
@@ -146,6 +146,8 @@ func (v *VoyageSegmentIndex) sourceFingerprint(videoPath, transcript string) (st
 	_, _ = hash.Write([]byte(strconv.FormatInt(info.ModTime().UnixNano(), 10)))
 	_, _ = hash.Write([]byte{0})
 	_, _ = hash.Write([]byte(strconv.FormatFloat(segmentSecs, 'g', -1, 64)))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(strconv.FormatFloat(duration, 'g', -1, 64)))
 	_, _ = hash.Write([]byte{0})
 	_, _ = hash.Write([]byte(strconv.Itoa(len(transcript))))
 	_, _ = hash.Write([]byte{0})
