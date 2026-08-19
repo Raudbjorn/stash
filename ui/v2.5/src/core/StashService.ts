@@ -3211,6 +3211,17 @@ export const mutateRejectSceneMetadataProposalAction = (
     variables: { runId, sceneId, actionIds },
   });
 
+export const mutateSelectSceneMetadataRemoteCandidate = (
+  runId: string,
+  sceneId: string,
+  endpoint: string,
+  remoteId: string
+) =>
+  client.mutate<GQL.SelectSceneMetadataRemoteCandidateMutation>({
+    mutation: GQL.SelectSceneMetadataRemoteCandidateDocument,
+    variables: { runId, sceneId, endpoint, remoteId },
+  });
+
 export const mutateApplySceneMetadataPlan = (
   runId: string,
   sceneIds: string[]

@@ -265,7 +265,7 @@ type Query {
   "Returns the active entity model installation and runtime status."
   sceneMetadataModelStatus: SceneMetadataModelStatus!
   "Returns persisted scene metadata analysis plans."
-  sceneMetadataPlans(sceneIds: [ID!], state: SceneMetadataPlanState): [SceneMetadataAnalysisPlan!]!
+  sceneMetadataPlans(sceneIds: [ID!], state: SceneMetadataPlanState, latestOnly: Boolean! = false): [SceneMetadataAnalysisPlan!]!
 
   # Job status
   jobQueue: [Job!]
@@ -579,6 +579,8 @@ type Mutation {
   acceptSceneMetadataProposalAction(runId: String!, sceneId: ID!, actionIds: [ID!]!): Boolean!
   "Reject reviewable actions from a persisted scene metadata plan."
   rejectSceneMetadataProposalAction(runId: String!, sceneId: ID!, actionIds: [ID!]!): Boolean!
+  "Select a review-deferred remote scene candidate and accept its link action."
+  selectSceneMetadataRemoteCandidate(runId: String!, sceneId: ID!, endpoint: String!, remoteId: String!): Boolean!
   "Atomically apply accepted actions from persisted scene metadata plans."
   applySceneMetadataPlan(runId: String!, sceneIds: [ID!]!): Boolean!
   "Clean metadata. Returns the job ID"

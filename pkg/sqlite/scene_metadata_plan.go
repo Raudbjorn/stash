@@ -105,6 +105,47 @@ func (s *SceneMetadataPlanStore) FindSceneMetadataPlans(ctx context.Context, sce
 	}
 	return result, nil
 }
+func (s *SceneMetadataPlanStore) FindLatestSceneMetadataPlans(ctx context.Context, sceneIDs []int, state *string) ([]models.SceneMetadataPlanRecord, error) {
+	latestRun := dialect.From(sceneMetadataPlansTable).
+		Select(goqu.I("run_id")).
+		Order(goqu.I("created_at").Desc()).
+		Limit(1)
+	if len(sceneIDs) > 0 {
+		latestRun = latestRun.Where(goqu.I("scene_id").In(sceneIDs))
+	}
+	if state != nil {
+		latestRun = latestRun.Where(goqu.I("state").Eq(*state))
+	} else {
+		latestRun = latestRun.Where(
+			goqu.I("state").In("proposed", "accepted"),
+		)
+	}
+	query := dialect.From(sceneMetadataPlansTable).Select(goqu.Star()).
+		Where(goqu.I("run_id").Eq(latestRun)).
+		Order(goqu.I("scene_id").Asc())
+	if len(sceneIDs) > 0 {
+		query = query.Where(goqu.I("scene_id").In(sceneIDs))
+	}
+	if state != nil {
+		query = query.Where(goqu.I("state").Eq(*state))
+	}
+	var result []models.SceneMetadataPlanRecord
+	if err := queryFunc(ctx, query.Prepared(true), false, func(rows *sqlx.Rows) error {
+		var row sceneMetadataPlanRow
+		if err := rows.StructScan(&row); err != nil {
+			return err
+		}
+		result = append(result, models.SceneMetadataPlanRecord{
+			RunID: row.RunID, SceneID: row.SceneID, ProposalJSON: row.ProposalJSON,
+			ModelFingerprint: row.ModelFingerprint, PolicyVersion: row.PolicyVersion,
+			State: row.State, CreatedAt: row.CreatedAt, AppliedAt: row.AppliedAt,
+		})
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
 
 func (s *SceneMetadataPlanStore) FindSceneMetadataPlan(ctx context.Context, runID string, sceneID int) (*models.SceneMetadataPlanRecord, error) {
 	query := dialect.From(sceneMetadataPlansTable).Select(goqu.Star()).Prepared(true).
@@ -146,6 +187,29 @@ func (s *SceneMetadataPlanStore) FindSceneMetadataPlanActions(ctx context.Contex
 	}
 	return result, nil
 }
+func (s *SceneMetadataPlanStore) FindSceneMetadataPlanActionsForRuns(ctx context.Context, runIDs []string, sceneIDs []int) ([]models.SceneMetadataPlanActionRecord, error) {
+	if len(runIDs) == 0 || len(sceneIDs) == 0 {
+		return nil, nil
+	}
+	query := dialect.From(sceneMetadataPlanActionsTable).Select(goqu.Star()).Prepared(true).
+		Where(goqu.I("run_id").In(runIDs), goqu.I("scene_id").In(sceneIDs)).
+		Order(goqu.I("run_id").Asc(), goqu.I("scene_id").Asc(), goqu.I("id").Asc())
+	var result []models.SceneMetadataPlanActionRecord
+	if err := queryFunc(ctx, query, false, func(rows *sqlx.Rows) error {
+		var row sceneMetadataPlanActionRow
+		if err := rows.StructScan(&row); err != nil {
+			return err
+		}
+		result = append(result, models.SceneMetadataPlanActionRecord{
+			ID: row.ID, RunID: row.RunID, SceneID: row.SceneID, Kind: row.Kind,
+			PayloadJSON: row.PayloadJSON, State: row.State, ReasonCodes: row.ReasonCodes,
+		})
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
 
 func (s *SceneMetadataPlanStore) SetSceneMetadataPlanState(ctx context.Context, runID string, sceneID int, state string, appliedAt *time.Time) error {
 	_, err := exec(ctx, dialect.Update(sceneMetadataPlansTable).Prepared(true).
@@ -168,6 +232,22 @@ func (s *SceneMetadataPlanStore) SetSceneMetadataPlanActionStates(ctx context.Co
 	}
 	count, err := result.RowsAffected()
 	return int(count), err
+}
+func (s *SceneMetadataPlanStore) CreateSceneMetadataPlanAction(ctx context.Context, action *models.SceneMetadataPlanActionRecord) error {
+	row := sceneMetadataPlanActionRow{
+		RunID: action.RunID, SceneID: action.SceneID, Kind: action.Kind,
+		PayloadJSON: action.PayloadJSON, State: action.State, ReasonCodes: action.ReasonCodes,
+	}
+	result, err := exec(ctx, dialect.Insert(sceneMetadataPlanActionsTable).Prepared(true).Rows(row))
+	if err != nil {
+		return err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	action.ID = int(id)
+	return nil
 }
 
 var _ models.SceneMetadataPlanReaderWriter = (*SceneMetadataPlanStore)(nil)

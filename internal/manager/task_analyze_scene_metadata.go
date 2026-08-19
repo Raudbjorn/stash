@@ -352,6 +352,7 @@ func (j *analyzeSceneMetadataJob) processScene(ctx context.Context, sc *models.S
 		return fmt.Errorf("loading scene: %w", err)
 	}
 
+	persistedPrimary := newSceneMetadataFileUpdate(primary)
 	fileDirty := false
 	if primary != nil && !primary.MetadataProbed && j.ffprobe != nil {
 		if probed, err := j.ffprobe.NewVideoFileContext(ctx, primary.Path); err == nil {
@@ -656,7 +657,7 @@ func (j *analyzeSceneMetadataJob) processScene(ctx context.Context, sc *models.S
 		LocalCandidates: localCandidates, RemoteCandidates: remoteCandidates,
 		Suggested: suggestions, ReasonCodes: sortedUniqueStrings(reasonCodes),
 		Ambiguity:      ambiguity,
-		StaleSceneHash: staleSceneHash(sc, existingPerformerIDs, existingGroups, sc.StashIDs.List(), primary),
+		StaleSceneHash: staleSceneHashWithPrimary(sc, existingPerformerIDs, existingGroups, sc.StashIDs.List(), persistedPrimary),
 		PolicyVersion:  j.policyVersion, ModelFingerprint: j.modelFingerprint,
 		State: planState, CreatedAt: time.Now().UTC(),
 	}

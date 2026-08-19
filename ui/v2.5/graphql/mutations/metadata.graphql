@@ -108,6 +108,20 @@ mutation RejectSceneMetadataProposalAction(
   )
 }
 
+mutation SelectSceneMetadataRemoteCandidate(
+  $runId: String!
+  $sceneId: ID!
+  $endpoint: String!
+  $remoteId: String!
+) {
+  selectSceneMetadataRemoteCandidate(
+    runId: $runId
+    sceneId: $sceneId
+    endpoint: $endpoint
+    remoteId: $remoteId
+  )
+}
+
 mutation ApplySceneMetadataPlan($runId: String!, $sceneIds: [ID!]!) {
   applySceneMetadataPlan(runId: $runId, sceneIds: $sceneIds)
 }

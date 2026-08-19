@@ -112,9 +112,37 @@ query FindScenesForSelect(
 }
 
 query SceneMetadataPlans($sceneIds: [ID!]) {
-  sceneMetadataPlans(sceneIds: $sceneIds) {
+  sceneMetadataPlans(sceneIds: $sceneIds, latestOnly: true) {
     runID
     sceneID
+    sources {
+      kind
+      label
+      rawText
+      normalized
+    }
+    localCandidates {
+      candidate
+      status
+      performerID
+      matchingIDs
+      scraperIDs
+      reason
+      proposedName
+    }
+    remoteCandidates {
+      endpoint
+      remoteID
+      title
+      provenance
+      score
+      decision
+      contributions {
+        field
+        weight
+        reason
+      }
+    }
     suggested {
       actionID
       kind

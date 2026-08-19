@@ -138,6 +138,21 @@ func (r *mutationResolver) RejectSceneMetadataProposalAction(ctx context.Context
 	}
 	return manager.GetInstance().RejectSceneMetadataProposalActions(ctx, runID, id, actionIDs)
 }
+func (r *mutationResolver) SelectSceneMetadataRemoteCandidate(
+	ctx context.Context,
+	runID string,
+	sceneID string,
+	endpoint string,
+	remoteID string,
+) (bool, error) {
+	id, err := strconv.Atoi(sceneID)
+	if err != nil {
+		return false, fmt.Errorf("invalid scene ID %q: %w", sceneID, err)
+	}
+	return manager.GetInstance().SelectSceneMetadataRemoteCandidate(
+		ctx, runID, id, endpoint, remoteID,
+	)
+}
 
 func (r *mutationResolver) ApplySceneMetadataPlan(ctx context.Context, runID string, sceneIDs []string) (bool, error) {
 	return manager.GetInstance().ApplySceneMetadataPlans(ctx, runID, sceneIDs)

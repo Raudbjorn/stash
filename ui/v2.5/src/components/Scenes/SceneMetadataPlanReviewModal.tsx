@@ -8,6 +8,7 @@ import {
   mutateAcceptSceneMetadataProposalAction,
   mutateApplySceneMetadataPlan,
   mutateRejectSceneMetadataProposalAction,
+  mutateSelectSceneMetadataRemoteCandidate,
   useSceneMetadataPlans,
 } from "src/core/StashService";
 import { useToast } from "src/hooks/Toast";
@@ -106,6 +107,21 @@ function actionSummary(action: Suggestion) {
   }
 }
 
+function remoteActionIdentity(action: Suggestion) {
+  if (action.kind !== "remote_scene_match") return;
+  try {
+    const payload = JSON.parse(action.payloadJSON) as {
+      endpoint?: string;
+      remoteID?: string;
+    };
+    if (payload.endpoint && payload.remoteID) {
+      return `${payload.endpoint}\u0000${payload.remoteID}`;
+    }
+  } catch {
+    return;
+  }
+}
+
 export const SceneMetadataPlanReviewModal: React.FC<
   ISceneMetadataPlanReviewModal
 > = ({ show, sceneIds, onHide }) => {
@@ -152,13 +168,32 @@ export const SceneMetadataPlanReviewModal: React.FC<
     }
   }
 
+  async function selectRemoteCandidate(
+    runID: string,
+    sceneID: string,
+    endpoint: string,
+    remoteID: string
+  ) {
+    const key = `remote:${sceneID}:${endpoint}:${remoteID}`;
+    setBusyKey(key);
+    try {
+      await mutateSelectSceneMetadataRemoteCandidate(
+        runID,
+        sceneID,
+        endpoint,
+        remoteID
+      );
+      await refetch();
+    } catch (mutationError) {
+      Toast.error(mutationError);
+    } finally {
+      setBusyKey(undefined);
+    }
+  }
+
   async function applyRun(runID: string, plans: Plan[]) {
     const acceptedSceneIDs = plans
-      .filter((plan) =>
-        plan.suggested.some(
-          (action) => action.state === GQL.SceneMetadataPlanState.Accepted
-        )
-      )
+      .filter((plan) => plan.state === GQL.SceneMetadataPlanState.Accepted)
       .map((plan) => plan.sceneID);
     if (acceptedSceneIDs.length === 0) return;
     const key = `apply:${runID}`;
@@ -219,11 +254,22 @@ export const SceneMetadataPlanReviewModal: React.FC<
         </Alert>
       ) : null}
       {runs.map(({ runID, plans }) => {
-        const acceptedCount = plans.reduce(
+        const applicablePlans = plans.filter(
+          (plan) => plan.state === GQL.SceneMetadataPlanState.Accepted
+        );
+        const acceptedCount = applicablePlans.reduce(
           (count, plan) =>
             count +
             plan.suggested.filter(
               (action) => action.state === GQL.SceneMetadataPlanState.Accepted
+            ).length,
+          0
+        );
+        const proposedCount = plans.reduce(
+          (count, plan) =>
+            count +
+            plan.suggested.filter(
+              (action) => action.state === GQL.SceneMetadataPlanState.Proposed
             ).length,
           0
         );
@@ -250,7 +296,7 @@ export const SceneMetadataPlanReviewModal: React.FC<
               <Button
                 size="sm"
                 variant="primary"
-                disabled={acceptedCount === 0 || busyKey !== undefined}
+                disabled={applicablePlans.length === 0 || busyKey !== undefined}
                 onClick={() => void applyRun(runID, plans)}
               >
                 {busyKey === `apply:${runID}` ? (
@@ -267,6 +313,15 @@ export const SceneMetadataPlanReviewModal: React.FC<
                 )}
               </Button>
             </header>
+            {proposedCount > 0 ? (
+              <Alert variant="warning" className="m-3 mb-0">
+                {intl.formatMessage({
+                  id: "scene_metadata.review.complete_before_apply",
+                  defaultMessage:
+                    "Accept or reject every proposed change for a scene before applying it.",
+                })}
+              </Alert>
+            ) : null}
             {plans.map((plan) => (
               <div key={plan.sceneID} className="px-3 py-3 border-bottom">
                 <div className="d-flex align-items-center mb-2">
@@ -293,6 +348,139 @@ export const SceneMetadataPlanReviewModal: React.FC<
                     </Badge>
                   ) : null}
                 </div>
+                {plan.remoteCandidates.some(
+                  (candidate) => candidate.decision === "review"
+                ) ? (
+                  <div className="border rounded mb-3">
+                    <div className="font-weight-bold bg-light border-bottom px-2 py-2">
+                      {intl.formatMessage({
+                        id: "scene_metadata.review.remote_candidates",
+                        defaultMessage: "Remote scene candidates",
+                      })}
+                    </div>
+                    {(() => {
+                      const selectedRemote = plan.suggested
+                        .filter(
+                          (action) =>
+                            action.state ===
+                              GQL.SceneMetadataPlanState.Accepted ||
+                            action.state === GQL.SceneMetadataPlanState.Applied
+                        )
+                        .map(remoteActionIdentity)
+                        .find((identity) => identity !== undefined);
+                      return plan.remoteCandidates
+                        .filter((candidate) => candidate.decision === "review")
+                        .map((candidate) => {
+                          const identity = `${candidate.endpoint}\u0000${candidate.remoteID}`;
+                          const selected = selectedRemote === identity;
+                          const key = `remote:${plan.sceneID}:${candidate.endpoint}:${candidate.remoteID}`;
+                          return (
+                            <div
+                              key={identity}
+                              className="d-flex align-items-start justify-content-between border-top px-2 py-2"
+                            >
+                              <div className="pr-3">
+                                <div>
+                                  <strong>
+                                    {candidate.title || candidate.remoteID}
+                                  </strong>
+                                  <Badge variant="secondary" className="ml-2">
+                                    {candidate.provenance}
+                                  </Badge>
+                                  <Badge variant="warning" className="ml-2">
+                                    {candidate.score.toFixed(3)}
+                                  </Badge>
+                                  {selected ? (
+                                    <Badge variant="primary" className="ml-2">
+                                      {intl.formatMessage({
+                                        id: "scene_metadata.review.selected",
+                                        defaultMessage: "Selected",
+                                      })}
+                                    </Badge>
+                                  ) : null}
+                                </div>
+                                <div className="small">
+                                  {candidate.endpoint} · {candidate.remoteID}
+                                </div>
+                                {candidate.contributions.length > 0 ? (
+                                  <small className="text-muted">
+                                    {candidate.contributions
+                                      .map(
+                                        (contribution) =>
+                                          `${contribution.field}: ${contribution.reason}`
+                                      )
+                                      .join(" · ")}
+                                  </small>
+                                ) : null}
+                              </div>
+                              <Button
+                                size="sm"
+                                variant={
+                                  selected ? "primary" : "outline-primary"
+                                }
+                                disabled={
+                                  busyKey !== undefined ||
+                                  selectedRemote !== undefined ||
+                                  plan.state ===
+                                    GQL.SceneMetadataPlanState.Applied ||
+                                  plan.state ===
+                                    GQL.SceneMetadataPlanState.Stale
+                                }
+                                onClick={() =>
+                                  void selectRemoteCandidate(
+                                    runID,
+                                    plan.sceneID,
+                                    candidate.endpoint,
+                                    candidate.remoteID
+                                  )
+                                }
+                              >
+                                {busyKey === key ? (
+                                  <Spinner animation="border" size="sm" />
+                                ) : (
+                                  intl.formatMessage({
+                                    id: "actions.select",
+                                    defaultMessage: "Select",
+                                  })
+                                )}
+                              </Button>
+                            </div>
+                          );
+                        });
+                    })()}
+                  </div>
+                ) : null}
+                {plan.sources.length > 0 || plan.localCandidates.length > 0 ? (
+                  <details className="mb-3">
+                    <summary>
+                      {intl.formatMessage({
+                        id: "scene_metadata.review.evidence",
+                        defaultMessage: "Analysis evidence",
+                      })}
+                    </summary>
+                    <div className="border rounded px-2 py-2 mt-2">
+                      {plan.sources.map((source, index) => (
+                        <div
+                          key={`${source.kind}:${source.label}:${index}`}
+                          className="small mb-1"
+                        >
+                          <strong>{source.label || source.kind}</strong>:{" "}
+                          {source.rawText}
+                        </div>
+                      ))}
+                      {plan.localCandidates.map((candidate, index) => (
+                        <div
+                          key={`${candidate.candidate}:${index}`}
+                          className="small mb-1"
+                        >
+                          <strong>{candidate.candidate}</strong> ·{" "}
+                          {candidate.status}
+                          {candidate.reason ? ` · ${candidate.reason}` : ""}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
                 {plan.suggested.length === 0 ? (
                   <div className="text-muted small">
                     {intl.formatMessage({

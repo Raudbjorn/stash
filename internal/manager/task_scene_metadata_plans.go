@@ -585,6 +585,18 @@ func staleSceneHash(
 	stashIDs []models.StashID,
 	primary *models.VideoFile,
 ) string {
+	return staleSceneHashWithPrimary(
+		scene, performerIDs, groups, stashIDs, newSceneMetadataFileUpdate(primary),
+	)
+}
+
+func staleSceneHashWithPrimary(
+	scene *models.Scene,
+	performerIDs []int,
+	groups []models.GroupsScenes,
+	stashIDs []models.StashID,
+	primary *sceneMetadataFileUpdate,
+) string {
 	ids := append([]int(nil), performerIDs...)
 	sort.Ints(ids)
 	sortedGroups := append([]models.GroupsScenes(nil), groups...)
@@ -624,7 +636,7 @@ func staleSceneHash(
 	}{
 		Title: scene.Title, Date: date, PerformerIDs: ids, StudioID: scene.StudioID,
 		Organized: scene.Organized, Groups: sortedGroups, StashIDs: sortedStashIDs,
-		PrimaryFile: newSceneMetadataFileUpdate(primary),
+		PrimaryFile: primary,
 	})
 	digest := sha256.Sum256(payload)
 	return hex.EncodeToString(digest[:])
@@ -661,7 +673,12 @@ func (j *analyzeSceneMetadataJob) persistAnalysisPlan(ctx context.Context, plan 
 	})
 }
 
-func (s *Manager) SceneMetadataPlans(ctx context.Context, sceneIDs []string, state *SceneMetadataPlanState) ([]*AnalysisPlan, error) {
+func (s *Manager) SceneMetadataPlans(
+	ctx context.Context,
+	sceneIDs []string,
+	state *SceneMetadataPlanState,
+	latestOnly bool,
+) ([]*AnalysisPlan, error) {
 	ids, err := stringslice.StringSliceToIntSlice(sceneIDs)
 	if err != nil {
 		return nil, fmt.Errorf("parse scene IDs: %w", err)
@@ -671,13 +688,49 @@ func (s *Manager) SceneMetadataPlans(ctx context.Context, sceneIDs []string, sta
 		value := string(*state)
 		stateFilter = &value
 	}
-	var records []models.SceneMetadataPlanRecord
+	var (
+		records []models.SceneMetadataPlanRecord
+		actions []models.SceneMetadataPlanActionRecord
+	)
 	if err := s.Repository.WithReadTxn(ctx, func(ctx context.Context) error {
 		var err error
-		records, err = s.Repository.SceneMetadataPlan.FindSceneMetadataPlans(ctx, ids, stateFilter)
+		if latestOnly {
+			records, err = s.Repository.SceneMetadataPlan.FindLatestSceneMetadataPlans(ctx, ids, stateFilter)
+		} else {
+			records, err = s.Repository.SceneMetadataPlan.FindSceneMetadataPlans(ctx, ids, stateFilter)
+		}
+		if err != nil || len(records) == 0 {
+			return err
+		}
+		runIDs := make([]string, 0, len(records))
+		recordSceneIDs := make([]int, 0, len(records))
+		seenRuns := make(map[string]struct{}, len(records))
+		seenScenes := make(map[int]struct{}, len(records))
+		for _, record := range records {
+			if _, seen := seenRuns[record.RunID]; !seen {
+				runIDs = append(runIDs, record.RunID)
+				seenRuns[record.RunID] = struct{}{}
+			}
+			if _, seen := seenScenes[record.SceneID]; !seen {
+				recordSceneIDs = append(recordSceneIDs, record.SceneID)
+				seenScenes[record.SceneID] = struct{}{}
+			}
+		}
+		actions, err = s.Repository.SceneMetadataPlan.FindSceneMetadataPlanActionsForRuns(
+			ctx, runIDs, recordSceneIDs,
+		)
 		return err
 	}); err != nil {
 		return nil, err
+	}
+	type planKey struct {
+		runID   string
+		sceneID int
+	}
+	actionsByPlan := make(map[planKey][]models.SceneMetadataPlanActionRecord, len(records))
+	for _, action := range actions {
+		key := planKey{runID: action.RunID, sceneID: action.SceneID}
+		actionsByPlan[key] = append(actionsByPlan[key], action)
 	}
 	result := make([]*AnalysisPlan, 0, len(records))
 	for _, record := range records {
@@ -686,16 +739,8 @@ func (s *Manager) SceneMetadataPlans(ctx context.Context, sceneIDs []string, sta
 			return nil, fmt.Errorf("decode scene metadata plan %s/%d: %w", record.RunID, record.SceneID, err)
 		}
 		plan.State, plan.AppliedAt = SceneMetadataPlanState(record.State), record.AppliedAt
-		var actions []models.SceneMetadataPlanActionRecord
-		if err := s.Repository.WithReadTxn(ctx, func(ctx context.Context) error {
-			var err error
-			actions, err = s.Repository.SceneMetadataPlan.FindSceneMetadataPlanActions(ctx, record.RunID, record.SceneID)
-			return err
-		}); err != nil {
-			return nil, err
-		}
-		plan.Suggested = make([]SuggestedField, 0, len(actions))
-		for _, action := range actions {
+		plan.Suggested = nil
+		for _, action := range actionsByPlan[planKey{runID: record.RunID, sceneID: record.SceneID}] {
 			var reasons []string
 			_ = json.Unmarshal([]byte(action.ReasonCodes), &reasons)
 			plan.Suggested = append(plan.Suggested, SuggestedField{

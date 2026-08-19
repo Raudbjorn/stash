@@ -2,6 +2,8 @@ package manager
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -218,5 +220,100 @@ func TestStaleSceneHashIncludesActionDependentRelationshipsAndFileMetadata(t *te
 	changedFile.Title = "Updated Container Title"
 	if got := staleSceneHash(&scene, nil, groups, stashIDs, &changedFile); got == original {
 		t.Fatal("file metadata edit did not change stale-scene hash")
+	}
+}
+
+func TestSceneMetadataPlansLatestOnlyReturnsNewestRun(t *testing.T) {
+	repository := newTestRepository(t)
+	scene := createTestScene(t, repository, "Latest Plan")
+	oldTitle, newTitle := "Old suggestion", "New suggestion"
+	job := &analyzeSceneMetadataJob{repository: repository}
+	for _, plan := range []*AnalysisPlan{
+		{
+			RunID: "older-run", SceneID: scene.ID,
+			StaleSceneHash: staleSceneHash(scene, nil, nil, nil, nil),
+			State:          SceneMetadataPlanProposed,
+			CreatedAt:      time.Now().UTC().Add(-time.Hour),
+			Suggested: []SuggestedField{{
+				Kind:        sceneMetadataActionTitle,
+				PayloadJSON: actionPayload(sceneMetadataActionPayload{Title: &oldTitle}),
+				State:       SceneMetadataPlanProposed,
+			}},
+		},
+		{
+			RunID: "newer-run", SceneID: scene.ID,
+			StaleSceneHash: staleSceneHash(scene, nil, nil, nil, nil),
+			State:          SceneMetadataPlanProposed,
+			CreatedAt:      time.Now().UTC(),
+			Suggested: []SuggestedField{{
+				Kind:        sceneMetadataActionTitle,
+				PayloadJSON: actionPayload(sceneMetadataActionPayload{Title: &newTitle}),
+				State:       SceneMetadataPlanProposed,
+			}},
+		},
+	} {
+		if err := job.persistAnalysisPlan(context.Background(), plan); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manager := &Manager{Repository: repository}
+	plans, err := manager.SceneMetadataPlans(
+		context.Background(), []string{fmt.Sprint(scene.ID)}, nil, true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plans) != 1 || plans[0].RunID != "newer-run" || len(plans[0].Suggested) != 1 {
+		t.Fatalf("latest plans = %+v", plans)
+	}
+	var payload sceneMetadataActionPayload
+	if err := json.Unmarshal([]byte(plans[0].Suggested[0].PayloadJSON), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Title == nil || *payload.Title != newTitle {
+		t.Fatalf("latest action payload = %+v", payload)
+	}
+
+	appliedAt := time.Now().UTC()
+	if err := repository.WithTxn(context.Background(), func(ctx context.Context) error {
+		return repository.SceneMetadataPlan.SetSceneMetadataPlanState(
+			ctx,
+			"newer-run",
+			scene.ID,
+			string(SceneMetadataPlanApplied),
+			&appliedAt,
+		)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	plans, err = manager.SceneMetadataPlans(
+		context.Background(), []string{fmt.Sprint(scene.ID)}, nil, true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plans) != 1 || plans[0].RunID != "older-run" {
+		t.Fatalf("latest actionable plans after applying newer run = %+v", plans)
+	}
+
+	if err := repository.WithTxn(context.Background(), func(ctx context.Context) error {
+		return repository.SceneMetadataPlan.SetSceneMetadataPlanState(
+			ctx,
+			"older-run",
+			scene.ID,
+			string(SceneMetadataPlanApplied),
+			&appliedAt,
+		)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	plans, err = manager.SceneMetadataPlans(
+		context.Background(), []string{fmt.Sprint(scene.ID)}, nil, true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plans) != 0 {
+		t.Fatalf("latest actionable plans after applying every run = %+v", plans)
 	}
 }

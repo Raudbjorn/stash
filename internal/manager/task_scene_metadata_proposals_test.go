@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -312,6 +313,211 @@ func TestSceneMetadataBulkApplyRollsBackAllScenes(t *testing.T) {
 	if record := findSceneMetadataPlanRecord(t, repository, runID, first.ID); record.State != string(SceneMetadataPlanAccepted) {
 		t.Fatalf("first plan state = %q after rollback, want accepted", record.State)
 	}
+}
+func TestSceneMetadataFileProposalUsesPersistedPreProbeSnapshot(t *testing.T) {
+	repository := newTestRepository(t)
+	scene, file := createTestSceneWithVideoFile(t, repository, "Probe Scene")
+	persistedFile := newSceneMetadataFileUpdate(file)
+	file.Title = "Probed Container Title"
+	file.Comment = "Probed comment"
+	file.MetadataProbed = true
+	plan := &AnalysisPlan{
+		RunID: "probe-run", SceneID: scene.ID,
+		StaleSceneHash: staleSceneHashWithPrimary(scene, nil, nil, nil, persistedFile),
+		State:          SceneMetadataPlanAccepted, CreatedAt: time.Now().UTC(),
+		Suggested: []SuggestedField{{
+			Kind: sceneMetadataActionFileMetadata,
+			PayloadJSON: actionPayload(sceneMetadataActionPayload{
+				File: newSceneMetadataFileUpdate(file),
+			}),
+			State: SceneMetadataPlanAccepted,
+		}},
+	}
+	job := &analyzeSceneMetadataJob{repository: repository}
+	if err := job.persistAnalysisPlan(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+	if err := applySceneMetadataPlan(context.Background(), repository, plan.RunID, scene.ID); err != nil {
+		t.Fatal(err)
+	}
+	var fresh *models.VideoFile
+	if err := repository.WithReadTxn(context.Background(), func(ctx context.Context) error {
+		files, err := repository.File.Find(ctx, file.ID)
+		if err != nil {
+			return err
+		}
+		var ok bool
+		fresh, ok = files[0].(*models.VideoFile)
+		if !ok {
+			t.Fatalf("file %d is not a video", file.ID)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if fresh.Title != file.Title || fresh.Comment != file.Comment || !fresh.MetadataProbed {
+		t.Fatalf("applied file metadata = %+v", fresh)
+	}
+	if record := findSceneMetadataPlanRecord(t, repository, plan.RunID, scene.ID); record.State != string(SceneMetadataPlanApplied) {
+		t.Fatalf("plan state = %q, want applied", record.State)
+	}
+}
+
+func TestSceneMetadataApplyRequiresEveryActionReviewed(t *testing.T) {
+	repository := newTestRepository(t)
+	scene := createTestScene(t, repository, "Original")
+	title, date := "Reviewed", "2025-04-03"
+	plan := &AnalysisPlan{
+		RunID: "complete-review-run", SceneID: scene.ID,
+		StaleSceneHash: staleSceneHash(scene, nil, nil, nil, nil),
+		State:          SceneMetadataPlanProposed, CreatedAt: time.Now().UTC(),
+		Suggested: []SuggestedField{
+			{Kind: sceneMetadataActionTitle, PayloadJSON: actionPayload(sceneMetadataActionPayload{Title: &title}), State: SceneMetadataPlanProposed},
+			{Kind: sceneMetadataActionDate, PayloadJSON: actionPayload(sceneMetadataActionPayload{Date: &date}), State: SceneMetadataPlanProposed},
+		},
+	}
+	job := &analyzeSceneMetadataJob{repository: repository}
+	if err := job.persistAnalysisPlan(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+	actions := findSceneMetadataPlanActions(t, repository, plan.RunID, scene.ID)
+	manager := &Manager{Repository: repository}
+	firstID := sceneMetadataActionIdentifier(plan.RunID, scene.ID, actions[0].ID)
+	if _, err := manager.AcceptSceneMetadataProposalActions(context.Background(), plan.RunID, scene.ID, []string{firstID}); err != nil {
+		t.Fatal(err)
+	}
+	if record := findSceneMetadataPlanRecord(t, repository, plan.RunID, scene.ID); record.State != string(SceneMetadataPlanProposed) {
+		t.Fatalf("partially reviewed plan state = %q, want proposed", record.State)
+	}
+	if _, err := manager.ApplySceneMetadataPlans(context.Background(), plan.RunID, []string{strconv.Itoa(scene.ID)}); err == nil {
+		t.Fatal("partially reviewed plan applied")
+	}
+	if fresh := findTestScene(t, repository, scene.ID); fresh.Title != "Original" || fresh.Date != nil {
+		t.Fatalf("partial apply changed scene: title=%q date=%v", fresh.Title, fresh.Date)
+	}
+	secondID := sceneMetadataActionIdentifier(plan.RunID, scene.ID, actions[1].ID)
+	if _, err := manager.AcceptSceneMetadataProposalActions(context.Background(), plan.RunID, scene.ID, []string{secondID}); err != nil {
+		t.Fatal(err)
+	}
+	if record := findSceneMetadataPlanRecord(t, repository, plan.RunID, scene.ID); record.State != string(SceneMetadataPlanAccepted) {
+		t.Fatalf("fully reviewed plan state = %q, want accepted", record.State)
+	}
+	if _, err := manager.ApplySceneMetadataPlans(context.Background(), plan.RunID, []string{strconv.Itoa(scene.ID)}); err != nil {
+		t.Fatal(err)
+	}
+	fresh := findTestScene(t, repository, scene.ID)
+	if fresh.Title != title || fresh.Date == nil || fresh.Date.String() != date {
+		t.Fatalf("applied scene = title %q date %v", fresh.Title, fresh.Date)
+	}
+}
+
+func TestSelectSceneMetadataRemoteCandidateCreatesAcceptedAction(t *testing.T) {
+	repository := newTestRepository(t)
+	scene := createTestScene(t, repository, "Remote Review")
+	plan := &AnalysisPlan{
+		RunID: "remote-review-run", SceneID: scene.ID,
+		StaleSceneHash: staleSceneHash(scene, nil, nil, nil, nil),
+		State:          SceneMetadataPlanProposed, CreatedAt: time.Now().UTC(),
+		RemoteCandidates: []RemoteSceneCandidate{{
+			Endpoint: "https://stash.example/graphql", RemoteID: "remote-1",
+			Title: "Remote Scene", Provenance: "search", Decision: "review",
+		}},
+	}
+	job := &analyzeSceneMetadataJob{repository: repository}
+	if err := job.persistAnalysisPlan(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+	manager := &Manager{Repository: repository}
+	if _, err := manager.SelectSceneMetadataRemoteCandidate(
+		context.Background(), plan.RunID, scene.ID,
+		"https://stash.example/graphql", "not-a-candidate",
+	); err == nil {
+		t.Fatal("unknown remote candidate was selected")
+	}
+	if _, err := manager.SelectSceneMetadataRemoteCandidate(
+		context.Background(), plan.RunID, scene.ID,
+		"https://stash.example/graphql", "remote-1",
+	); err != nil {
+		t.Fatal(err)
+	}
+	actions := findSceneMetadataPlanActions(t, repository, plan.RunID, scene.ID)
+	if len(actions) != 1 || actions[0].Kind != sceneMetadataActionRemoteScene ||
+		actions[0].State != string(SceneMetadataPlanAccepted) {
+		t.Fatalf("selected remote actions = %+v", actions)
+	}
+	if record := findSceneMetadataPlanRecord(t, repository, plan.RunID, scene.ID); record.State != string(SceneMetadataPlanAccepted) {
+		t.Fatalf("selected plan state = %q, want accepted", record.State)
+	}
+	if _, err := manager.ApplySceneMetadataPlans(
+		context.Background(), plan.RunID, []string{strconv.Itoa(scene.ID)},
+	); err != nil {
+		t.Fatal(err)
+	}
+	fresh := findTestScene(t, repository, scene.ID)
+	if err := repository.WithReadTxn(context.Background(), func(ctx context.Context) error {
+		return fresh.LoadStashIDs(ctx, repository.Scene)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stashIDs := fresh.StashIDs.List()
+	if len(stashIDs) != 1 || stashIDs[0].StashID != "remote-1" {
+		t.Fatalf("scene stash IDs = %+v", stashIDs)
+	}
+}
+
+func createTestSceneWithVideoFile(t *testing.T, repository models.Repository, title string) (*models.Scene, *models.VideoFile) {
+	t.Helper()
+	var (
+		scene models.Scene
+		file  models.VideoFile
+	)
+	if err := repository.WithTxn(context.Background(), func(ctx context.Context) error {
+		folder := models.Folder{
+			Path: t.TempDir(), DirEntry: models.DirEntry{ModTime: time.Now()},
+		}
+		if err := repository.Folder.Create(ctx, &folder); err != nil {
+			return err
+		}
+		file.BaseFile = &models.BaseFile{
+			Path: filepath.Join(folder.Path, "scene.mp4"), Basename: "scene.mp4",
+			ParentFolderID: folder.ID,
+		}
+		if err := repository.File.Create(ctx, &file); err != nil {
+			return err
+		}
+		scene = models.NewScene()
+		scene.Title = title
+		return repository.Scene.Create(ctx, &scene, []models.FileID{file.ID})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return &scene, &file
+}
+
+func findSceneMetadataPlanActions(t *testing.T, repository models.Repository, runID string, sceneID int) []models.SceneMetadataPlanActionRecord {
+	t.Helper()
+	var actions []models.SceneMetadataPlanActionRecord
+	if err := repository.WithReadTxn(context.Background(), func(ctx context.Context) error {
+		var err error
+		actions, err = repository.SceneMetadataPlan.FindSceneMetadataPlanActions(ctx, runID, sceneID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return actions
+}
+
+func findTestScene(t *testing.T, repository models.Repository, sceneID int) *models.Scene {
+	t.Helper()
+	var scene *models.Scene
+	if err := repository.WithReadTxn(context.Background(), func(ctx context.Context) error {
+		var err error
+		scene, err = repository.Scene.Find(ctx, sceneID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return scene
 }
 
 func findSceneMetadataPlanRecord(t *testing.T, repository models.Repository, runID string, sceneID int) *models.SceneMetadataPlanRecord {
