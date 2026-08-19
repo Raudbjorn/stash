@@ -200,11 +200,22 @@ export const SceneMetadataPlanReviewModal: React.FC<
     const acceptedSceneIDs = plans
       .filter((plan) => plan.state === GQL.SceneMetadataPlanState.Accepted)
       .map((plan) => plan.sceneID);
-    if (acceptedSceneIDs.length === 0) return;
+    if (acceptedSceneIDs.length === 0) {
+      Toast.success(
+        intl.formatMessage({
+          id: "scene_metadata.review.nothing_to_apply",
+          defaultMessage: "No accepted changes to apply",
+        })
+      );
+      return;
+    }
     const key = `apply:${runID}`;
     setBusyKey(key);
     try {
-      const result = await mutateApplySceneMetadataPlan(runID, acceptedSceneIDs);
+      const result = await mutateApplySceneMetadataPlan(
+        runID,
+        acceptedSceneIDs
+      );
       if (result.data?.applySceneMetadataPlan) {
         Toast.success(
           intl.formatMessage({
@@ -270,11 +281,11 @@ export const SceneMetadataPlanReviewModal: React.FC<
                 appliedAt: intl.formatDate(
                   new Date(
                     appliedData.sceneMetadataPlans[0].appliedAt ??
-                      appliedData.sceneMetadataPlans[0].createdAt,
+                      appliedData.sceneMetadataPlans[0].createdAt
                   ),
-                  { dateStyle: "medium", timeStyle: "short" },
+                  { dateStyle: "medium", timeStyle: "short" }
                 ),
-              },
+              }
             )}
           </Alert>
         ) : (
@@ -330,7 +341,11 @@ export const SceneMetadataPlanReviewModal: React.FC<
               <Button
                 size="sm"
                 variant="primary"
-                disabled={applicablePlans.length === 0 || proposedCount > 0 || busyKey !== undefined}
+                disabled={
+                  applicablePlans.length === 0 ||
+                  proposedCount > 0 ||
+                  busyKey !== undefined
+                }
                 onClick={() => void applyRun(runID, plans)}
               >
                 {busyKey === `apply:${runID}` ? (

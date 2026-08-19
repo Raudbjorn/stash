@@ -12,6 +12,7 @@ import (
 	"github.com/stashapp/stash/internal/manager/config"
 	"github.com/stashapp/stash/internal/manager/task"
 	"github.com/stashapp/stash/pkg/logger"
+	"github.com/stashapp/stash/pkg/session"
 )
 
 func (r *mutationResolver) MetadataScan(ctx context.Context, input manager.ScanMetadataInput) (string, error) {
@@ -159,10 +160,21 @@ func (r *mutationResolver) ApplySceneMetadataPlan(ctx context.Context, runID str
 }
 
 func (r *mutationResolver) PurgeSceneMetadataPlans(ctx context.Context, olderThanSeconds int) (int, error) {
-	if olderThanSeconds < 1 {
-		return 0, fmt.Errorf("olderThanSeconds must be at least 1")
+	const minPurgeAgeSeconds = 3600
+	if olderThanSeconds < minPurgeAgeSeconds {
+		return 0, fmt.Errorf("olderThanSeconds must be at least %d", minPurgeAgeSeconds)
 	}
-	return manager.GetInstance().PurgeSceneMetadataPlans(ctx, time.Duration(olderThanSeconds)*time.Second)
+	actor := "unauthenticated"
+	if userID := session.GetCurrentUserID(ctx); userID != nil {
+		actor = *userID
+	}
+	count, err := manager.GetInstance().PurgeSceneMetadataPlans(ctx, time.Duration(olderThanSeconds)*time.Second)
+	if err != nil {
+		logger.Warnf("[scene metadata] purge failed actor=%s older_than_seconds=%d: %v", actor, olderThanSeconds, err)
+		return 0, err
+	}
+	logger.Infof("[scene metadata] purged %d plan(s) actor=%s older_than_seconds=%d", count, actor, olderThanSeconds)
+	return count, nil
 }
 
 func (r *mutationResolver) MetadataIdentify(ctx context.Context, input identify.Options) (string, error) {
