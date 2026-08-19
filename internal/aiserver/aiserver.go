@@ -35,6 +35,7 @@ import (
 	"github.com/stashapp/stash/internal/aiserver/tagging"
 	"github.com/stashapp/stash/internal/aiserver/task"
 	"github.com/stashapp/stash/internal/manager/config"
+	"github.com/stashapp/stash/pkg/aitag/llamaprov"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
 )
@@ -378,7 +379,8 @@ func (s *Server) Start(ctx context.Context) error {
 	// rather than an error: a missing model or an unreachable inference server
 	// disables analysis and leaves the scheduler, the interactions pipeline and
 	// the recommenders running.
-	provider, rules, taggingStatus := tagging.Build(ctx, tagging.Settings{
+	taxonomyCategories := effectiveTaxonomyCategories(s.deps.Config.GetAITaggingTaxonomyCategories())
+	taggingSettings := tagging.Settings{
 		Provider:              s.deps.Config.GetAITaggingProvider(),
 		ServerURL:             s.deps.Config.GetAITaggingServerURL(),
 		OpenAIKey:             s.deps.Config.GetAITaggingOpenAIKey(),
@@ -396,23 +398,17 @@ func (s *Server) Start(ctx context.Context) error {
 		VLMVoyageEndpoint:     s.deps.Config.GetAITaggingVLMVoyageEndpoint(),
 		TaxonomyEndpoint:      s.deps.Config.GetAITaggingTaxonomyEndpoint(),
 		TaxonomyAPIKey:        s.deps.Config.GetAITaggingTaxonomyAPIKey(),
-		TaxonomyCategories:    s.deps.Config.GetAITaggingTaxonomyCategories(),
+		TaxonomyCategories:    taxonomyCategories,
 		TaxonomyMaxCandidates: s.deps.Config.GetAITaggingTaxonomyMaxCandidates(),
 		FFmpegPath:            s.deps.Config.GetFFMpegPath(),
 		FrameInterval:         s.deps.Config.GetAITaggingFrameInterval(),
 		Threshold:             s.deps.Config.GetAITaggingThreshold(),
 		MaxSpanMergeSeconds:   s.deps.Config.GetAITaggingMaxSpanMerge(),
-	})
+	}
+	taxonomyClient := tagging.NewTaxonomyClient(taggingSettings)
+	taggingSettings.TaxonomyClient = taxonomyClient
+	provider, rules, taggingStatus := tagging.Build(ctx, taggingSettings)
 	s.taggingStatus = taggingStatus
-	s.tagging = tagging.NewService(s.deps.Repo, db, tagging.Config{
-		Provider:            provider,
-		Rules:               rules,
-		MaxSpanMergeSeconds: s.deps.Config.GetAITaggingMaxSpanMerge(),
-		FFmpegPath:          s.deps.Config.GetFFMpegPath(),
-		DefaultFrameInterval: tagging.DefaultFrameInterval(
-			s.deps.Config.GetAITaggingProvider(), s.deps.Config.GetAITaggingFrameInterval()),
-	})
-	s.trainer = tagging.NewTrainer(s.deps.Repo, db)
 	s.voyageSegments = nil
 	if s.deps.Config.GetAITaggingVLMVoyageVideoEnabled() &&
 		s.deps.Config.GetAITaggingVLMVoyageAPIKey() != "" {
@@ -424,8 +420,23 @@ func (s *Server) Start(ctx context.Context) error {
 			Dimension:   s.deps.Config.GetAITaggingVLMVoyageDimension(),
 			DB:          db,
 			FFmpegPath:  s.deps.Config.GetFFMpegPath(),
+			Taxonomy:    taxonomyClient,
+			Categories:  taggingSettings.TaxonomyCategories,
 		}
 	}
+	s.tagging = tagging.NewService(s.deps.Repo, db, tagging.Config{
+		Provider:            provider,
+		Rules:               rules,
+		MaxSpanMergeSeconds: s.deps.Config.GetAITaggingMaxSpanMerge(),
+		FFmpegPath:          s.deps.Config.GetFFMpegPath(),
+		DefaultFrameInterval: tagging.DefaultFrameInterval(
+			s.deps.Config.GetAITaggingProvider(), s.deps.Config.GetAITaggingFrameInterval()),
+		SegmentIndexer:     s.voyageSegments,
+		VoyageAnalyzer:     s.voyageSegments,
+		TaxonomyClient:     taxonomyClient,
+		TaxonomyCategories: taggingSettings.TaxonomyCategories,
+	})
+	s.trainer = tagging.NewTrainer(s.deps.Repo, db)
 
 	// Registered whatever the provider's state: the action must be visible so
 	// the user can see WHY it is unavailable when they try it, rather than the
@@ -644,3 +655,10 @@ func (s *Server) DB() *store.DB {
 
 // Repo exposes Stash's repository to the AI subsystem's own packages.
 func (s *Server) Repo() models.Repository { return s.deps.Repo }
+
+func effectiveTaxonomyCategories(configured []string) []string {
+	if len(configured) == 0 {
+		return llamaprov.DefaultTaxonomyCategories()
+	}
+	return append([]string(nil), configured...)
+}

@@ -1,12 +1,8 @@
 package recommend
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"image"
-	"image/color"
-	"image/jpeg"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -26,24 +22,41 @@ func TestVoyageSegmentIndexBuildsThreeFixedSegments(t *testing.T) {
 		t.Fatalf("segments=%d HTTP calls=%d, want 3/3", len(segments), calls.Load())
 	}
 	for i, segment := range segments {
-		if segment.Start != float64(i*30) || segment.End != float64((i+1)*30) || len(segment.Vector) != 3 {
+		if segment.Start != float64(i*30) || segment.End != float64((i+1)*30) || len(segment.Vector) != defaultVoyageDimension {
 			t.Fatalf("segment %d = %#v", i, segment)
 		}
 	}
 }
 
-func TestVoyageSegmentIndexUsesDatabaseCache(t *testing.T) {
+func TestVoyageSegmentIndexCacheUsesExactEmbeddingInput(t *testing.T) {
 	index, calls := newTestVoyageSegmentIndex(t)
 	if _, err := index.Build(context.Background(), 42, "missing.mp4", "transcript", 90); err != nil {
 		t.Fatal(err)
 	}
 	firstCalls := calls.Load()
-	segments, err := index.Build(context.Background(), 42, "missing.mp4", "different transcript", 90)
-	if err != nil {
+	if _, err := index.Build(context.Background(), 42, "missing.mp4", "transcript", 90); err != nil {
 		t.Fatal(err)
 	}
-	if len(segments) != 3 || calls.Load() != firstCalls {
-		t.Fatalf("cache build segments=%d calls=%d, want 3/%d", len(segments), calls.Load(), firstCalls)
+	if calls.Load() != firstCalls {
+		t.Fatalf("unchanged input made %d calls, want %d", calls.Load(), firstCalls)
+	}
+
+	if _, err := index.Build(context.Background(), 42, "missing.mp4", "different transcript", 90); err != nil {
+		t.Fatal(err)
+	}
+	afterTranscript := calls.Load()
+	if afterTranscript != firstCalls+3 {
+		t.Fatalf("changed transcript made %d calls, want %d", afterTranscript, firstCalls+3)
+	}
+
+	index.ExtractVideo = func(context.Context, string, float64, float64) ([]byte, error) {
+		return []byte("different mp4"), nil
+	}
+	if _, err := index.Build(context.Background(), 42, "missing.mp4", "different transcript", 90); err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != afterTranscript+3 {
+		t.Fatalf("changed video made %d calls, want %d", calls.Load(), afterTranscript+3)
 	}
 }
 
@@ -62,41 +75,33 @@ func newTestVoyageSegmentIndex(t *testing.T) (*VoyageSegmentIndex, *atomic.Int32
 			Inputs []struct {
 				Content []map[string]any `json:"content"`
 			} `json:"inputs"`
-			Model string `json:"model"`
+			Model           string `json:"model"`
+			InputType       string `json:"input_type"`
+			OutputDimension int    `json:"output_dimension"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Fatal(err)
 		}
-		if len(request.Inputs) != 1 || len(request.Inputs[0].Content) != 6 || request.Model != "voyage-multimodal-3.5" {
+		if len(request.Inputs) != 1 || len(request.Inputs[0].Content) != 2 ||
+			request.Inputs[0].Content[1]["type"] != "video_base64" ||
+			request.Model != "voyage-multimodal-3.5" || request.InputType != "document" ||
+			request.OutputDimension != defaultVoyageDimension {
 			t.Errorf("request = %#v", request)
 		}
+		vector := make([]float32, defaultVoyageDimension)
+		vector[0] = 1
+		vector[len(vector)-1] = 3
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"data": []map[string]any{{"index": 0, "embedding": []float32{1, 2, 3}}},
+			"data": []map[string]any{{"index": 0, "embedding": vector}},
 		})
 	}))
 	t.Cleanup(server.Close)
 
-	frame := testJPEG(t)
 	return &VoyageSegmentIndex{
 		APIKey: "secret", Model: "voyage-multimodal-3.5", Endpoint: server.URL,
-		SegmentSecs: 30, Dimension: 3, DB: db, Client: server.Client(), FFmpegPath: "ffmpeg-not-installed-for-test",
-		ExtractFrame: func(context.Context, string, float64) ([]byte, error) {
-			return frame, nil
+		SegmentSecs: 30, DB: db, Client: server.Client(), FFmpegPath: "ffmpeg-not-installed-for-test",
+		ExtractVideo: func(context.Context, string, float64, float64) ([]byte, error) {
+			return []byte("mp4"), nil
 		},
 	}, &calls
-}
-
-func testJPEG(t *testing.T) []byte {
-	t.Helper()
-	imageValue := image.NewRGBA(image.Rect(0, 0, 4, 4))
-	for y := range 4 {
-		for x := range 4 {
-			imageValue.Set(x, y, color.RGBA{R: 32, G: 64, B: 96, A: 255})
-		}
-	}
-	var buffer bytes.Buffer
-	if err := jpeg.Encode(&buffer, imageValue, nil); err != nil {
-		t.Fatal(err)
-	}
-	return buffer.Bytes()
 }

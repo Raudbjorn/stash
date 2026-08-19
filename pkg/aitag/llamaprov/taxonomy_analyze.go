@@ -2,6 +2,7 @@ package llamaprov
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -65,6 +66,12 @@ func (a *TaxonomyAnalyzer) AnalyzeVideo(ctx context.Context, path string, opts a
 
 func (a *TaxonomyAnalyzer) AnalyzeImages(ctx context.Context, paths []string, opts aitag.Options) (*aitag.ImageResult, error) {
 	return a.Provider.AnalyzeImages(ctx, paths, opts)
+}
+
+// CompleteJSON preserves the underlying provider's structured text completion
+// capability for callers that use the active tagging provider as a completer.
+func (a *TaxonomyAnalyzer) CompleteJSON(ctx context.Context, systemPrompt, userPrompt, schemaName string, schema json.RawMessage, maxTokens int, target any) error {
+	return a.Provider.CompleteJSON(ctx, systemPrompt, userPrompt, schemaName, schema, maxTokens, target)
 }
 
 func (a *TaxonomyAnalyzer) Close() error { return a.Provider.Close() }
@@ -144,7 +151,7 @@ func (a *TaxonomyAnalyzer) Analyze(ctx context.Context, videoPath string, opts a
 			return nil, fmt.Errorf("describe frame %.3f: %w", frame.Time, err)
 		}
 		candidates := a.selectCandidates(description, pool, bm25)
-		if a.Reranker != nil {
+		if a.Reranker != nil && (opts.UseVoyageReranker == nil || *opts.UseVoyageReranker) {
 			instruction := a.VoyageQueryInstr
 			if instruction == "" {
 				instruction = defaultVoyageQueryInstruction

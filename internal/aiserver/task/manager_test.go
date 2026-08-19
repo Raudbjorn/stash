@@ -397,7 +397,7 @@ func TestFailedHandlerRecordsError(t *testing.T) {
 	m := newManager(t, Options{Gate: newFakeGate()})
 
 	rec, err := m.Submit(def("a", "svc"), func(context.Context, action.ContextInput, map[string]any, action.Handle) (any, error) {
-		return nil, errors.New("boom")
+		return map[string]any{"failed_scenes": []int{42}}, errors.New("boom")
 	}, action.ContextInput{Page: "scenes"}, nil, PriorityNormal, SubmitOptions{})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -406,6 +406,10 @@ func TestFailedHandlerRecordsError(t *testing.T) {
 	got := waitStatus(t, m, rec.ID, StatusFailed)
 	if got.Error != "boom" {
 		t.Errorf("error = %q, want boom", got.Error)
+	}
+	result, ok := got.Result.(map[string]any)
+	if !ok || len(result["failed_scenes"].([]int)) != 1 {
+		t.Errorf("failed task result = %#v", got.Result)
 	}
 	// result is only surfaced for completed tasks.
 	if got.Summary()["result"] != nil {

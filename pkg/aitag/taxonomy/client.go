@@ -15,14 +15,16 @@ import (
 // Client provides freshness, category selection, and label resolution over a
 // taxonomy cache.
 type Client struct {
-	mu                 sync.Mutex
-	Cache              *Cache
-	bm25               *BM25
-	bm25BuiltAt        time.Time
-	bm25Entries        int
-	bm25Aliases        int
-	Endpoint           string
-	APIKey             string
+	mu          sync.Mutex
+	Cache       *Cache
+	bm25        *BM25
+	bm25BuiltAt time.Time
+	bm25Entries int
+	bm25Aliases int
+	Endpoint    string
+	APIKey      string
+	// StaleTolerance optionally caps stale-cache use after MaxAge. Zero keeps a
+	// non-empty snapshot usable until a refresh succeeds.
 	StaleTolerance     time.Duration
 	ExcludeTagPatterns []string
 }
@@ -218,8 +220,11 @@ func (c *Client) rebuildBM25Locked() {
 }
 
 func (c *Client) staleUsable(now time.Time) bool {
-	if len(c.Cache.Entries) == 0 || c.Cache.UpdatedAt.IsZero() || c.StaleTolerance <= 0 {
+	if len(c.Cache.Entries) == 0 || c.Cache.UpdatedAt.IsZero() {
 		return false
+	}
+	if c.StaleTolerance <= 0 {
+		return true
 	}
 	return now.Sub(c.Cache.UpdatedAt) <= MaxAge+c.StaleTolerance
 }

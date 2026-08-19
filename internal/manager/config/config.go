@@ -300,7 +300,7 @@ const (
 	AITaggingVLMVoyageEmbeddingEndpoint        = "ai_tagging_vlm_voyage_embedding_endpoint"
 	aiTaggingVLMVoyageVideoModelDefault        = "voyage-multimodal-3.5"
 	aiTaggingVLMVoyageSegmentSecsDefault       = 30.0
-	aiTaggingVLMVoyageDimensionDefault         = 256
+	aiTaggingVLMVoyageDimensionDefault         = 1024
 	aiTaggingVLMVoyageEmbeddingEndpointDefault = "https://api.voyageai.com/v1/multimodalembeddings"
 	// AITaggingTaxonomyEndpoint is the StashDB GraphQL taxonomy source.
 	AITaggingTaxonomyEndpoint = "ai_tagging_taxonomy_endpoint"
@@ -2375,12 +2375,14 @@ func (i *Config) GetAITaggingVLMContext() int {
 	return i.getInt(AITaggingVLMContext)
 }
 
-// GetAITaggingAnalyzeMode returns taxonomy unless explicitly set to legacy.
+// GetAITaggingAnalyzeMode preserves the legacy analyzer unless taxonomy mode is
+// explicitly enabled. Existing VLM installations predate this key and must not
+// start requiring a taxonomy endpoint after an upgrade.
 func (i *Config) GetAITaggingAnalyzeMode() string {
-	if i.getString(AITaggingAnalyzeMode) == "legacy" {
-		return "legacy"
+	if i.getString(AITaggingAnalyzeMode) == "taxonomy" {
+		return "taxonomy"
 	}
-	return "taxonomy"
+	return "legacy"
 }
 
 func (i *Config) GetAITaggingVLMAcceptMode() string {
@@ -2436,12 +2438,11 @@ func (i *Config) GetAITaggingVLMVoyageSegmentSecs() float64 {
 	return seconds
 }
 
+// GetAITaggingVLMVoyageDimension returns the multimodal REST API's fixed
+// response dimension. The endpoint does not expose an output-dimension request
+// field, so persisted values from earlier builds cannot select another size.
 func (i *Config) GetAITaggingVLMVoyageDimension() int {
-	dimension := i.getInt(AITaggingVLMVoyageDimension)
-	if dimension <= 0 {
-		return aiTaggingVLMVoyageDimensionDefault
-	}
-	return dimension
+	return aiTaggingVLMVoyageDimensionDefault
 }
 
 func (i *Config) GetAITaggingVLMVoyageEmbeddingEndpoint() string {

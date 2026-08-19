@@ -95,3 +95,32 @@ func TestCacheFetchPaginatesAndReplacesFile(t *testing.T) {
 		t.Fatal("second fetch did not replace the cache file")
 	}
 }
+
+func TestClientUsesStaleCacheWhenRefreshFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	client := &Client{
+		Endpoint: server.URL,
+		Cache: &Cache{
+			Endpoint:  server.URL,
+			UpdatedAt: time.Now().Add(-7 * 24 * time.Hour),
+			Entries: map[string]Entry{
+				"tag-1": {
+					StashID:   "tag-1",
+					Canonical: "Dildo Play",
+					Category:  "Acts",
+				},
+			},
+		},
+	}
+	candidates, err := client.CandidatesByCategory(context.Background(), []string{"Acts"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates["Acts"]) != 1 || candidates["Acts"][0].StashID != "tag-1" {
+		t.Fatalf("candidates = %#v", candidates)
+	}
+}

@@ -318,8 +318,8 @@ type Query {
   aiServerStatus: AIServerStatus!
   "Whether AI tagging can run right now, and why not when it cannot."
   aiTaggingStatus: AITaggingStatus!
-  "Detected tag spans for a scene, grouped by category/label. Empty when the AI server is not running or nothing has been analysed yet."
-  aiTaggingSpans(sceneID: ID!): [AITaggingSpanGroup!]!
+  "Detected tag spans from one analysis service/run, grouped by category and label. runID defaults to that service's latest completed scene run."
+  aiTaggingSpans(sceneID: ID!, service: String!, runID: Int): [AITaggingSpanGroup!]!
   "Scene-level taxonomy support diagnostics. runID defaults to the latest completed llama_vlm run."
   aiTaggingSceneSupports(sceneID: Int!, runID: Int): [AITaggingLabelSupport!]!
   "Active StashDB taxonomy cache status."
@@ -735,8 +735,8 @@ type Mutation {
   configureAIServer(input: AIServerConfigInput!): AIServerConfig!
   "Refresh the active StashDB AI-tagging taxonomy without restarting the AI server."
   refreshAITaggingTaxonomy: AIServerTaxonomyRefresh!
-  "Trigger AI tagging analysis for a single scene. Returns immediately with a task id to poll via aiTasks/aiTask."
-  analyzeSceneWithAI(sceneID: ID!): AnalyzeSceneWithAIResult!
+  "Trigger AI tagging analysis for a single scene with one configured service. Returns immediately with a task id to poll via aiTasks/aiTask."
+  analyzeSceneWithAI(sceneID: ID!, service: String!): AnalyzeSceneWithAIResult!
   "Cancel a queued or running AI server task. Returns false if it was not found or already finished."
   cancelAITask(id: ID!): Boolean!
 }

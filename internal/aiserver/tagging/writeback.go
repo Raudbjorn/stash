@@ -21,13 +21,19 @@ import (
 	"github.com/stashapp/stash/pkg/txn"
 )
 
-// WritebackOptions control how markers reach Stash.
+// WritebackOptions control how markers and scene tags reach Stash.
 type WritebackOptions struct {
-	// CreateMissingTags creates a Stash tag when a label has none.
-	//
-	// Off by default: generated tags are hard to notice and tedious to clean
-	// up, so populating a user's tag list is something they should opt into.
+	// CreateMissingTags creates a Stash tag when a canonical label has no
+	// matching name or alias.
 	CreateMissingTags bool
+
+	// ApplySceneTags adds every resolved marker tag to the scene without
+	// removing tags the user already applied.
+	ApplySceneTags bool
+	// SceneTagNames are the accepted labels to apply to the scene. Marker
+	// renames may be used for labels that produced markers; labels with no
+	// marker rule retain their canonical provider name.
+	SceneTagNames []string
 
 	// ReplacePrevious removes the markers a previous run of the same service
 	// created for the scene. On by default - without it a re-analysis leaves
@@ -49,6 +55,10 @@ func DefaultWritebackOptions() WritebackOptions {
 type WritebackResult struct {
 	Created int `json:"created"`
 	Removed int `json:"removed"`
+	// TagsApplied counts distinct resolved tags added to the scene.
+	TagsApplied int `json:"tags_applied"`
+	// TagsCreated counts canonical labels that required a new Stash tag.
+	TagsCreated int `json:"tags_created"`
 	// SkippedNoTag counts markers dropped because their label has no Stash tag
 	// and tag creation was not requested. Reported rather than silently
 	// swallowed: it is the most common reason a run "produces nothing".
@@ -86,6 +96,9 @@ func (w *Writer) Write(ctx context.Context, service string, sceneID int, runID i
 	if w.repo.SceneMarker == nil {
 		return result, fmt.Errorf("scene markers are unavailable")
 	}
+	if opts.ApplySceneTags && w.repo.Scene == nil {
+		return result, fmt.Errorf("scenes are unavailable")
+	}
 
 	// Resolve tags first, outside the write transaction: a missing tag is a
 	// reason to report rather than to abort a partly-applied write.
@@ -95,12 +108,14 @@ func (w *Writer) Write(ctx context.Context, service string, sceneID int, runID i
 	}
 
 	var (
-		toCreate []resolved
-		missing  = map[string]bool{}
+		toCreate   []resolved
+		missing    = map[string]bool{}
+		sceneTagID = map[int]bool{}
+		createdTag = map[int]bool{}
 	)
 
 	for _, marker := range markers {
-		tagID, err := w.resolveTag(ctx, marker.RenamedTag, opts.CreateMissingTags)
+		tagID, created, err := w.resolveTag(ctx, marker.RenamedTag, opts.CreateMissingTags)
 		if err != nil {
 			return result, err
 		}
@@ -110,12 +125,36 @@ func (w *Writer) Write(ctx context.Context, service string, sceneID int, runID i
 			continue
 		}
 		toCreate = append(toCreate, resolved{marker: marker, tagID: *tagID})
+		if opts.ApplySceneTags && len(opts.SceneTagNames) == 0 {
+			sceneTagID[*tagID] = true
+		}
+		if created {
+			createdTag[*tagID] = true
+		}
+	}
+
+	if opts.ApplySceneTags {
+		for _, name := range opts.SceneTagNames {
+			tagID, created, err := w.resolveTag(ctx, name, opts.CreateMissingTags)
+			if err != nil {
+				return result, err
+			}
+			if tagID == nil {
+				missing[name] = true
+				continue
+			}
+			sceneTagID[*tagID] = true
+			if created {
+				createdTag[*tagID] = true
+			}
+		}
 	}
 
 	for name := range missing {
 		result.MissingTags = append(result.MissingTags, name)
 	}
 	sort.Strings(result.MissingTags)
+	result.TagsCreated = len(createdTag)
 
 	var previous []int
 	if opts.ReplacePrevious && w.db != nil {
@@ -128,6 +167,9 @@ func (w *Writer) Write(ctx context.Context, service string, sceneID int, runID i
 
 	if opts.DryRun {
 		result.Created = len(toCreate)
+		if opts.ApplySceneTags {
+			result.TagsApplied = len(sceneTagID)
+		}
 		result.Removed = len(previous)
 		return result, nil
 	}
@@ -171,6 +213,23 @@ func (w *Writer) Write(ctx context.Context, service string, sceneID int, runID i
 			})
 			result.Created++
 		}
+
+		if opts.ApplySceneTags && len(sceneTagID) > 0 {
+			tagIDs := make([]int, 0, len(sceneTagID))
+			for id := range sceneTagID {
+				tagIDs = append(tagIDs, id)
+			}
+			sort.Ints(tagIDs)
+			partial := models.NewScenePartial()
+			partial.TagIDs = &models.UpdateIDs{
+				IDs:  tagIDs,
+				Mode: models.RelationshipUpdateModeAdd,
+			}
+			if _, err := w.repo.Scene.UpdatePartial(ctx, sceneID, partial); err != nil {
+				return fmt.Errorf("apply AI tags to scene: %w", err)
+			}
+			result.TagsApplied = len(tagIDs)
+		}
 		return nil
 	})
 	if err != nil {
@@ -196,22 +255,23 @@ func (w *Writer) Write(ctx context.Context, service string, sceneID int, runID i
 	return result, nil
 }
 
-// resolveTag maps a label to a Stash tag id, optionally creating it.
-func (w *Writer) resolveTag(ctx context.Context, name string, create bool) (*int, error) {
+// resolveTag maps a label to a Stash tag id, optionally creating it. The bool
+// reports whether this call created the tag.
+func (w *Writer) resolveTag(ctx context.Context, name string, create bool) (*int, bool, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	w.mu.Lock()
-	if cached, ok := w.tagCache[name]; ok {
+	if cached, ok := w.tagCache[name]; ok && (cached != nil || !create) {
 		w.mu.Unlock()
-		return cached, nil
+		return cached, false, nil
 	}
 	w.mu.Unlock()
 
 	if w.repo.Tag == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	var found *models.Tag
@@ -236,9 +296,10 @@ func (w *Writer) resolveTag(ctx context.Context, name string, create bool) (*int
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("look up tag %q: %w", name, err)
+		return nil, false, fmt.Errorf("look up tag %q: %w", name, err)
 	}
 
+	created := false
 	if found == nil && create {
 		newTag := models.NewTag()
 		newTag.Name = name
@@ -247,9 +308,10 @@ func (w *Writer) resolveTag(ctx context.Context, name string, create bool) (*int
 			return w.repo.Tag.Create(ctx, input)
 		})
 		if err != nil {
-			return nil, fmt.Errorf("create tag %q: %w", name, err)
+			return nil, false, fmt.Errorf("create tag %q: %w", name, err)
 		}
 		found = &newTag
+		created = true
 	}
 
 	var id *int
@@ -261,7 +323,7 @@ func (w *Writer) resolveTag(ctx context.Context, name string, create bool) (*int
 	w.mu.Lock()
 	w.tagCache[name] = id
 	w.mu.Unlock()
-	return id, nil
+	return id, created, nil
 }
 
 // InvalidateTagCache forgets resolved tags.

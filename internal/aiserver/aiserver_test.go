@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/stashapp/stash/internal/manager/config"
+	"github.com/stashapp/stash/pkg/aitag/llamaprov"
 )
 
 // newTestConfig builds a config rooted at a temp directory, so the AI database
@@ -247,5 +249,17 @@ func TestDatabasePathDefaultsBesideConfig(t *testing.T) {
 	cfg.SetString(config.AIDatabasePath, abs)
 	if got := cfg.GetAIDatabasePath(); got != abs {
 		t.Errorf("absolute override = %q, want %q", got, abs)
+	}
+}
+
+func TestEffectiveTaxonomyCategoriesUsesAnalyzerDefaults(t *testing.T) {
+	defaults := effectiveTaxonomyCategories(nil)
+	if want := llamaprov.DefaultTaxonomyCategories(); !reflect.DeepEqual(defaults, want) {
+		t.Fatalf("categories = %q, want %q", defaults, want)
+	}
+
+	configured := []string{"Custom"}
+	if got := effectiveTaxonomyCategories(configured); !reflect.DeepEqual(got, configured) {
+		t.Fatalf("configured categories = %q, want %q", got, configured)
 	}
 }

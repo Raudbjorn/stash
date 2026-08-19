@@ -111,6 +111,12 @@ type AIServerStatus {
   hasVLMProvider: Boolean!
   "True when an enabled OpenAI-compatible local text-generation provider is reachable."
   hasLocalTextProvider: Boolean!
+  "Checksum-pinned llama.cpp vision-language model pairs offered by this build."
+  availableVLMModels: [String!]!
+  "Voyage reranker model names accepted by this build."
+  availableVoyageRerankModels: [String!]!
+  "Voyage multimodal video model names accepted by this build."
+  availableVoyageVideoModels: [String!]!
   backendVersion: String!
   schemaVersion: String
   error: String
