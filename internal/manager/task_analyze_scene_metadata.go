@@ -629,7 +629,7 @@ func (j *analyzeSceneMetadataJob) processScene(ctx context.Context, sc *models.S
 		}
 	}
 	if fileDirty {
-		addSuggestion(sceneMetadataActionFileMetadata, sceneMetadataActionPayload{File: primary}, "container_metadata_probe")
+		addSuggestion(sceneMetadataActionFileMetadata, sceneMetadataActionPayload{File: newSceneMetadataFileUpdate(primary)}, "container_metadata_probe")
 	}
 
 	if analysis.Diagnostics.ModelAvailable {
@@ -656,7 +656,7 @@ func (j *analyzeSceneMetadataJob) processScene(ctx context.Context, sc *models.S
 		LocalCandidates: localCandidates, RemoteCandidates: remoteCandidates,
 		Suggested: suggestions, ReasonCodes: sortedUniqueStrings(reasonCodes),
 		Ambiguity:      ambiguity,
-		StaleSceneHash: staleSceneHash(sc, existingPerformerIDs),
+		StaleSceneHash: staleSceneHash(sc, existingPerformerIDs, existingGroups, sc.StashIDs.List(), primary),
 		PolicyVersion:  j.policyVersion, ModelFingerprint: j.modelFingerprint,
 		State: planState, CreatedAt: time.Now().UTC(),
 	}

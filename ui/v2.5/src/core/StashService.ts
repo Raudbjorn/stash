@@ -3183,6 +3183,43 @@ export const mutateMetadataAnalyzeScenes = (
     mutation: GQL.MetadataAnalyzeScenesDocument,
     variables: { input },
   });
+export const useSceneMetadataPlans = (sceneIds: string[], skip = false) =>
+  GQL.useSceneMetadataPlansQuery({
+    variables: { sceneIds },
+    fetchPolicy: "no-cache",
+    pollInterval: skip ? 0 : 2000,
+    skip,
+  });
+
+export const mutateAcceptSceneMetadataProposalAction = (
+  runId: string,
+  sceneId: string,
+  actionIds: string[]
+) =>
+  client.mutate<GQL.AcceptSceneMetadataProposalActionMutation>({
+    mutation: GQL.AcceptSceneMetadataProposalActionDocument,
+    variables: { runId, sceneId, actionIds },
+  });
+
+export const mutateRejectSceneMetadataProposalAction = (
+  runId: string,
+  sceneId: string,
+  actionIds: string[]
+) =>
+  client.mutate<GQL.RejectSceneMetadataProposalActionMutation>({
+    mutation: GQL.RejectSceneMetadataProposalActionDocument,
+    variables: { runId, sceneId, actionIds },
+  });
+
+export const mutateApplySceneMetadataPlan = (
+  runId: string,
+  sceneIds: string[]
+) =>
+  client.mutate<GQL.ApplySceneMetadataPlanMutation>({
+    mutation: GQL.ApplySceneMetadataPlanDocument,
+    variables: { runId, sceneIds },
+  });
+
 export const useSceneMetadataModels = () =>
   GQL.useSceneMetadataModelsQuery({
     fetchPolicy: "no-cache",

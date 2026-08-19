@@ -83,3 +83,31 @@ mutation AnonymiseDatabase($input: AnonymiseDatabaseInput!) {
 mutation OptimiseDatabase {
   optimiseDatabase
 }
+
+mutation AcceptSceneMetadataProposalAction(
+  $runId: String!
+  $sceneId: ID!
+  $actionIds: [ID!]!
+) {
+  acceptSceneMetadataProposalAction(
+    runId: $runId
+    sceneId: $sceneId
+    actionIds: $actionIds
+  )
+}
+
+mutation RejectSceneMetadataProposalAction(
+  $runId: String!
+  $sceneId: ID!
+  $actionIds: [ID!]!
+) {
+  rejectSceneMetadataProposalAction(
+    runId: $runId
+    sceneId: $sceneId
+    actionIds: $actionIds
+  )
+}
+
+mutation ApplySceneMetadataPlan($runId: String!, $sceneIds: [ID!]!) {
+  applySceneMetadataPlan(runId: $runId, sceneIds: $sceneIds)
+}

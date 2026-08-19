@@ -110,3 +110,22 @@ query FindScenesForSelect(
     }
   }
 }
+
+query SceneMetadataPlans($sceneIds: [ID!]) {
+  sceneMetadataPlans(sceneIds: $sceneIds) {
+    runID
+    sceneID
+    suggested {
+      actionID
+      kind
+      payloadJSON
+      state
+      reasonCodes
+    }
+    reasonCodes
+    ambiguity
+    state
+    createdAt
+    appliedAt
+  }
+}

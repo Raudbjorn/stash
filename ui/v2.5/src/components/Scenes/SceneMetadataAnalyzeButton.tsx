@@ -9,6 +9,7 @@ import {
 } from "src/core/StashService";
 import { useToast } from "src/hooks/Toast";
 import { ModalComponent } from "src/components/Shared/Modal";
+import { SceneMetadataPlanReviewModal } from "./SceneMetadataPlanReviewModal";
 
 interface ISceneMetadataAnalyzeButton {
   sceneIds: string[];
@@ -42,6 +43,7 @@ export const SceneMetadataAnalyzeButton: React.FC<
   const Toast = useToast();
   const { data: configurationData } = useConfiguration();
   const [show, setShow] = useState(false);
+  const [showReview, setShowReview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const persisted = (
     configurationData?.configuration.ui as
@@ -83,6 +85,7 @@ export const SceneMetadataAnalyzeButton: React.FC<
         )
       );
       setShow(false);
+      if (options.dryRun ?? true) setShowReview(true);
     } catch (error) {
       Toast.error(error);
     } finally {
@@ -99,6 +102,17 @@ export const SceneMetadataAnalyzeButton: React.FC<
         onClick={open}
       >
         <FormattedMessage id="actions.analyze_scene_metadata" />…
+      </Button>
+      <Button
+        variant="secondary"
+        className={className ? `${className} ml-2` : "ml-2"}
+        disabled={sceneIds.length === 0}
+        onClick={() => setShowReview(true)}
+      >
+        <FormattedMessage
+          id="scene_metadata.review.action"
+          defaultMessage="Review proposals"
+        />
       </Button>
       {show && (
         <ModalComponent
@@ -233,6 +247,11 @@ export const SceneMetadataAnalyzeButton: React.FC<
           </Form>
         </ModalComponent>
       )}
+      <SceneMetadataPlanReviewModal
+        show={showReview}
+        sceneIds={sceneIds}
+        onHide={() => setShowReview(false)}
+      />
     </>
   );
 };

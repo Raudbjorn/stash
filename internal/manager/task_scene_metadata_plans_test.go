@@ -68,7 +68,7 @@ func TestSceneMetadataAcceptedRemoteMatchWritesStashID(t *testing.T) {
 	remoteID := "remote-scene"
 	plan := &AnalysisPlan{
 		RunID: "fingerprint-run", SceneID: scene.ID,
-		StaleSceneHash: staleSceneHash(scene, nil),
+		StaleSceneHash: staleSceneHash(scene, nil, nil, nil, nil),
 		State:          SceneMetadataPlanAccepted, CreatedAt: time.Now().UTC(),
 		RemoteCandidates: []RemoteSceneCandidate{{
 			Endpoint: endpoint, RemoteID: remoteID,
@@ -185,5 +185,38 @@ func TestSceneMetadataBlockedSearchLeavesCloseMatchesForReview(t *testing.T) {
 	}
 	if len(candidates) != 2 || chosen != nil {
 		t.Fatalf("candidates = %+v chosen = %+v", candidates, chosen)
+	}
+}
+
+func TestStaleSceneHashIncludesActionDependentRelationshipsAndFileMetadata(t *testing.T) {
+	scene := models.NewScene()
+	scene.Title = "Planned Scene"
+	groupIndex := 1
+	groups := []models.GroupsScenes{{GroupID: 10, SceneIndex: &groupIndex}}
+	stashIDs := []models.StashID{{Endpoint: "https://box.example/graphql", StashID: "remote"}}
+	file := &models.VideoFile{
+		BaseFile:       &models.BaseFile{ID: 20},
+		Title:          "Container Title",
+		Comment:        "Comment",
+		Encoder:        "Encoder",
+		Tags:           map[string]string{"key": "value"},
+		CreationTime:   time.Unix(100, 0).UTC(),
+		MetadataProbed: true,
+	}
+	original := staleSceneHash(&scene, nil, groups, stashIDs, file)
+
+	changedIndex := 2
+	changedGroups := []models.GroupsScenes{{GroupID: 10, SceneIndex: &changedIndex}}
+	if got := staleSceneHash(&scene, nil, changedGroups, stashIDs, file); got == original {
+		t.Fatal("group edit did not change stale-scene hash")
+	}
+	changedStashIDs := []models.StashID{{Endpoint: "https://box.example/graphql", StashID: "new-remote"}}
+	if got := staleSceneHash(&scene, nil, groups, changedStashIDs, file); got == original {
+		t.Fatal("stash ID edit did not change stale-scene hash")
+	}
+	changedFile := *file
+	changedFile.Title = "Updated Container Title"
+	if got := staleSceneHash(&scene, nil, groups, stashIDs, &changedFile); got == original {
+		t.Fatal("file metadata edit did not change stale-scene hash")
 	}
 }

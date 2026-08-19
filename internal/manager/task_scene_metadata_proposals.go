@@ -63,7 +63,15 @@ func (s *Manager) setSceneMetadataProposalActionState(ctx context.Context, runID
 		if updated != len(ids) {
 			return fmt.Errorf("one or more scene metadata actions are not proposed")
 		}
-		return nil
+		actions, err = s.Repository.SceneMetadataPlan.FindSceneMetadataPlanActions(ctx, runID, sceneID)
+		if err != nil {
+			return err
+		}
+		state, update := reviewedSceneMetadataPlanState(actions)
+		if !update {
+			return nil
+		}
+		return s.Repository.SceneMetadataPlan.SetSceneMetadataPlanState(ctx, runID, sceneID, string(state), nil)
 	})
 	return err == nil, err
 }
@@ -81,12 +89,18 @@ func (s *Manager) ApplySceneMetadataPlans(ctx context.Context, runID string, sce
 	if err != nil {
 		return false, fmt.Errorf("parse scene IDs: %w", err)
 	}
-	for _, sceneID := range ids {
-		if err := applySceneMetadataPlan(ctx, s.Repository, runID, sceneID); err != nil {
-			return false, err
-		}
+	if s.Repository.SceneMetadataPlan == nil {
+		return false, fmt.Errorf("scene metadata plan store is unavailable")
 	}
-	return true, nil
+	err = s.Repository.WithTxn(ctx, func(ctx context.Context) error {
+		for _, sceneID := range ids {
+			if err := applySceneMetadataPlanTx(ctx, s.Repository, runID, sceneID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return err == nil, err
 }
 
 func (j *analyzeSceneMetadataJob) ApplySceneMetadataPlan(ctx context.Context, runID string, sceneID int) error {
@@ -98,164 +112,190 @@ func applySceneMetadataPlan(ctx context.Context, repository models.Repository, r
 		return fmt.Errorf("scene metadata plan store is unavailable")
 	}
 	return repository.WithTxn(ctx, func(ctx context.Context) error {
-		record, err := repository.SceneMetadataPlan.FindSceneMetadataPlan(ctx, runID, sceneID)
-		if err != nil {
-			return err
-		}
-		if record == nil {
-			return fmt.Errorf("scene metadata plan %s/%d not found", runID, sceneID)
-		}
-		var plan AnalysisPlan
-		if err := json.Unmarshal([]byte(record.ProposalJSON), &plan); err != nil {
-			return fmt.Errorf("decode scene metadata plan: %w", err)
-		}
-		scene, err := repository.Scene.Find(ctx, sceneID)
-		if err != nil {
-			return err
-		}
-		if scene == nil {
-			return fmt.Errorf("scene %d not found", sceneID)
-		}
-		if err := scene.LoadPerformerIDs(ctx, repository.Scene); err != nil {
-			return err
-		}
-		if err := scene.LoadGroups(ctx, repository.Scene); err != nil {
-			return err
-		}
-		if err := scene.LoadFiles(ctx, repository.Scene); err != nil {
-			return err
-		}
-		if err := scene.LoadStashIDs(ctx, repository.Scene); err != nil {
-			return err
-		}
-		if staleSceneHash(scene, scene.PerformerIDs.List()) != plan.StaleSceneHash {
-			actions, err := repository.SceneMetadataPlan.FindSceneMetadataPlanActions(ctx, runID, sceneID)
-			if err != nil {
-				return err
-			}
-			accepted := actionIDsInState(actions, string(SceneMetadataPlanAccepted))
-			if _, err := repository.SceneMetadataPlan.SetSceneMetadataPlanActionStates(
-				ctx, runID, sceneID, accepted,
-				string(SceneMetadataPlanAccepted), string(SceneMetadataPlanStale),
-			); err != nil {
-				return err
-			}
-			return repository.SceneMetadataPlan.SetSceneMetadataPlanState(
-				ctx, runID, sceneID, string(SceneMetadataPlanStale), nil,
-			)
-		}
+		return applySceneMetadataPlanTx(ctx, repository, runID, sceneID)
+	})
+}
 
+func applySceneMetadataPlanTx(ctx context.Context, repository models.Repository, runID string, sceneID int) error {
+	record, err := repository.SceneMetadataPlan.FindSceneMetadataPlan(ctx, runID, sceneID)
+	if err != nil {
+		return err
+	}
+	if record == nil {
+		return fmt.Errorf("scene metadata plan %s/%d not found", runID, sceneID)
+	}
+	var plan AnalysisPlan
+	if err := json.Unmarshal([]byte(record.ProposalJSON), &plan); err != nil {
+		return fmt.Errorf("decode scene metadata plan: %w", err)
+	}
+	scene, err := repository.Scene.Find(ctx, sceneID)
+	if err != nil {
+		return err
+	}
+	if scene == nil {
+		return fmt.Errorf("scene %d not found", sceneID)
+	}
+	if err := scene.LoadPerformerIDs(ctx, repository.Scene); err != nil {
+		return err
+	}
+	if err := scene.LoadGroups(ctx, repository.Scene); err != nil {
+		return err
+	}
+	if err := scene.LoadFiles(ctx, repository.Scene); err != nil {
+		return err
+	}
+	if err := scene.LoadStashIDs(ctx, repository.Scene); err != nil {
+		return err
+	}
+	if staleSceneHash(scene, scene.PerformerIDs.List(), scene.Groups.List(), scene.StashIDs.List(), scene.Files.Primary()) != plan.StaleSceneHash {
 		actions, err := repository.SceneMetadataPlan.FindSceneMetadataPlanActions(ctx, runID, sceneID)
 		if err != nil {
 			return err
 		}
-		accepted := make([]models.SceneMetadataPlanActionRecord, 0, len(actions))
-		for _, action := range actions {
-			if action.State == string(SceneMetadataPlanAccepted) {
-				accepted = append(accepted, action)
-			}
-		}
-		if len(accepted) == 0 {
-			return nil
-		}
-
-		partial := models.NewScenePartial()
-		performerIDs := append([]int(nil), scene.PerformerIDs.List()...)
-		performerIDsSet := false
-		var fileUpdates []*models.VideoFile
-		for _, action := range accepted {
-			var payload sceneMetadataActionPayload
-			if err := json.Unmarshal([]byte(action.PayloadJSON), &payload); err != nil {
-				return fmt.Errorf("decode scene metadata action %d: %w", action.ID, err)
-			}
-			switch action.Kind {
-			case sceneMetadataActionPerformerIDs:
-				performerIDs = append([]int(nil), payload.PerformerIDs...)
-				performerIDsSet = true
-			case sceneMetadataActionCreatePerformer:
-				if payload.Performer == nil {
-					return fmt.Errorf("performer action %d has no performer", action.ID)
-				}
-				id, err := createOrFindPlannedPerformer(ctx, repository, payload.Performer)
-				if err != nil {
-					return err
-				}
-				performerIDs = mergeIDs(performerIDs, []int{id})
-				performerIDsSet = true
-			case sceneMetadataActionStudioID:
-				if payload.StudioID == nil {
-					return fmt.Errorf("studio action %d has no studio ID", action.ID)
-				}
-				partial.StudioID = models.NewOptionalInt(*payload.StudioID)
-			case sceneMetadataActionCreateStudio:
-				if payload.Studio == nil {
-					return fmt.Errorf("studio action %d has no studio", action.ID)
-				}
-				if err := repository.Studio.Create(ctx, payload.Studio); err != nil {
-					return err
-				}
-				partial.StudioID = models.NewOptionalInt(payload.Studio.ID)
-			case sceneMetadataActionDate:
-				if payload.Date == nil {
-					return fmt.Errorf("date action %d has no date", action.ID)
-				}
-				date, err := models.ParseDate(*payload.Date)
-				if err != nil {
-					return err
-				}
-				partial.Date = models.NewOptionalDate(date)
-			case sceneMetadataActionTitle:
-				if payload.Title == nil {
-					return fmt.Errorf("title action %d has no title", action.ID)
-				}
-				partial.Title = models.NewOptionalString(*payload.Title)
-			case sceneMetadataActionGroups:
-				partial.GroupIDs = &models.UpdateGroupIDs{Groups: payload.Groups, Mode: models.RelationshipUpdateModeSet}
-			case sceneMetadataActionFileMetadata:
-				if payload.File != nil {
-					fileUpdates = append(fileUpdates, payload.File)
-				}
-			case sceneMetadataActionRemoteScene:
-				if payload.Endpoint == "" || payload.RemoteID == "" {
-					return fmt.Errorf("remote scene action %d is incomplete", action.ID)
-				}
-				stashIDs := append([]models.StashID(nil), scene.StashIDs.List()...)
-				stashIDs = append(stashIDs, models.StashID{Endpoint: payload.Endpoint, StashID: payload.RemoteID})
-				partial.StashIDs = &models.UpdateStashIDs{StashIDs: stashIDs, Mode: models.RelationshipUpdateModeSet}
-			default:
-				return fmt.Errorf("unsupported scene metadata action kind %q", action.Kind)
-			}
-		}
-		if performerIDsSet {
-			partial.PerformerIDs = &models.UpdateIDs{IDs: performerIDs, Mode: models.RelationshipUpdateModeSet}
-		}
-		for _, file := range fileUpdates {
-			if err := repository.File.Update(ctx, file); err != nil {
-				return err
-			}
-		}
-		if _, err := repository.Scene.UpdatePartial(ctx, sceneID, partial); err != nil {
+		accepted := actionIDsInState(actions, string(SceneMetadataPlanAccepted))
+		if _, err := repository.SceneMetadataPlan.SetSceneMetadataPlanActionStates(
+			ctx, runID, sceneID, accepted,
+			string(SceneMetadataPlanAccepted), string(SceneMetadataPlanStale),
+		); err != nil {
 			return err
 		}
-		acceptedIDs := make([]int, 0, len(accepted))
-		for _, action := range accepted {
-			acceptedIDs = append(acceptedIDs, action.ID)
-		}
-		updated, err := repository.SceneMetadataPlan.SetSceneMetadataPlanActionStates(
-			ctx, runID, sceneID, acceptedIDs,
-			string(SceneMetadataPlanAccepted), string(SceneMetadataPlanApplied),
+		return repository.SceneMetadataPlan.SetSceneMetadataPlanState(
+			ctx, runID, sceneID, string(SceneMetadataPlanStale), nil,
 		)
+	}
+
+	actions, err := repository.SceneMetadataPlan.FindSceneMetadataPlanActions(ctx, runID, sceneID)
+	if err != nil {
+		return err
+	}
+	accepted := make([]models.SceneMetadataPlanActionRecord, 0, len(actions))
+	for _, action := range actions {
+		if action.State == string(SceneMetadataPlanAccepted) {
+			accepted = append(accepted, action)
+		}
+	}
+	if len(accepted) == 0 {
+		return nil
+	}
+
+	partial := models.NewScenePartial()
+	performerIDs := append([]int(nil), scene.PerformerIDs.List()...)
+	var createdPerformerIDs []int
+	performerIDsSet := false
+	var fileUpdates []*sceneMetadataFileUpdate
+	for _, action := range accepted {
+		var payload sceneMetadataActionPayload
+		if err := json.Unmarshal([]byte(action.PayloadJSON), &payload); err != nil {
+			return fmt.Errorf("decode scene metadata action %d: %w", action.ID, err)
+		}
+		switch action.Kind {
+		case sceneMetadataActionPerformerIDs:
+			performerIDs = append([]int(nil), payload.PerformerIDs...)
+			performerIDsSet = true
+		case sceneMetadataActionCreatePerformer:
+			if payload.Performer == nil {
+				return fmt.Errorf("performer action %d has no performer", action.ID)
+			}
+			id, err := createOrFindPlannedPerformer(ctx, repository, payload.Performer)
+			if err != nil {
+				return err
+			}
+			createdPerformerIDs = append(createdPerformerIDs, id)
+			performerIDsSet = true
+		case sceneMetadataActionStudioID:
+			if payload.StudioID == nil {
+				return fmt.Errorf("studio action %d has no studio ID", action.ID)
+			}
+			partial.StudioID = models.NewOptionalInt(*payload.StudioID)
+		case sceneMetadataActionCreateStudio:
+			if payload.Studio == nil {
+				return fmt.Errorf("studio action %d has no studio", action.ID)
+			}
+			if err := repository.Studio.Create(ctx, payload.Studio); err != nil {
+				return err
+			}
+			partial.StudioID = models.NewOptionalInt(payload.Studio.ID)
+		case sceneMetadataActionDate:
+			if payload.Date == nil {
+				return fmt.Errorf("date action %d has no date", action.ID)
+			}
+			date, err := models.ParseDate(*payload.Date)
+			if err != nil {
+				return err
+			}
+			partial.Date = models.NewOptionalDate(date)
+		case sceneMetadataActionTitle:
+			if payload.Title == nil {
+				return fmt.Errorf("title action %d has no title", action.ID)
+			}
+			partial.Title = models.NewOptionalString(*payload.Title)
+		case sceneMetadataActionGroups:
+			partial.GroupIDs = &models.UpdateGroupIDs{Groups: payload.Groups, Mode: models.RelationshipUpdateModeSet}
+		case sceneMetadataActionFileMetadata:
+			if payload.File != nil {
+				fileUpdates = append(fileUpdates, payload.File)
+			}
+		case sceneMetadataActionRemoteScene:
+			if payload.Endpoint == "" || payload.RemoteID == "" {
+				return fmt.Errorf("remote scene action %d is incomplete", action.ID)
+			}
+			stashIDs := append([]models.StashID(nil), scene.StashIDs.List()...)
+			stashIDs = append(stashIDs, models.StashID{Endpoint: payload.Endpoint, StashID: payload.RemoteID})
+			partial.StashIDs = &models.UpdateStashIDs{StashIDs: stashIDs, Mode: models.RelationshipUpdateModeSet}
+		default:
+			return fmt.Errorf("unsupported scene metadata action kind %q", action.Kind)
+		}
+	}
+	if performerIDsSet {
+		performerIDs = mergeIDs(performerIDs, createdPerformerIDs)
+		partial.PerformerIDs = &models.UpdateIDs{IDs: performerIDs, Mode: models.RelationshipUpdateModeSet}
+	}
+	for _, update := range fileUpdates {
+		files, err := repository.File.Find(ctx, update.ID)
 		if err != nil {
 			return err
 		}
-		if updated != len(acceptedIDs) {
-			return fmt.Errorf("scene metadata action state changed during apply")
+		if len(files) != 1 {
+			return fmt.Errorf("video file %d not found", update.ID)
 		}
-		now := time.Now().UTC()
-		return repository.SceneMetadataPlan.SetSceneMetadataPlanState(
-			ctx, runID, sceneID, string(SceneMetadataPlanApplied), &now,
-		)
-	})
+		file, ok := files[0].(*models.VideoFile)
+		if !ok {
+			return fmt.Errorf("file %d is not a video", update.ID)
+		}
+		file.Title = update.Title
+		file.Comment = update.Comment
+		file.Encoder = update.Encoder
+		file.Tags = make(map[string]string, len(update.Tags))
+		for key, value := range update.Tags {
+			file.Tags[key] = value
+		}
+		file.CreationTime = update.CreationTime
+		file.MetadataProbed = update.MetadataProbed
+		if err := repository.File.Update(ctx, file); err != nil {
+			return err
+		}
+	}
+	if _, err := repository.Scene.UpdatePartial(ctx, sceneID, partial); err != nil {
+		return err
+	}
+	acceptedIDs := make([]int, 0, len(accepted))
+	for _, action := range accepted {
+		acceptedIDs = append(acceptedIDs, action.ID)
+	}
+	updated, err := repository.SceneMetadataPlan.SetSceneMetadataPlanActionStates(
+		ctx, runID, sceneID, acceptedIDs,
+		string(SceneMetadataPlanAccepted), string(SceneMetadataPlanApplied),
+	)
+	if err != nil {
+		return err
+	}
+	if updated != len(acceptedIDs) {
+		return fmt.Errorf("scene metadata action state changed during apply")
+	}
+	now := time.Now().UTC()
+	return repository.SceneMetadataPlan.SetSceneMetadataPlanState(
+		ctx, runID, sceneID, string(SceneMetadataPlanApplied), &now,
+	)
 }
 
 func createOrFindPlannedPerformer(ctx context.Context, repository models.Repository, proposed *models.Performer) (int, error) {
@@ -287,4 +327,25 @@ func actionIDsInState(actions []models.SceneMetadataPlanActionRecord, state stri
 		}
 	}
 	return ids
+}
+
+func reviewedSceneMetadataPlanState(actions []models.SceneMetadataPlanActionRecord) (SceneMetadataPlanState, bool) {
+	hasAccepted, hasProposed := false, false
+	for _, action := range actions {
+		switch SceneMetadataPlanState(action.State) {
+		case SceneMetadataPlanApplied, SceneMetadataPlanStale:
+			return "", false
+		case SceneMetadataPlanAccepted:
+			hasAccepted = true
+		case SceneMetadataPlanProposed:
+			hasProposed = true
+		}
+	}
+	if hasAccepted {
+		return SceneMetadataPlanAccepted, true
+	}
+	if hasProposed {
+		return SceneMetadataPlanProposed, true
+	}
+	return SceneMetadataPlanRejected, true
 }

@@ -175,9 +175,33 @@ type sceneMetadataActionPayload struct {
 	Date         *string                   `json:"date,omitempty"`
 	Title        *string                   `json:"title,omitempty"`
 	Groups       []models.GroupsScenes     `json:"groups,omitempty"`
-	File         *models.VideoFile         `json:"file,omitempty"`
+	File         *sceneMetadataFileUpdate  `json:"file,omitempty"`
 	Endpoint     string                    `json:"endpoint,omitempty"`
 	RemoteID     string                    `json:"remoteID,omitempty"`
+}
+
+type sceneMetadataFileUpdate struct {
+	ID             models.FileID     `json:"id"`
+	Title          string            `json:"title"`
+	Comment        string            `json:"comment"`
+	Encoder        string            `json:"encoder"`
+	Tags           map[string]string `json:"tags"`
+	CreationTime   time.Time         `json:"creationTime"`
+	MetadataProbed bool              `json:"metadataProbed"`
+}
+
+func newSceneMetadataFileUpdate(file *models.VideoFile) *sceneMetadataFileUpdate {
+	if file == nil {
+		return nil
+	}
+	tags := make(map[string]string, len(file.Tags))
+	for key, value := range file.Tags {
+		tags[key] = value
+	}
+	return &sceneMetadataFileUpdate{
+		ID: file.ID, Title: file.Title, Comment: file.Comment, Encoder: file.Encoder,
+		Tags: tags, CreationTime: file.CreationTime, MetadataProbed: file.MetadataProbed,
+	}
 }
 
 func newSceneMetadataRunID() string {
@@ -554,9 +578,36 @@ func candidateFromResolution(resolution performerResolution) PerformerCandidate 
 	return candidate
 }
 
-func staleSceneHash(scene *models.Scene, performerIDs []int) string {
+func staleSceneHash(
+	scene *models.Scene,
+	performerIDs []int,
+	groups []models.GroupsScenes,
+	stashIDs []models.StashID,
+	primary *models.VideoFile,
+) string {
 	ids := append([]int(nil), performerIDs...)
 	sort.Ints(ids)
+	sortedGroups := append([]models.GroupsScenes(nil), groups...)
+	sort.Slice(sortedGroups, func(left, right int) bool {
+		if sortedGroups[left].GroupID != sortedGroups[right].GroupID {
+			return sortedGroups[left].GroupID < sortedGroups[right].GroupID
+		}
+		leftIndex, rightIndex := -1, -1
+		if sortedGroups[left].SceneIndex != nil {
+			leftIndex = *sortedGroups[left].SceneIndex
+		}
+		if sortedGroups[right].SceneIndex != nil {
+			rightIndex = *sortedGroups[right].SceneIndex
+		}
+		return leftIndex < rightIndex
+	})
+	sortedStashIDs := append([]models.StashID(nil), stashIDs...)
+	sort.Slice(sortedStashIDs, func(left, right int) bool {
+		if sortedStashIDs[left].Endpoint != sortedStashIDs[right].Endpoint {
+			return sortedStashIDs[left].Endpoint < sortedStashIDs[right].Endpoint
+		}
+		return sortedStashIDs[left].StashID < sortedStashIDs[right].StashID
+	})
 	date := ""
 	if scene.Date != nil {
 		date = scene.Date.String()
@@ -567,7 +618,14 @@ func staleSceneHash(scene *models.Scene, performerIDs []int) string {
 		PerformerIDs []int
 		StudioID     *int
 		Organized    bool
-	}{scene.Title, date, ids, scene.StudioID, scene.Organized})
+		Groups       []models.GroupsScenes
+		StashIDs     []models.StashID
+		PrimaryFile  *sceneMetadataFileUpdate
+	}{
+		Title: scene.Title, Date: date, PerformerIDs: ids, StudioID: scene.StudioID,
+		Organized: scene.Organized, Groups: sortedGroups, StashIDs: sortedStashIDs,
+		PrimaryFile: newSceneMetadataFileUpdate(primary),
+	})
 	digest := sha256.Sum256(payload)
 	return hex.EncodeToString(digest[:])
 }
