@@ -31,3 +31,7 @@ func (r *queryResolver) SceneMetadataModelStatus(ctx context.Context) (*manager.
 	status := manager.GetInstance().SceneMetadataModelStatus()
 	return &status, nil
 }
+
+func (r *queryResolver) SceneMetadataPlans(ctx context.Context, sceneIds []string, runID *string, state *manager.SceneMetadataPlanState, latestOnly bool, limit *int) ([]*manager.AnalysisPlan, error) {
+	return manager.GetInstance().SceneMetadataPlans(ctx, sceneIds, runID, state, latestOnly, limit)
+}

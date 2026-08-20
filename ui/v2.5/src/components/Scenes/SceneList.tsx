@@ -59,6 +59,7 @@ import { useZoomKeybinds } from "../List/ZoomSlider";
 import { FilteredListToolbar } from "../List/FilteredListToolbar";
 import { FilterTags } from "../List/FilterTags";
 import { SidebarFolderFilter } from "../List/Filters/FolderFilter";
+import { SceneMetadataAnalyzeButton } from "./SceneMetadataAnalyzeButton";
 
 function renderMetadataByline(result: GQL.FindScenesQueryResult) {
   const duration = result?.data?.findScenes?.duration;
@@ -628,15 +629,23 @@ export const FilteredSceneList = PatchComponent(
     if (sidebarStateLoading) return null;
 
     const operations = (
-      <ListOperations
-        items={items.length}
-        hasSelection={hasSelection}
-        operations={otherOperations}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        onPlay={onPlay}
-        operationsMenuClassName="scene-list-operations-dropdown"
-      />
+      <>
+        {hasSelection && (
+          <SceneMetadataAnalyzeButton
+            sceneIds={Array.from(selectedIds.values())}
+            className="mr-2"
+          />
+        )}
+        <ListOperations
+          items={items.length}
+          hasSelection={hasSelection}
+          operations={otherOperations}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onPlay={onPlay}
+          operationsMenuClassName="scene-list-operations-dropdown"
+        />
+      </>
     );
 
     return (

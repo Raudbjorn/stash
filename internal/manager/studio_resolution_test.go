@@ -381,7 +381,7 @@ func TestResolveStudioCandidateSingleProviderAdopts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolution.Status != studioResolutionCreated {
+	if resolution.Status != studioResolutionProposed {
 		t.Fatalf("resolution = %+v, want created", resolution)
 	}
 	if resolution.ProviderID != "stashbox:https://box.example/graphql" {
@@ -421,7 +421,7 @@ func TestResolveStudioCandidateMultipleProvidersAgree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolution.Status != studioResolutionCreated {
+	if resolution.Status != studioResolutionProposed {
 		t.Fatalf("resolution = %+v, want created", resolution)
 	}
 	if completer.callCount() != 0 {
@@ -455,7 +455,7 @@ func TestResolveStudioCandidateLLMDisambiguatesConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolution.Status != studioResolutionCreated {
+	if resolution.Status != studioResolutionProposed {
 		t.Fatalf("resolution = %+v, want created", resolution)
 	}
 	if resolution.ProviderID != "stashbox:https://two.example/graphql" {
@@ -584,17 +584,24 @@ func TestStudioCandidateMatchesScraped(t *testing.T) {
 	}
 }
 
-func TestResolveStudioCandidateDryRun(t *testing.T) {
+func TestResolveStudioCandidateDryRunStillVerifies(t *testing.T) {
 	r := newTestRepository(t)
+	querier := &recordingStashBoxStudioQuerier{responses: []*models.ScrapedStudio{bravoFilms()}}
 	job := &analyzeSceneMetadataJob{
 		repository: r,
 		input:      AnalyzeSceneMetadataInput{DryRun: true},
+		studioVerifierStashBoxes: []studioStashBoxVerifier{
+			{ID: "stashbox:https://box.example/graphql", client: querier},
+		},
 	}
-	resolution, err := job.resolveStudioCandidate(context.Background(), 1, "Anything", nil)
+	resolution, err := job.resolveStudioCandidate(context.Background(), 1, "Bravo Films", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolution.Status != studioResolutionDryRun {
-		t.Fatalf("status = %s, want dry_run", resolution.Status)
+	if resolution.Status != studioResolutionProposed || resolution.Proposed == nil {
+		t.Fatalf("resolution = %+v, want verified proposal", resolution)
+	}
+	if len(querier.calls) != 1 {
+		t.Fatalf("verifier calls = %d, want 1", len(querier.calls))
 	}
 }

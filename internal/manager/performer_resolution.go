@@ -21,17 +21,16 @@ type performerResolutionStatus string
 
 const (
 	performerResolutionExisting   performerResolutionStatus = "existing"
-	performerResolutionCreated    performerResolutionStatus = "created"
+	performerResolutionProposed   performerResolutionStatus = "proposed"
 	performerResolutionAmbiguous  performerResolutionStatus = "ambiguous"
 	performerResolutionUnverified performerResolutionStatus = "unverified"
-	performerResolutionDryRun     performerResolutionStatus = "dry_run"
 	performerResolutionCancelled  performerResolutionStatus = "cancelled"
 )
 
 const (
 	performerReasonSingleExactLibraryMatch = "single_exact_library_match"
 	performerReasonScraperIdentityMatch    = "scraper_identity_match"
-	performerReasonCreatedAfterRecheck     = "created_after_transaction_recheck"
+	performerReasonVerifiedNewPerformer    = "verified_new_performer"
 	performerReasonMultipleLibraryMatches  = "multiple_exact_library_matches"
 	performerReasonScraperResultsConflict  = "scraper_results_conflict"
 	performerReasonScraperNoExactResult    = "scraper_no_exact_result"
@@ -39,7 +38,6 @@ const (
 	performerReasonVerifierFailed          = "verifier_failed"
 	performerReasonLocalAIUnavailable      = "local_ai_unavailable"
 	performerReasonLocalAIInvalid          = "local_ai_invalid"
-	performerReasonDryRun                  = "dry_run"
 	performerReasonCancelled               = "cancelled"
 )
 
@@ -50,6 +48,7 @@ type performerResolution struct {
 	MatchingIDs []int
 	ScraperIDs  []string
 	Reason      string
+	Proposed    *models.Performer
 }
 
 type performerIdentity struct {
@@ -141,13 +140,6 @@ func (j *analyzeSceneMetadataJob) resolvePerformerCandidates(ctx context.Context
 			})
 			continue
 		}
-		if j.input.DryRun {
-			finalize(performerResolution{
-				Candidate: candidate, Status: performerResolutionDryRun,
-				MatchingIDs: matchingIDs, Reason: performerReasonDryRun,
-			})
-			continue
-		}
 		if len(j.performerVerifierScrapers) == 0 && len(j.performerVerifierStashBoxes) == 0 {
 			status, reason := performerResolutionUnverified, performerReasonScraperUnavailable
 			if len(library) > 1 {
@@ -192,7 +184,7 @@ func (j *analyzeSceneMetadataJob) resolvePerformerCandidates(ctx context.Context
 
 		components := scrapedIdentityComponents(verified, library)
 		if len(components) == 1 && len(library) == 0 {
-			resolution, err := j.resolveOrCreateVerifiedPerformer(ctx, candidate, components[0], nil)
+			resolution, err := j.planVerifiedPerformer(ctx, candidate, components[0], nil)
 			resolution.ScraperIDs = scraperIDs
 			if err != nil {
 				if ctx.Err() != nil {
@@ -267,7 +259,7 @@ func (j *analyzeSceneMetadataJob) resolvePerformerCandidates(ctx context.Context
 			})
 			continue
 		}
-		resolution, err := j.resolveOrCreateVerifiedPerformer(ctx, entry.candidate, selected, evidence)
+		resolution, err := j.planVerifiedPerformer(ctx, entry.candidate, selected, evidence)
 		resolution.ScraperIDs = entry.scraperIDs
 		if err != nil {
 			if ctx.Err() != nil {
@@ -782,85 +774,73 @@ func scrapedPerformerIdentityFromModel(scraperID string, scraped *models.Scraped
 	return identity
 }
 
-func (j *analyzeSceneMetadataJob) resolveOrCreateVerifiedPerformer(ctx context.Context, candidate string, verified []scrapedPerformerIdentity, evidence []performerContextEvidence) (performerResolution, error) {
+func (j *analyzeSceneMetadataJob) planVerifiedPerformer(ctx context.Context, candidate string, verified []scrapedPerformerIdentity, evidence []performerContextEvidence) (performerResolution, error) {
 	resolution := performerResolution{Candidate: candidate}
-	var created *models.Performer
-	err := j.repository.WithTxn(ctx, func(ctx context.Context) error {
-		fresh, err := findExactPerformerIdentities(ctx, j.repository.Performer, candidate)
-		if err != nil {
-			return err
-		}
-		resolution.MatchingIDs = performerIdentityIDs(fresh)
-		if len(fresh) == 1 {
-			resolution.Status = performerResolutionExisting
-			resolution.PerformerID = fresh[0].ID
-			resolution.Reason = performerReasonSingleExactLibraryMatch
-			return nil
-		}
-		if id, ok := matchScrapedIdentityToLibrary(candidate, fresh, verified); ok {
+	var fresh []performerIdentity
+	if err := j.repository.WithReadTxn(ctx, func(ctx context.Context) error {
+		var err error
+		fresh, err = findExactPerformerIdentities(ctx, j.repository.Performer, candidate)
+		return err
+	}); err != nil {
+		return resolution, err
+	}
+	resolution.MatchingIDs = performerIdentityIDs(fresh)
+	if len(fresh) == 1 {
+		resolution.Status = performerResolutionExisting
+		resolution.PerformerID = fresh[0].ID
+		resolution.Reason = performerReasonSingleExactLibraryMatch
+		return resolution, nil
+	}
+	if id, ok := matchScrapedIdentityToLibrary(candidate, fresh, verified); ok {
+		resolution.Status = performerResolutionExisting
+		resolution.PerformerID = id
+		resolution.MatchingIDs = append(resolution.MatchingIDs, id)
+		resolution.Reason = performerReasonScraperIdentityMatch
+		return resolution, nil
+	}
+	components := scrapedIdentityComponents(verified, fresh)
+	if len(fresh) > 1 {
+		if _, id, ok := matchContextEvidence(candidate, fresh, components, evidence); ok && id != 0 {
 			resolution.Status = performerResolutionExisting
 			resolution.PerformerID = id
 			resolution.MatchingIDs = append(resolution.MatchingIDs, id)
 			resolution.Reason = performerReasonScraperIdentityMatch
-			return nil
+			return resolution, nil
 		}
-		components := scrapedIdentityComponents(verified, fresh)
-		if len(fresh) > 1 {
-			if component, id, ok := matchContextEvidence(candidate, fresh, components, evidence); ok && id != 0 {
-				_ = component
-				resolution.Status = performerResolutionExisting
-				resolution.PerformerID = id
-				resolution.MatchingIDs = append(resolution.MatchingIDs, id)
-				resolution.Reason = performerReasonScraperIdentityMatch
-				return nil
-			}
-			resolution.Status = performerResolutionAmbiguous
-			resolution.Reason = performerReasonMultipleLibraryMatches
-			return nil
-		}
-		if len(components) != 1 || len(components[0]) == 0 {
-			resolution.Status = performerResolutionAmbiguous
-			resolution.Reason = performerReasonScraperResultsConflict
-			return nil
-		}
+		resolution.Status = performerResolutionAmbiguous
+		resolution.Reason = performerReasonMultipleLibraryMatches
+		return resolution, nil
+	}
+	if len(components) != 1 || len(components[0]) == 0 {
+		resolution.Status = performerResolutionAmbiguous
+		resolution.Reason = performerReasonScraperResultsConflict
+		return resolution, nil
+	}
 
-		selected := components[0][0]
-		newPerformer := models.NewPerformer()
-		newPerformer.Name = strings.TrimSpace(selected.Name)
-		newPerformer.Disambiguation = strings.TrimSpace(selected.Disambiguation)
-		if parsed, err := models.ParseDate(strings.TrimSpace(selected.Birthdate)); err == nil {
-			newPerformer.Birthdate = &parsed
-		}
-		urls := make([]string, 0, len(selected.URLs))
-		seenURLs := make(map[string]struct{}, len(selected.URLs))
-		for _, raw := range selected.URLs {
-			normalized, valid := normalizeProfileURL(raw)
-			if !valid {
-				continue
-			}
-			if _, exists := seenURLs[normalized]; exists {
-				continue
-			}
-			seenURLs[normalized] = struct{}{}
-			urls = append(urls, normalized)
-		}
-		newPerformer.URLs = models.NewRelatedStrings(urls)
-		if err := j.repository.Performer.Create(ctx, &models.CreatePerformerInput{Performer: &newPerformer}); err != nil {
-			return err
-		}
-		created = &newPerformer
-		resolution.Status = performerResolutionCreated
-		resolution.PerformerID = newPerformer.ID
-		resolution.MatchingIDs = append(resolution.MatchingIDs, newPerformer.ID)
-		resolution.Reason = performerReasonCreatedAfterRecheck
-		return nil
-	})
-	if err != nil {
-		return resolution, err
+	selected := components[0][0]
+	newPerformer := models.NewPerformer()
+	newPerformer.Name = strings.TrimSpace(selected.Name)
+	newPerformer.Disambiguation = strings.TrimSpace(selected.Disambiguation)
+	if parsed, err := models.ParseDate(strings.TrimSpace(selected.Birthdate)); err == nil {
+		newPerformer.Birthdate = &parsed
 	}
-	if created != nil {
-		j.performerRecords = append(j.performerRecords, metadata.NamedAliases{ID: created.ID, Name: created.Name})
+	urls := make([]string, 0, len(selected.URLs))
+	seenURLs := make(map[string]struct{}, len(selected.URLs))
+	for _, raw := range selected.URLs {
+		normalized, valid := normalizeProfileURL(raw)
+		if !valid {
+			continue
+		}
+		if _, exists := seenURLs[normalized]; exists {
+			continue
+		}
+		seenURLs[normalized] = struct{}{}
+		urls = append(urls, normalized)
 	}
+	newPerformer.URLs = models.NewRelatedStrings(urls)
+	resolution.Status = performerResolutionProposed
+	resolution.Proposed = &newPerformer
+	resolution.Reason = performerReasonVerifiedNewPerformer
 	return resolution, nil
 }
 

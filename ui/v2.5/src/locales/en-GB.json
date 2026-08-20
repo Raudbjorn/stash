@@ -730,11 +730,13 @@
           "installed": "Installed",
           "label": "Local scene metadata models",
           "not_installed": "Not installed",
+          "present_not_validated": "Present, not validated",
           "not_installed_option": "{model} (not installed)",
           "reload": "Reload active model",
           "reloaded": "Active local model reloaded",
+          "repair": "Repair",
           "remove": "Remove",
-          "reserved_role_hint": "Performer context and studio provider selection are reserved for future text models. Leave them unset to keep deterministic behaviour.",
+          "reserved_role_hint": "Performer context and studio provider selection power the local-AI disambiguation checkboxes below. Leave them unset to keep those steps deterministic.",
           "role_entity_extraction": "Entity extraction",
           "role_performer_context": "Performer context",
           "role_studio_provider_selection": "Studio provider selection",
@@ -746,7 +748,8 @@
         "overwrite_date": "Overwrite an existing date only with high-confidence, uncontested evidence",
         "overwrite_title": "Overwrite a user-authored title",
         "performer_confidence": {
-          "label": "New performer confidence threshold"
+          "label": "Minimum raw score for new performer verification",
+          "note": "Uncalibrated decision scores; not probabilities."
         },
         "performer_verifier_scrapers": {
           "help": "Selected name scrapers and Stash-box endpoints verify newly discovered performer identities. Leaving both selections empty disables network verification and creation of newly discovered performers.",
@@ -758,6 +761,19 @@
           "label": "Performer verification Stash-box endpoints",
           "placeholder": "Select Stash-box endpoints…"
         },
+        "provider_policies": {
+          "date": "Date",
+          "help": "Drag providers into authority order, then choose how each field may contribute. Observe never changes local data; merge only adds; replace may remove existing values where the separate destructive-operation gate permits it.",
+          "label": "Ordered provider authority",
+          "merge": "Merge",
+          "observe": "Observe",
+          "performers": "Performers",
+          "replace": "Replace",
+          "replace_performers": "Allow replace-mode providers to remove local performers",
+          "studio": "Studio",
+          "title": "Title"
+        },
+        "selection_count": "{count, plural, one {Analyze # selected scene} other {Analyze # selected scenes}}",
         "studio_verifier_scrapers": {
           "help": "The built-in URL catalog identifies studios from known community-scraper domains. Additional name scrapers can verify newly discovered studio names.",
           "label": "Studio verification scrapers",

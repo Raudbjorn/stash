@@ -209,6 +209,10 @@ input AnalyzeSceneMetadataInput {
   performerVerifierScraperIDs: [ID!]
   "Configured Stash-box endpoints allowed to verify newly-discovered performer names."
   performerVerifierStashBoxEndpoints: [String!]
+  "Explicit ordered authority policy. Lower priority values are evaluated first."
+  providerPolicies: [SceneMetadataProviderPolicyInput!]
+  "Allow a replace-mode provider to remove local performer relationships. Defaults to false."
+  replaceLocalPerformersFromRemote: Boolean
   "Minimum plausibility score (0-1) for a newly-discovered performer name to be looked up and, if confirmed, created. Defaults to 0.6."
   performerConfidenceThreshold: Float
   "Minimum confidence (0-1) for a resolved date to be written to a scene that doesn't already have one. Defaults to 0.6."
@@ -228,6 +232,20 @@ input AnalyzeSceneMetadataInput {
   "Allow replacing a user-authored title. By default only empty or filename-derived titles are changed."
   overwriteExistingTitle: Boolean
 }
+enum SceneMetadataProviderFieldMode {
+  OBSERVE
+  MERGE
+  REPLACE
+}
+
+input SceneMetadataProviderPolicyInput {
+  endpoint: String!
+  priority: Int!
+  performerMode: SceneMetadataProviderFieldMode!
+  studioMode: SceneMetadataProviderFieldMode!
+  dateMode: SceneMetadataProviderFieldMode!
+  titleMode: SceneMetadataProviderFieldMode!
+}
 enum SceneMetadataModelRole {
   ENTITY_EXTRACTION
   PERFORMER_CONTEXT
@@ -243,6 +261,9 @@ type SceneMetadataModel {
   license: String!
   licenseURL: String!
   installed: Boolean!
+  present: Boolean!
+  validated: Boolean!
+  active: Boolean!
   lastError: String
 }
 
@@ -257,6 +278,78 @@ type SceneMetadataModelStatus {
   cachePath: String!
   runtimeAvailable: Boolean!
   lastError: String!
+}
+
+enum SceneMetadataPlanState {
+  PROPOSED
+  ACCEPTED
+  APPLIED
+  REJECTED
+  STALE
+}
+
+type SceneMetadataSourceExcerpt {
+  kind: String!
+  label: String!
+  rawText: String!
+  normalized: String!
+}
+
+type SceneMetadataPerformerCandidate {
+  candidate: String!
+  status: String!
+  performerID: ID!
+  matchingIDs: [ID!]!
+  scraperIDs: [String!]!
+  reason: String!
+  proposedName: String!
+}
+
+type SceneMetadataCandidateContribution {
+  field: String!
+  weight: Float!
+  reason: String!
+}
+
+enum SceneMetadataRemoteCandidateDecision {
+  accept
+  review
+  reject
+}
+
+type SceneMetadataRemoteSceneCandidate {
+  endpoint: String!
+  remoteID: String!
+  title: String!
+  provenance: String!
+  score: Float!
+  decision: SceneMetadataRemoteCandidateDecision!
+  contributions: [SceneMetadataCandidateContribution!]!
+}
+
+type SceneMetadataSuggestedField {
+  actionID: ID!
+  kind: String!
+  payloadJSON: String!
+  state: SceneMetadataPlanState!
+  reasonCodes: [String!]!
+}
+
+type SceneMetadataAnalysisPlan {
+  runID: String!
+  sceneID: ID!
+  sources: [SceneMetadataSourceExcerpt!]!
+  localCandidates: [SceneMetadataPerformerCandidate!]!
+  remoteCandidates: [SceneMetadataRemoteSceneCandidate!]!
+  suggested: [SceneMetadataSuggestedField!]!
+  reasonCodes: [String!]!
+  ambiguity: Boolean!
+  staleSceneHash: String!
+  policyVersion: String!
+  modelFingerprint: String!
+  state: SceneMetadataPlanState!
+  createdAt: Time!
+  appliedAt: Time
 }
 
 

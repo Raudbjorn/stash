@@ -13,6 +13,14 @@ import (
 
 const modelRootDirectory = "scene-metadata-models"
 
+// ModelState separates the bundle's filesystem, validation, and selection
+// state. Installed is deliberately derived by API callers from all three.
+type ModelState struct {
+	Present   bool
+	Validated bool
+	Active    bool
+}
+
 // Artifact is one immutable file in a pinned model bundle.
 type Artifact struct {
 	RemotePath string
@@ -148,6 +156,28 @@ func BundlePath(cachePath, key string) string {
 
 func ModelPath(cachePath, key string) string {
 	return filepath.Join(BundlePath(cachePath, key), "model.onnx")
+}
+
+// InspectModelState reports independently whether a bundle exists, validates,
+// and is currently selected.
+func InspectModelState(cachePath, key, activeKey string, installer Installer) (ModelState, error) {
+	state := ModelState{Active: activeKey == key}
+	info, err := os.Stat(BundlePath(cachePath, key))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return state, nil
+		}
+		return state, fmt.Errorf("inspect model bundle %q: %w", key, err)
+	}
+	state.Present = info.IsDir()
+	if !state.Present {
+		return state, nil
+	}
+	if err := installer.ValidateModelSignature(cachePath, key); err != nil {
+		return state, err
+	}
+	state.Validated = true
+	return state, nil
 }
 
 func modelForBundle(path string) (ModelSpec, bool) {

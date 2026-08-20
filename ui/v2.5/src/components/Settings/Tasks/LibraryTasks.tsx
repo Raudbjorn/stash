@@ -13,9 +13,11 @@ import {
   mutateSceneMetadataModelInstall,
   mutateSceneMetadataModelReload,
   mutateSceneMetadataModelUninstall,
+  mutateSceneMetadataModelRepair,
   useSceneMetadataModelAssignments,
   useSceneMetadataModels,
   useSceneMetadataModelStatus,
+  mutatePurgeSceneMetadataPlans,
   useAIServerAvailability,
 } from "src/core/StashService";
 import { withoutTypename } from "src/utils/data";
@@ -25,6 +27,7 @@ import { IdentifyDialog } from "../../Dialogs/IdentifyDialog/IdentifyDialog";
 import * as GQL from "src/core/generated-graphql";
 import { DirectorySelectionDialog } from "./DirectorySelectionDialog";
 import { ScanOptions } from "./ScanOptions";
+import { SceneMetadataPlanReviewModal } from "../../Scenes/SceneMetadataPlanReviewModal";
 import { useToast } from "src/hooks/Toast";
 import { GenerateOptions } from "./GenerateOptions";
 import { SettingSection } from "../SettingSection";
@@ -55,6 +58,8 @@ interface IAnalyzeSceneMetadataTaskDefaults {
   studioVerifierScraperIDs: string[];
   studioVerifierStashBoxEndpoints: string[];
   useLocalAIStudioProviderSelection: boolean;
+  providerPolicies: GQL.SceneMetadataProviderPolicyInput[];
+  replaceLocalPerformersFromRemote: boolean;
 }
 
 interface IAutoTagOptions {
@@ -190,6 +195,18 @@ const SceneMetadataModelsPanel: React.FC = () => {
     }
   }
 
+  async function repair(modelKey: string) {
+    setBusyKey(modelKey);
+    try {
+      await mutateSceneMetadataModelRepair(modelKey);
+      await Promise.all([refetchModels(), refetchStatus()]);
+    } catch (error) {
+      Toast.error(error);
+    } finally {
+      setBusyKey(undefined);
+    }
+  }
+
   async function assign(role: GQL.SceneMetadataModelRole, modelKey: string) {
     setBusyKey(role);
     try {
@@ -271,7 +288,7 @@ const SceneMetadataModelsPanel: React.FC = () => {
 
       <div className="mb-4">
         {models.map((model) => {
-          const active = status?.activeKey === model.key;
+          const active = model.active;
           const assigned = assignedKeys.has(model.key);
           return (
             <div
@@ -301,14 +318,22 @@ const SceneMetadataModelsPanel: React.FC = () => {
               </div>
               <div className="d-flex align-items-center mb-1">
                 <Badge
-                  variant={model.installed ? "success" : "secondary"}
+                  variant={
+                    model.installed
+                      ? "success"
+                      : model.present && !model.validated
+                        ? "warning"
+                        : "secondary"
+                  }
                   className="mr-2"
                 >
                   <FormattedMessage
                     id={
                       model.installed
                         ? "config.tasks.analyze_scene_metadata.model.installed"
-                        : "config.tasks.analyze_scene_metadata.model.not_installed"
+                        : model.present && !model.validated
+                          ? "config.tasks.analyze_scene_metadata.model.present_not_validated"
+                          : "config.tasks.analyze_scene_metadata.model.not_installed"
                     }
                   />
                 </Badge>
@@ -317,7 +342,17 @@ const SceneMetadataModelsPanel: React.FC = () => {
                     <FormattedMessage id="config.tasks.analyze_scene_metadata.model.active" />
                   </Badge>
                 ) : null}
-                {!model.installed ? (
+                {model.present && !model.validated ? (
+                  <Button
+                    variant="warning"
+                    size="sm"
+                    type="button"
+                    disabled={busyKey !== undefined}
+                    onClick={() => repair(model.key)}
+                  >
+                    <FormattedMessage id="config.tasks.analyze_scene_metadata.model.repair" />
+                  </Button>
+                ) : !model.present ? (
                   <Button
                     variant="secondary"
                     size="sm"
@@ -332,7 +367,7 @@ const SceneMetadataModelsPanel: React.FC = () => {
                       values={{ model: model.key }}
                     />
                   </Button>
-                ) : !assigned ? (
+                ) : model.validated && !assigned ? (
                   <Button
                     variant="danger"
                     size="sm"
@@ -353,7 +388,7 @@ const SceneMetadataModelsPanel: React.FC = () => {
         {roleRows.map(({ role, label }) => {
           const assignment = assignments.find((item) => item.role === role);
           const assignableModels = models.filter(
-            (model) => model.installed || model.key === assignment?.modelKey
+            (model) => model.validated || model.key === assignment?.modelKey
           );
           return (
             <Form.Group controlId={`scene-metadata-model-${role}`} key={role}>
@@ -376,9 +411,9 @@ const SceneMetadataModelsPanel: React.FC = () => {
                   <option
                     value={model.key}
                     key={model.key}
-                    disabled={!model.installed}
+                    disabled={!model.validated}
                   >
-                    {model.installed
+                    {model.validated
                       ? model.displayName
                       : intl.formatMessage(
                           {
@@ -395,9 +430,11 @@ const SceneMetadataModelsPanel: React.FC = () => {
         <div className="text-muted small">
           <FormattedMessage id="config.tasks.analyze_scene_metadata.model.assign_requires_install_hint" />
         </div>
-        <div className="text-muted small">
-          <FormattedMessage id="config.tasks.analyze_scene_metadata.model.reserved_role_hint" />
-        </div>
+        {roleRows.length > 1 ? (
+          <div className="text-muted small">
+            <FormattedMessage id="config.tasks.analyze_scene_metadata.model.reserved_role_hint" />
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -406,6 +443,9 @@ const SceneMetadataModelsPanel: React.FC = () => {
 export const LibraryTasks: React.FC = () => {
   const intl = useIntl();
   const Toast = useToast();
+  const [showReview, setShowReview] = useState(false);
+  const [purgeAgeSeconds, setPurgeAgeSeconds] = useState(86400);
+  const [purging, setPurging] = useState(false);
   const { ui, saveUI, loading } = useSettings();
 
   const { taskDefaults } = ui;
@@ -478,6 +518,8 @@ export const LibraryTasks: React.FC = () => {
       studioVerifierScraperIDs: [],
       studioVerifierStashBoxEndpoints: [],
       useLocalAIStudioProviderSelection: false,
+      providerPolicies: [],
+      replaceLocalPerformersFromRemote: false,
     });
   const [
     analyzeSceneMetadataOptionsInitialized,
@@ -575,6 +617,8 @@ export const LibraryTasks: React.FC = () => {
       loading ||
       performerScrapersLoading ||
       performerScrapersError ||
+      studioScrapersLoading ||
+      studioScrapersError ||
       analyzeSceneMetadataOptionsInitialized
     ) {
       return;
@@ -609,6 +653,25 @@ export const LibraryTasks: React.FC = () => {
     const reconciledStudioIDs = requestedStudioIDs.filter((id) =>
       availableStudioIDs.has(id)
     );
+    const requestedProviderPolicies = persisted?.providerPolicies ?? [];
+    const requestedPolicyEndpoints = new Set(
+      requestedProviderPolicies.map((policy) => policy.endpoint)
+    );
+    const reconciledProviderPolicies = [
+      ...requestedProviderPolicies.filter((policy) =>
+        availableStashBoxEndpoints.has(policy.endpoint)
+      ),
+      ...stashBoxVerifierOptions
+        .filter((option) => !requestedPolicyEndpoints.has(option.value))
+        .map((option) => ({
+          endpoint: option.value,
+          priority: 0,
+          performerMode: GQL.SceneMetadataProviderFieldMode.Observe,
+          studioMode: GQL.SceneMetadataProviderFieldMode.Observe,
+          dateMode: GQL.SceneMetadataProviderFieldMode.Observe,
+          titleMode: GQL.SceneMetadataProviderFieldMode.Observe,
+        })),
+    ].map((policy, priority) => ({ ...policy, priority }));
     const nextOptions: IAnalyzeSceneMetadataTaskDefaults = {
       dryRun: persisted?.dryRun ?? true,
       performerVerifierScraperIDs: reconciledIDs,
@@ -624,6 +687,9 @@ export const LibraryTasks: React.FC = () => {
       studioVerifierStashBoxEndpoints: reconciledStudioStashBoxEndpoints,
       useLocalAIStudioProviderSelection:
         persisted?.useLocalAIStudioProviderSelection ?? false,
+      providerPolicies: reconciledProviderPolicies,
+      replaceLocalPerformersFromRemote:
+        persisted?.replaceLocalPerformersFromRemote ?? false,
     };
 
     setAnalyzeSceneMetadataOptions(nextOptions);
@@ -641,7 +707,9 @@ export const LibraryTasks: React.FC = () => {
         requestedStashBoxEndpoints.length ||
       reconciledStudioIDs.length !== requestedStudioIDs.length ||
       reconciledStudioStashBoxEndpoints.length !==
-        requestedStudioStashBoxEndpoints.length
+        requestedStudioStashBoxEndpoints.length ||
+      JSON.stringify(reconciledProviderPolicies) !==
+        JSON.stringify(requestedProviderPolicies)
     ) {
       saveUI({
         taskDefaults: {
@@ -683,12 +751,54 @@ export const LibraryTasks: React.FC = () => {
     setAutoTagOptions(s);
   }
 
+  function persistAnalyzeSceneMetadataOptions(
+    options: IAnalyzeSceneMetadataTaskDefaults
+  ) {
+    configureDefaults({ analyzeSceneMetadata: options });
+  }
+
   function onSetAnalyzeSceneMetadataOptions(
     partial: Partial<IAnalyzeSceneMetadataTaskDefaults>
   ) {
     const nextOptions = { ...analyzeSceneMetadataOptions, ...partial };
-    configureDefaults({ analyzeSceneMetadata: nextOptions });
+    persistAnalyzeSceneMetadataOptions(nextOptions);
     setAnalyzeSceneMetadataOptions(nextOptions);
+  }
+
+  function updateProviderPolicy(
+    endpoint: string,
+    partial: Partial<GQL.SceneMetadataProviderPolicyInput>
+  ) {
+    onSetAnalyzeSceneMetadataOptions({
+      providerPolicies: analyzeSceneMetadataOptions.providerPolicies.map(
+        (policy) =>
+          policy.endpoint === endpoint ? { ...policy, ...partial } : policy
+      ),
+    });
+  }
+
+  function moveProviderPolicy(sourceEndpoint: string, targetEndpoint: string) {
+    if (!sourceEndpoint || sourceEndpoint === targetEndpoint) {
+      return;
+    }
+    const policies = [...analyzeSceneMetadataOptions.providerPolicies];
+    const sourceIndex = policies.findIndex(
+      (policy) => policy.endpoint === sourceEndpoint
+    );
+    const targetIndex = policies.findIndex(
+      (policy) => policy.endpoint === targetEndpoint
+    );
+    if (sourceIndex < 0 || targetIndex < 0) {
+      return;
+    }
+    const [source] = policies.splice(sourceIndex, 1);
+    policies.splice(targetIndex, 0, source);
+    onSetAnalyzeSceneMetadataOptions({
+      providerPolicies: policies.map((policy, priority) => ({
+        ...policy,
+        priority,
+      })),
+    });
   }
 
   function setDialogOpen(s: Partial<DialogOpenState>) {
@@ -757,6 +867,9 @@ export const LibraryTasks: React.FC = () => {
   }
 
   async function runAnalyzeSceneMetadata() {
+    // Re-save the complete selection at launch as well as on each change.
+    // This retries any failed or superseded debounced UI-config write.
+    persistAnalyzeSceneMetadataOptions(analyzeSceneMetadataOptions);
     try {
       // A previously-persisted true value must not silently be sent once the
       // AI server is unavailable - the checkbox being disabled in the UI is
@@ -782,6 +895,27 @@ export const LibraryTasks: React.FC = () => {
       );
     } catch (e) {
       Toast.error(e);
+    }
+  }
+
+  async function runPurgeSceneMetadataPlans() {
+    setPurging(true);
+    try {
+      const result = await mutatePurgeSceneMetadataPlans(purgeAgeSeconds);
+      const count = result.data?.purgeSceneMetadataPlans ?? 0;
+      Toast.success(
+        intl.formatMessage(
+          {
+            id: "scene_metadata.review.purged",
+            defaultMessage: "Removed {count, number} old analysis runs",
+          },
+          { count }
+        )
+      );
+    } catch (error) {
+      Toast.error(error);
+    } finally {
+      setPurging(false);
     }
   }
 
@@ -864,11 +998,31 @@ export const LibraryTasks: React.FC = () => {
     const general = configuration?.general;
 
     try {
+      // taskDefaults is an untyped persisted map and can contain fields from
+      // older releases. GraphQL rejects unknown input fields with HTTP 400,
+      // so copy only the current GenerateMetadataInput contract.
       await mutateMetadataGenerate({
-        ...generateOptions,
+        covers: generateOptions.covers,
+        sprites: generateOptions.sprites,
+        previews: generateOptions.previews,
+        imagePreviews: generateOptions.imagePreviews,
+        markers: generateOptions.markers,
+        markerImagePreviews: generateOptions.markerImagePreviews,
+        markerScreenshots: generateOptions.markerScreenshots,
+        transcodes: generateOptions.transcodes,
+        forceTranscodes: generateOptions.forceTranscodes,
+        phashes: generateOptions.phashes,
+        interactiveHeatmapsSpeeds: generateOptions.interactiveHeatmapsSpeeds,
+        imagePhashes: generateOptions.imagePhashes,
+        imageThumbnails: generateOptions.imageThumbnails,
+        clipPreviews: generateOptions.clipPreviews,
+        contactSheets: generateOptions.contactSheets,
+        subtitles: generateOptions.subtitles,
+        subtitleLanguage: generateOptions.subtitleLanguage,
+        dubbing: generateOptions.dubbing,
+        overwrite: generateOptions.overwrite,
         paths,
         previewOptions: {
-          ...generateOptions.previewOptions,
           previewSegments:
             general?.previewSegments ??
             generateOptions.previewOptions?.previewSegments,
@@ -1104,6 +1258,9 @@ export const LibraryTasks: React.FC = () => {
                   })
                 }
               />
+              <Form.Text className="text-muted">
+                <FormattedMessage id="config.tasks.analyze_scene_metadata.performer_confidence.note" />
+              </Form.Text>
             </Form.Group>
             <Form.Group
               className="col-md-6"
@@ -1186,6 +1343,115 @@ export const LibraryTasks: React.FC = () => {
               <FormattedMessage id="config.tasks.analyze_scene_metadata.studio_verifier_stash_boxes.help" />
             </Form.Text>
           </Form.Group>
+          <Form.Group controlId="analyze-scene-metadata-provider-policies">
+            <Form.Label>
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.provider_policies.label" />
+            </Form.Label>
+            <Form.Text className="text-muted d-block mb-2">
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.provider_policies.help" />
+            </Form.Text>
+            {analyzeSceneMetadataOptions.providerPolicies.map((policy) => (
+              <div
+                key={policy.endpoint}
+                className="border rounded p-2 mb-2"
+                draggable
+                onDragStart={(event) =>
+                  event.dataTransfer.setData("text/plain", policy.endpoint)
+                }
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  moveProviderPolicy(
+                    event.dataTransfer.getData("text/plain"),
+                    policy.endpoint
+                  );
+                }}
+              >
+                <div className="font-weight-bold mb-2">
+                  {stashBoxVerifierOptions.find(
+                    (option) => option.value === policy.endpoint
+                  )?.label ?? policy.endpoint}
+                </div>
+                <div className="row">
+                  {(
+                    [
+                      [
+                        "performerMode",
+                        "config.tasks.analyze_scene_metadata.provider_policies.performers",
+                      ],
+                      [
+                        "studioMode",
+                        "config.tasks.analyze_scene_metadata.provider_policies.studio",
+                      ],
+                      [
+                        "dateMode",
+                        "config.tasks.analyze_scene_metadata.provider_policies.date",
+                      ],
+                      [
+                        "titleMode",
+                        "config.tasks.analyze_scene_metadata.provider_policies.title",
+                      ],
+                    ] as const
+                  ).map(([field, label]) => (
+                    <Form.Group className="col-sm-6 col-lg-3 mb-1" key={field}>
+                      <Form.Label className="small mb-1">
+                        <FormattedMessage id={label} />
+                      </Form.Label>
+                      <Form.Control
+                        as="select"
+                        size="sm"
+                        value={policy[field]}
+                        onChange={(event) =>
+                          updateProviderPolicy(policy.endpoint, {
+                            [field]: event.currentTarget
+                              .value as GQL.SceneMetadataProviderFieldMode,
+                          })
+                        }
+                      >
+                        <option
+                          value={GQL.SceneMetadataProviderFieldMode.Observe}
+                        >
+                          {intl.formatMessage({
+                            id: "config.tasks.analyze_scene_metadata.provider_policies.observe",
+                          })}
+                        </option>
+                        <option
+                          value={GQL.SceneMetadataProviderFieldMode.Merge}
+                        >
+                          {intl.formatMessage({
+                            id: "config.tasks.analyze_scene_metadata.provider_policies.merge",
+                          })}
+                        </option>
+                        <option
+                          value={GQL.SceneMetadataProviderFieldMode.Replace}
+                        >
+                          {intl.formatMessage({
+                            id: "config.tasks.analyze_scene_metadata.provider_policies.replace",
+                          })}
+                        </option>
+                      </Form.Control>
+                    </Form.Group>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </Form.Group>
+          <Form.Check
+            id="analyze-scene-metadata-replace-local-performers"
+            checked={
+              analyzeSceneMetadataOptions.replaceLocalPerformersFromRemote
+            }
+            label={intl.formatMessage({
+              id: "config.tasks.analyze_scene_metadata.provider_policies.replace_performers",
+            })}
+            onChange={() =>
+              onSetAnalyzeSceneMetadataOptions({
+                replaceLocalPerformersFromRemote:
+                  !analyzeSceneMetadataOptions.replaceLocalPerformersFromRemote,
+              })
+            }
+            className="mb-2"
+          />
           <Form.Check
             id="analyze-scene-metadata-use-local-ai-studio-provider"
             checked={
@@ -1288,6 +1554,74 @@ export const LibraryTasks: React.FC = () => {
           >
             <FormattedMessage id="actions.analyze_scene_metadata" />…
           </Button>
+          <Button
+            variant="secondary"
+            type="button"
+            className="ml-2"
+            onClick={() => setShowReview(true)}
+          >
+            <FormattedMessage
+              id="scene_metadata.review.action"
+              defaultMessage="Review proposals"
+            />
+          </Button>
+          <div className="d-flex flex-wrap align-items-end mt-3">
+            <Form.Group
+              className="mb-0 mr-2"
+              controlId="purge-scene-metadata-plans"
+            >
+              <Form.Label>
+                <FormattedMessage
+                  id="scene_metadata.review.purge_age"
+                  defaultMessage="Remove applied runs older than"
+                />
+              </Form.Label>
+              <Form.Control
+                as="select"
+                className="input-control"
+                value={purgeAgeSeconds}
+                onChange={(event) =>
+                  setPurgeAgeSeconds(Number(event.currentTarget.value))
+                }
+              >
+                <option value={3600}>
+                  {intl.formatMessage({
+                    id: "scene_metadata.review.purge_hour",
+                    defaultMessage: "1 hour",
+                  })}
+                </option>
+                <option value={86400}>
+                  {intl.formatMessage({
+                    id: "scene_metadata.review.purge_day",
+                    defaultMessage: "1 day",
+                  })}
+                </option>
+                <option value={604800}>
+                  {intl.formatMessage({
+                    id: "scene_metadata.review.purge_week",
+                    defaultMessage: "7 days",
+                  })}
+                </option>
+                <option value={2592000}>
+                  {intl.formatMessage({
+                    id: "scene_metadata.review.purge_month",
+                    defaultMessage: "30 days",
+                  })}
+                </option>
+              </Form.Control>
+            </Form.Group>
+            <Button
+              variant="danger"
+              type="button"
+              disabled={purging}
+              onClick={() => void runPurgeSceneMetadataPlans()}
+            >
+              <FormattedMessage
+                id="scene_metadata.review.purge"
+                defaultMessage="Remove old runs"
+              />
+            </Button>
+          </div>
         </Setting>
       </SettingSection>
 
@@ -1346,6 +1680,11 @@ export const LibraryTasks: React.FC = () => {
           />
         </SettingGroup>
       </SettingSection>
+      <SceneMetadataPlanReviewModal
+        show={showReview}
+        sceneIds={[]}
+        onHide={() => setShowReview(false)}
+      />
     </Form.Group>
   );
 };

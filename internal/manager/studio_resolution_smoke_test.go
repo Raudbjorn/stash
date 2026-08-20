@@ -9,12 +9,9 @@ import (
 	"github.com/stashapp/stash/pkg/models"
 )
 
-// TestStudioResolverWiringEndToEnd exercises the full studio path:
-// (1) the conflict fixture forces the LLM, (2) the LLM pick is honored,
-// (3) the helper reports studioResolutionCreated, and (4) the adoption
-// path creates a single Studio row in the local database. This locks in
-// the end-to-end wiring (verifier resolution -> provider pool ->
-// reconciliation -> LLM -> adoption) without touching the worker.
+// TestStudioResolverWiringEndToEnd exercises the full read-only studio path:
+// the conflict fixture forces the LLM, the LLM pick is honored, and the
+// verified studio is returned as a proposal without mutating the library.
 func TestStudioResolverWiringEndToEnd(t *testing.T) {
 	job, q1, q2, completer := conflictingProviderJob(t, true)
 	completer.raw = `{"provider_id":"stashbox:https://one.example/graphql"}`
@@ -23,8 +20,8 @@ func TestStudioResolverWiringEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveStudioCandidate: %v", err)
 	}
-	if resolution.Status != studioResolutionCreated {
-		t.Fatalf("status = %q, want %q", resolution.Status, studioResolutionCreated)
+	if resolution.Status != studioResolutionProposed {
+		t.Fatalf("status = %q, want %q", resolution.Status, studioResolutionProposed)
 	}
 	if resolution.ProviderID != "stashbox:https://one.example/graphql" {
 		t.Fatalf("provider_id = %q, want stashbox:one", resolution.ProviderID)
@@ -36,28 +33,22 @@ func TestStudioResolverWiringEndToEnd(t *testing.T) {
 		t.Fatalf("both Stash-box queriers should be exercised; q1=%d q2=%d", len(q1.calls), len(q2.calls))
 	}
 
-	// Confirm a single Studio row was created locally and the resolver
-	// returned its id.
+	if resolution.Proposed == nil || resolution.Proposed.Name == "" {
+		t.Fatalf("proposed studio = %+v, want populated proposal", resolution.Proposed)
+	}
 	count := 0
-	var createdID int
 	if err := job.repository.WithReadTxn(context.Background(), func(ctx context.Context) error {
 		all, err := job.repository.Studio.All(ctx)
 		if err != nil {
 			return err
 		}
 		count = len(all)
-		if count == 1 {
-			createdID = all[0].ID
-		}
 		return nil
 	}); err != nil {
 		t.Fatalf("reading studios: %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("studio count = %d, want 1", count)
-	}
-	if resolution.StudioID != createdID {
-		t.Fatalf("resolution.StudioID = %d, want %d", resolution.StudioID, createdID)
+	if count != 0 {
+		t.Fatalf("studio count = %d, want 0 before apply", count)
 	}
 }
 

@@ -22,6 +22,9 @@ query SceneMetadataModels {
     license
     licenseURL
     installed
+    present
+    validated
+    active
     lastError
   }
 }

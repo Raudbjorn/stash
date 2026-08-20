@@ -12,6 +12,7 @@ import (
 	"github.com/stashapp/stash/internal/manager/config"
 	"github.com/stashapp/stash/internal/manager/task"
 	"github.com/stashapp/stash/pkg/logger"
+	"github.com/stashapp/stash/pkg/session"
 )
 
 func (r *mutationResolver) MetadataScan(ctx context.Context, input manager.ScanMetadataInput) (string, error) {
@@ -108,6 +109,10 @@ func (r *mutationResolver) SceneMetadataModelUninstall(ctx context.Context, mode
 	return true, nil
 }
 
+func (r *mutationResolver) SceneMetadataModelRepair(ctx context.Context, key string) (bool, error) {
+	return manager.GetInstance().SceneMetadataModelRepair(key)
+}
+
 func (r *mutationResolver) SceneMetadataModelAssign(ctx context.Context, role manager.SceneMetadataModelRole, modelKey *string) (bool, error) {
 	if err := manager.GetInstance().SceneMetadataModelAssign(role, modelKey); err != nil {
 		return false, err
@@ -117,6 +122,59 @@ func (r *mutationResolver) SceneMetadataModelAssign(ctx context.Context, role ma
 
 func (r *mutationResolver) SceneMetadataModelReload(ctx context.Context) (bool, error) {
 	return manager.GetInstance().SceneMetadataModelReload(), nil
+}
+
+func (r *mutationResolver) AcceptSceneMetadataProposalAction(ctx context.Context, runID string, sceneID string, actionIDs []string) (bool, error) {
+	id, err := strconv.Atoi(sceneID)
+	if err != nil {
+		return false, fmt.Errorf("invalid scene ID %q: %w", sceneID, err)
+	}
+	return manager.GetInstance().AcceptSceneMetadataProposalActions(ctx, runID, id, actionIDs)
+}
+
+func (r *mutationResolver) RejectSceneMetadataProposalAction(ctx context.Context, runID string, sceneID string, actionIDs []string) (bool, error) {
+	id, err := strconv.Atoi(sceneID)
+	if err != nil {
+		return false, fmt.Errorf("invalid scene ID %q: %w", sceneID, err)
+	}
+	return manager.GetInstance().RejectSceneMetadataProposalActions(ctx, runID, id, actionIDs)
+}
+func (r *mutationResolver) SelectSceneMetadataRemoteCandidate(
+	ctx context.Context,
+	runID string,
+	sceneID string,
+	endpoint string,
+	remoteID string,
+) (bool, error) {
+	id, err := strconv.Atoi(sceneID)
+	if err != nil {
+		return false, fmt.Errorf("invalid scene ID %q: %w", sceneID, err)
+	}
+	return manager.GetInstance().SelectSceneMetadataRemoteCandidate(
+		ctx, runID, id, endpoint, remoteID,
+	)
+}
+
+func (r *mutationResolver) ApplySceneMetadataPlan(ctx context.Context, runID string, sceneIDs []string) (bool, error) {
+	return manager.GetInstance().ApplySceneMetadataPlans(ctx, runID, sceneIDs)
+}
+
+func (r *mutationResolver) PurgeSceneMetadataPlans(ctx context.Context, olderThanSeconds int) (int, error) {
+	const minPurgeAgeSeconds = 3600
+	if olderThanSeconds < minPurgeAgeSeconds {
+		return 0, fmt.Errorf("olderThanSeconds must be at least %d", minPurgeAgeSeconds)
+	}
+	actor := "unauthenticated"
+	if userID := session.GetCurrentUserID(ctx); userID != nil {
+		actor = *userID
+	}
+	count, err := manager.GetInstance().PurgeSceneMetadataPlans(ctx, time.Duration(olderThanSeconds)*time.Second)
+	if err != nil {
+		logger.Warnf("[scene metadata] purge failed actor=%s older_than_seconds=%d: %v", actor, olderThanSeconds, err)
+		return 0, err
+	}
+	logger.Infof("[scene metadata] purged %d plan(s) actor=%s older_than_seconds=%d", count, actor, olderThanSeconds)
+	return count, nil
 }
 
 func (r *mutationResolver) MetadataIdentify(ctx context.Context, input identify.Options) (string, error) {

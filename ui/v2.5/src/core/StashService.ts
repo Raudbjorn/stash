@@ -3183,6 +3183,84 @@ export const mutateMetadataAnalyzeScenes = (
     mutation: GQL.MetadataAnalyzeScenesDocument,
     variables: { input },
   });
+export const useSceneMetadataPlans = (
+  sceneIds: string[],
+  options: {
+    skip?: boolean;
+    runId?: string;
+    limit?: number;
+    latestOnly?: boolean;
+  } = {}
+) =>
+  GQL.useSceneMetadataPlansQuery({
+    variables: {
+      sceneIds,
+      runId: options.runId,
+      limit: options.limit,
+      latestOnly: options.latestOnly ?? true,
+    },
+    fetchPolicy: "no-cache",
+    pollInterval: options.skip ? 0 : 2000,
+    skip: options.skip,
+  });
+
+export const useSceneMetadataAppliedPlans = (
+  sceneIds: string[],
+  skip = false
+) =>
+  GQL.useSceneMetadataAppliedPlansQuery({
+    variables: { sceneIds },
+    fetchPolicy: "no-cache",
+    pollInterval: 0,
+    skip,
+  });
+
+export const mutateAcceptSceneMetadataProposalAction = (
+  runId: string,
+  sceneId: string,
+  actionIds: string[]
+) =>
+  client.mutate<GQL.AcceptSceneMetadataProposalActionMutation>({
+    mutation: GQL.AcceptSceneMetadataProposalActionDocument,
+    variables: { runId, sceneId, actionIds },
+  });
+
+export const mutateRejectSceneMetadataProposalAction = (
+  runId: string,
+  sceneId: string,
+  actionIds: string[]
+) =>
+  client.mutate<GQL.RejectSceneMetadataProposalActionMutation>({
+    mutation: GQL.RejectSceneMetadataProposalActionDocument,
+    variables: { runId, sceneId, actionIds },
+  });
+
+export const mutateSelectSceneMetadataRemoteCandidate = (
+  runId: string,
+  sceneId: string,
+  endpoint: string,
+  remoteId: string
+) =>
+  client.mutate<GQL.SelectSceneMetadataRemoteCandidateMutation>({
+    mutation: GQL.SelectSceneMetadataRemoteCandidateDocument,
+    variables: { runId, sceneId, endpoint, remoteId },
+  });
+
+export const mutateApplySceneMetadataPlan = (
+  runId: string,
+  sceneIds: string[]
+) =>
+  client.mutate<GQL.ApplySceneMetadataPlanMutation>({
+    mutation: GQL.ApplySceneMetadataPlanDocument,
+    variables: { runId, sceneIds },
+  });
+
+export const mutatePurgeSceneMetadataPlans = (olderThanSeconds: number) =>
+  client.mutate<GQL.PurgeSceneMetadataPlansMutation>({
+    mutation: GQL.PurgeSceneMetadataPlansDocument,
+    variables: { olderThanSeconds },
+  });
+
 export const useSceneMetadataModels = () =>
   GQL.useSceneMetadataModelsQuery({
     fetchPolicy: "no-cache",
@@ -3211,6 +3289,12 @@ export const mutateSceneMetadataModelUninstall = (modelKey: string) =>
   client.mutate<GQL.SceneMetadataModelUninstallMutation>({
     mutation: GQL.SceneMetadataModelUninstallDocument,
     variables: { modelKey },
+  });
+
+export const mutateSceneMetadataModelRepair = (key: string) =>
+  client.mutate<GQL.SceneMetadataModelRepairMutation>({
+    mutation: GQL.SceneMetadataModelRepairDocument,
+    variables: { key },
   });
 
 export const mutateSceneMetadataModelAssign = (

@@ -60,6 +60,7 @@ import { FormattedDate } from "src/components/Shared/Date";
 import { StudioLogo } from "src/components/Shared/StudioLogo";
 import { JobFragment, useMonitorJob } from "src/utils/job";
 import { useScrollToTopOnMount } from "src/hooks/scrollToTop";
+import { SceneMetadataAnalyzeButton } from "../SceneMetadataAnalyzeButton";
 
 const SubmitStashBoxDraft = lazyComponent(
   () => import("src/components/Dialogs/SubmitDraft")
@@ -769,6 +770,12 @@ const ScenePage: React.FC<IProps> = PatchComponent("ScenePage", (props) => {
                   loading={organizedLoading}
                   organized={scene.organized}
                   onClick={onOrganizedClick}
+                />
+              </span>
+              <span>
+                <SceneMetadataAnalyzeButton
+                  sceneIds={[scene.id]}
+                  className="minimal"
                 />
               </span>
               <span>{renderOperations()}</span>

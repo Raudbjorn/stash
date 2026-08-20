@@ -34,7 +34,7 @@ const (
 	cacheSizeEnv = "STASH_SQLITE_CACHE_SIZE"
 )
 
-var appSchemaVersion uint = 98
+var appSchemaVersion uint = 99
 
 //go:embed migrations/*.sql
 var migrationsBox embed.FS
@@ -66,22 +66,23 @@ func (e *MismatchedSchemaVersionError) Error() string {
 }
 
 type storeRepository struct {
-	Blobs          *BlobStore
-	Clip           *ClipStore
-	File           *FileStore
-	Folder         *FolderStore
-	Image          *ImageStore
-	Gallery        *GalleryStore
-	GalleryChapter *GalleryChapterStore
-	Scene          *SceneStore
-	SceneMarker    *SceneMarkerStore
-	Performer      *PerformerStore
-	SavedFilter    *SavedFilterStore
-	Studio         *StudioStore
-	Tag            *TagStore
-	Group          *GroupStore
-	Playlist       *PlaylistStore
-	FunscriptIndex *FunscriptIndexStore
+	Blobs             *BlobStore
+	Clip              *ClipStore
+	File              *FileStore
+	Folder            *FolderStore
+	Image             *ImageStore
+	Gallery           *GalleryStore
+	GalleryChapter    *GalleryChapterStore
+	Scene             *SceneStore
+	SceneMarker       *SceneMarkerStore
+	Performer         *PerformerStore
+	SavedFilter       *SavedFilterStore
+	Studio            *StudioStore
+	Tag               *TagStore
+	Group             *GroupStore
+	Playlist          *PlaylistStore
+	FunscriptIndex    *FunscriptIndexStore
+	SceneMetadataPlan *SceneMetadataPlanStore
 }
 
 type Database struct {
@@ -107,22 +108,23 @@ func NewDatabase() *Database {
 
 	r := &storeRepository{}
 	*r = storeRepository{
-		Blobs:          blobStore,
-		Clip:           NewClipStore(),
-		File:           fileStore,
-		Folder:         folderStore,
-		Scene:          NewSceneStore(r, blobStore),
-		SceneMarker:    NewSceneMarkerStore(),
-		Image:          NewImageStore(r),
-		Gallery:        galleryStore,
-		GalleryChapter: NewGalleryChapterStore(),
-		Performer:      performerStore,
-		Studio:         studioStore,
-		Tag:            tagStore,
-		Group:          NewGroupStore(blobStore),
-		SavedFilter:    NewSavedFilterStore(),
-		Playlist:       NewPlaylistStore(),
-		FunscriptIndex: NewFunscriptIndexStore(),
+		Blobs:             blobStore,
+		Clip:              NewClipStore(),
+		File:              fileStore,
+		Folder:            folderStore,
+		Scene:             NewSceneStore(r, blobStore),
+		SceneMarker:       NewSceneMarkerStore(),
+		Image:             NewImageStore(r),
+		Gallery:           galleryStore,
+		GalleryChapter:    NewGalleryChapterStore(),
+		Performer:         performerStore,
+		Studio:            studioStore,
+		Tag:               tagStore,
+		Group:             NewGroupStore(blobStore),
+		SavedFilter:       NewSavedFilterStore(),
+		Playlist:          NewPlaylistStore(),
+		FunscriptIndex:    NewFunscriptIndexStore(),
+		SceneMetadataPlan: NewSceneMetadataPlanStore(),
 	}
 
 	ret := &Database{

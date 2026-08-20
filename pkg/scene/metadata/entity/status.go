@@ -9,18 +9,18 @@ import (
 	"sync"
 )
 
-type ModelState string
+type ModelLifecycleState string
 
 const (
-	ModelMissing ModelState = "missing"
-	ModelInvalid ModelState = "invalid"
-	ModelLoading ModelState = "loading"
-	ModelReady   ModelState = "ready"
+	ModelMissing ModelLifecycleState = "missing"
+	ModelInvalid ModelLifecycleState = "invalid"
+	ModelLoading ModelLifecycleState = "loading"
+	ModelReady   ModelLifecycleState = "ready"
 )
 
 type ModelStatus struct {
 	Key       string
-	State     ModelState
+	State     ModelLifecycleState
 	CachePath string
 	LastError string
 }

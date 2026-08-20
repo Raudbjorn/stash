@@ -290,3 +290,17 @@ func TestAssignmentHoldsModelLockAcrossReadinessCheck(t *testing.T) {
 		cfg.GetSceneMetadataEntityModelAssignments()[entity.RoleEntityExtraction],
 		"a model uninstalled during assignment must not become active")
 }
+
+func TestSceneMetadataModelRepairRemovesCorruptBundle(t *testing.T) {
+	cfg := config.InitializeEmpty()
+	cachePath := t.TempDir()
+	cfg.SetString(config.Cache, cachePath)
+	key := installFakeSceneMetadataBundle(t, cachePath, 0)
+	bundlePath := entity.BundlePath(cachePath, key)
+	require.NoError(t, os.WriteFile(filepath.Join(bundlePath, "model.onnx"), []byte("corrupt"), 0o600))
+
+	repaired, err := (&Manager{Config: cfg}).SceneMetadataModelRepair(key)
+	require.NoError(t, err)
+	assert.True(t, repaired)
+	assert.NoDirExists(t, bundlePath)
+}
