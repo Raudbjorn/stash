@@ -1007,3 +1007,20 @@ input[type="range"].blue-slider {
     }
   }
 }
+
+.scene-metadata-decision-rail__row {
+  border-left: 3px solid transparent;
+}
+
+.scene-metadata-decision-rail__row--accept {
+  border-left-color: #3d9a6a;
+}
+
+.scene-metadata-decision-rail__row--review {
+  border-left-color: #d4a017;
+}
+
+.scene-metadata-decision-rail__row--reject {
+  border-left-color: #6c757d;
+  opacity: 0.78;
+}

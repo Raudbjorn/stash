@@ -736,7 +736,7 @@
           "reloaded": "Active local model reloaded",
           "repair": "Repair",
           "remove": "Remove",
-          "reserved_role_hint": "Performer context and studio provider selection are reserved for future text models. Leave them unset to keep deterministic behaviour.",
+          "reserved_role_hint": "Performer context and studio provider selection power the local-AI disambiguation checkboxes below. Leave them unset to keep those steps deterministic.",
           "role_entity_extraction": "Entity extraction",
           "role_performer_context": "Performer context",
           "role_studio_provider_selection": "Studio provider selection",

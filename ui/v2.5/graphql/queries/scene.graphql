@@ -111,8 +111,8 @@ query FindScenesForSelect(
   }
 }
 
-query SceneMetadataPlans($sceneIds: [ID!], $runId: String, $limit: Int) {
-  sceneMetadataPlans(sceneIds: $sceneIds, runID: $runId, latestOnly: true, limit: $limit) {
+query SceneMetadataPlans($sceneIds: [ID!], $runId: String, $limit: Int, $latestOnly: Boolean! = true) {
+  sceneMetadataPlans(sceneIds: $sceneIds, runID: $runId, latestOnly: $latestOnly, limit: $limit) {
     runID
     sceneID
     sources {

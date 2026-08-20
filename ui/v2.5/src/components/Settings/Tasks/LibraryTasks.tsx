@@ -17,6 +17,7 @@ import {
   useSceneMetadataModelAssignments,
   useSceneMetadataModels,
   useSceneMetadataModelStatus,
+  mutatePurgeSceneMetadataPlans,
   useAIServerAvailability,
 } from "src/core/StashService";
 import { withoutTypename } from "src/utils/data";
@@ -26,6 +27,7 @@ import { IdentifyDialog } from "../../Dialogs/IdentifyDialog/IdentifyDialog";
 import * as GQL from "src/core/generated-graphql";
 import { DirectorySelectionDialog } from "./DirectorySelectionDialog";
 import { ScanOptions } from "./ScanOptions";
+import { SceneMetadataPlanReviewModal } from "../../Scenes/SceneMetadataPlanReviewModal";
 import { useToast } from "src/hooks/Toast";
 import { GenerateOptions } from "./GenerateOptions";
 import { SettingSection } from "../SettingSection";
@@ -143,6 +145,16 @@ const SceneMetadataModelsPanel: React.FC = () => {
       role: GQL.SceneMetadataModelRole.EntityExtraction,
       label:
         "config.tasks.analyze_scene_metadata.model.assign_entity_extraction",
+    },
+    {
+      role: GQL.SceneMetadataModelRole.PerformerContext,
+      label:
+        "config.tasks.analyze_scene_metadata.model.assign_performer_context",
+    },
+    {
+      role: GQL.SceneMetadataModelRole.StudioProviderSelection,
+      label:
+        "config.tasks.analyze_scene_metadata.model.assign_studio_provider_selection",
     },
   ];
 
@@ -431,6 +443,9 @@ const SceneMetadataModelsPanel: React.FC = () => {
 export const LibraryTasks: React.FC = () => {
   const intl = useIntl();
   const Toast = useToast();
+  const [showReview, setShowReview] = useState(false);
+  const [purgeAgeSeconds, setPurgeAgeSeconds] = useState(86400);
+  const [purging, setPurging] = useState(false);
   const { ui, saveUI, loading } = useSettings();
 
   const { taskDefaults } = ui;
@@ -880,6 +895,27 @@ export const LibraryTasks: React.FC = () => {
       );
     } catch (e) {
       Toast.error(e);
+    }
+  }
+
+  async function runPurgeSceneMetadataPlans() {
+    setPurging(true);
+    try {
+      const result = await mutatePurgeSceneMetadataPlans(purgeAgeSeconds);
+      const count = result.data?.purgeSceneMetadataPlans ?? 0;
+      Toast.success(
+        intl.formatMessage(
+          {
+            id: "scene_metadata.review.purged",
+            defaultMessage: "Removed {count, number} old analysis runs",
+          },
+          { count }
+        )
+      );
+    } catch (error) {
+      Toast.error(error);
+    } finally {
+      setPurging(false);
     }
   }
 
@@ -1518,6 +1554,74 @@ export const LibraryTasks: React.FC = () => {
           >
             <FormattedMessage id="actions.analyze_scene_metadata" />…
           </Button>
+          <Button
+            variant="secondary"
+            type="button"
+            className="ml-2"
+            onClick={() => setShowReview(true)}
+          >
+            <FormattedMessage
+              id="scene_metadata.review.action"
+              defaultMessage="Review proposals"
+            />
+          </Button>
+          <div className="d-flex flex-wrap align-items-end mt-3">
+            <Form.Group
+              className="mb-0 mr-2"
+              controlId="purge-scene-metadata-plans"
+            >
+              <Form.Label>
+                <FormattedMessage
+                  id="scene_metadata.review.purge_age"
+                  defaultMessage="Remove applied runs older than"
+                />
+              </Form.Label>
+              <Form.Control
+                as="select"
+                className="input-control"
+                value={purgeAgeSeconds}
+                onChange={(event) =>
+                  setPurgeAgeSeconds(Number(event.currentTarget.value))
+                }
+              >
+                <option value={3600}>
+                  {intl.formatMessage({
+                    id: "scene_metadata.review.purge_hour",
+                    defaultMessage: "1 hour",
+                  })}
+                </option>
+                <option value={86400}>
+                  {intl.formatMessage({
+                    id: "scene_metadata.review.purge_day",
+                    defaultMessage: "1 day",
+                  })}
+                </option>
+                <option value={604800}>
+                  {intl.formatMessage({
+                    id: "scene_metadata.review.purge_week",
+                    defaultMessage: "7 days",
+                  })}
+                </option>
+                <option value={2592000}>
+                  {intl.formatMessage({
+                    id: "scene_metadata.review.purge_month",
+                    defaultMessage: "30 days",
+                  })}
+                </option>
+              </Form.Control>
+            </Form.Group>
+            <Button
+              variant="danger"
+              type="button"
+              disabled={purging}
+              onClick={() => void runPurgeSceneMetadataPlans()}
+            >
+              <FormattedMessage
+                id="scene_metadata.review.purge"
+                defaultMessage="Remove old runs"
+              />
+            </Button>
+          </div>
         </Setting>
       </SettingSection>
 
@@ -1576,6 +1680,11 @@ export const LibraryTasks: React.FC = () => {
           />
         </SettingGroup>
       </SettingSection>
+      <SceneMetadataPlanReviewModal
+        show={showReview}
+        sceneIds={[]}
+        onHide={() => setShowReview(false)}
+      />
     </Form.Group>
   );
 };

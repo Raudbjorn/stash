@@ -3183,15 +3183,31 @@ export const mutateMetadataAnalyzeScenes = (
     mutation: GQL.MetadataAnalyzeScenesDocument,
     variables: { input },
   });
-export const useSceneMetadataPlans = (sceneIds: string[], skip = false) =>
+export const useSceneMetadataPlans = (
+  sceneIds: string[],
+  options: {
+    skip?: boolean;
+    runId?: string;
+    limit?: number;
+    latestOnly?: boolean;
+  } = {}
+) =>
   GQL.useSceneMetadataPlansQuery({
-    variables: { sceneIds },
+    variables: {
+      sceneIds,
+      runId: options.runId,
+      limit: options.limit,
+      latestOnly: options.latestOnly ?? true,
+    },
     fetchPolicy: "no-cache",
-    pollInterval: skip ? 0 : 2000,
-    skip,
+    pollInterval: options.skip ? 0 : 2000,
+    skip: options.skip,
   });
 
-export const useSceneMetadataAppliedPlans = (sceneIds: string[], skip = false) =>
+export const useSceneMetadataAppliedPlans = (
+  sceneIds: string[],
+  skip = false
+) =>
   GQL.useSceneMetadataAppliedPlansQuery({
     variables: { sceneIds },
     fetchPolicy: "no-cache",
