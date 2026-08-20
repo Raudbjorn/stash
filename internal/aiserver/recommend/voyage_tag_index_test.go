@@ -18,14 +18,15 @@ import (
 )
 
 func TestVoyageTagIndexMatchesAndCachesSceneAndTaxonomyVectors(t *testing.T) {
-	dir := t.TempDir()
-	db, err := store.Open(context.Background(), filepath.Join(dir, "ai.db"))
+	tempDir := t.TempDir()
+	db, err := store.Open(context.Background(), filepath.Join(tempDir, "ai.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	videoPath := filepath.Join(dir, "video.mp4")
-	if err := os.WriteFile(videoPath, []byte("mp4"), 0o600); err != nil {
+
+	videoPath := filepath.Join(tempDir, "scene.mp4")
+	if err := os.WriteFile(videoPath, []byte("source metadata"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

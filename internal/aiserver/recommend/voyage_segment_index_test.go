@@ -3,6 +3,7 @@ package recommend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,7 +15,7 @@ import (
 )
 
 func TestVoyageSegmentIndexBuildsThreeFixedSegments(t *testing.T) {
-	index, calls, videoPath, _ := newTestVoyageSegmentIndex(t)
+	index, calls, videoPath := newTestVoyageSegmentIndex(t)
 	segments, err := index.Build(context.Background(), 42, videoPath, "transcript", 90)
 	if err != nil {
 		t.Fatal(err)
@@ -29,23 +30,24 @@ func TestVoyageSegmentIndexBuildsThreeFixedSegments(t *testing.T) {
 	}
 }
 
-func TestVoyageSegmentIndexCacheUsesStableSourceFingerprint(t *testing.T) {
-	index, calls, videoPath, extracts := newTestVoyageSegmentIndex(t)
+func TestVoyageSegmentIndexCacheUsesSourceFingerprint(t *testing.T) {
+	index, calls, videoPath := newTestVoyageSegmentIndex(t)
 	if _, err := index.Build(context.Background(), 42, videoPath, "transcript", 90); err != nil {
 		t.Fatal(err)
 	}
 	firstCalls := calls.Load()
-	firstExtracts := extracts.Load()
+	extractVideo := index.ExtractVideo
+	index.ExtractVideo = func(context.Context, string, float64, float64) ([]byte, error) {
+		return nil, errors.New("cached build extracted video")
+	}
 	if _, err := index.Build(context.Background(), 42, videoPath, "transcript", 90); err != nil {
 		t.Fatal(err)
 	}
 	if calls.Load() != firstCalls {
 		t.Fatalf("unchanged input made %d calls, want %d", calls.Load(), firstCalls)
 	}
-	if extracts.Load() != firstExtracts {
-		t.Fatalf("cache hit extracted %d segments, want %d", extracts.Load(), firstExtracts)
-	}
 
+	index.ExtractVideo = extractVideo
 	if _, err := index.Build(context.Background(), 42, videoPath, "different transcript", 90); err != nil {
 		t.Fatal(err)
 	}
@@ -54,8 +56,11 @@ func TestVoyageSegmentIndexCacheUsesStableSourceFingerprint(t *testing.T) {
 		t.Fatalf("changed transcript made %d calls, want %d", afterTranscript, firstCalls+3)
 	}
 
-	if err := os.WriteFile(videoPath, []byte("different mp4"), 0o600); err != nil {
+	if err := os.WriteFile(videoPath, []byte("changed source metadata"), 0o600); err != nil {
 		t.Fatal(err)
+	}
+	index.ExtractVideo = func(context.Context, string, float64, float64) ([]byte, error) {
+		return []byte("different mp4"), nil
 	}
 	if _, err := index.Build(context.Background(), 42, videoPath, "different transcript", 90); err != nil {
 		t.Fatal(err)
@@ -65,16 +70,55 @@ func TestVoyageSegmentIndexCacheUsesStableSourceFingerprint(t *testing.T) {
 	}
 }
 
-func newTestVoyageSegmentIndex(t *testing.T) (*VoyageSegmentIndex, *atomic.Int32, string, *atomic.Int32) {
+func TestVoyageSegmentIndexShortenedDurationUsesFastPath(t *testing.T) {
+	index, calls, videoPath := newTestVoyageSegmentIndex(t)
+	ctx := context.Background()
+	if _, err := index.Build(ctx, 42, videoPath, "transcript", 90); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := index.Build(ctx, 42, videoPath, "transcript", 60); err != nil {
+		t.Fatal(err)
+	}
+	afterShortening := calls.Load()
+	if afterShortening != 5 {
+		t.Fatalf("shortened build made %d calls, want 5", afterShortening)
+	}
+
+	sourceFingerprint, err := index.sourceFingerprint(videoPath, "transcript", 60)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := index.DB.GetEmbeddingSegments(ctx, voyageSegmentService, 42, index.cacheModel())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if segments, ok := cachedVoyageSegments(42, stored, sourceFingerprint, 60); !ok || len(segments) != 2 {
+		t.Fatal("complete shortened cache remains ineligible for the fast path")
+	}
+
+	index.ExtractVideo = func(context.Context, string, float64, float64) ([]byte, error) {
+		return nil, errors.New("shortened cache extracted video")
+	}
+	segments, err := index.Build(ctx, 42, videoPath, "transcript", 60)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(segments) != 2 || calls.Load() != afterShortening {
+		t.Fatalf("cached shortened build returned %d segments and %d calls, want 2/%d", len(segments), calls.Load(), afterShortening)
+	}
+}
+
+func newTestVoyageSegmentIndex(t *testing.T) (*VoyageSegmentIndex, *atomic.Int32, string) {
 	t.Helper()
-	dir := t.TempDir()
-	db, err := store.Open(context.Background(), filepath.Join(dir, "ai.db"))
+	tempDir := t.TempDir()
+	db, err := store.Open(context.Background(), filepath.Join(tempDir, "ai.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	videoPath := filepath.Join(dir, "video.mp4")
-	if err := os.WriteFile(videoPath, []byte("mp4"), 0o600); err != nil {
+
+	videoPath := filepath.Join(tempDir, "scene.mp4")
+	if err := os.WriteFile(videoPath, []byte("source metadata"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -107,13 +151,12 @@ func newTestVoyageSegmentIndex(t *testing.T) (*VoyageSegmentIndex, *atomic.Int32
 	}))
 	t.Cleanup(server.Close)
 
-	var extracts atomic.Int32
-	return &VoyageSegmentIndex{
+	index := &VoyageSegmentIndex{
 		APIKey: "secret", Model: "voyage-multimodal-3.5", Endpoint: server.URL,
 		SegmentSecs: 30, DB: db, Client: server.Client(), FFmpegPath: "ffmpeg-not-installed-for-test",
-		ExtractVideo: func(_ context.Context, path string, _, _ float64) ([]byte, error) {
-			extracts.Add(1)
-			return os.ReadFile(path)
+		ExtractVideo: func(context.Context, string, float64, float64) ([]byte, error) {
+			return []byte("mp4"), nil
 		},
-	}, &calls, videoPath, &extracts
+	}
+	return index, &calls, videoPath
 }
