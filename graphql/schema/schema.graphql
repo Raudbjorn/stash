@@ -559,6 +559,11 @@ type Mutation {
   metadataScan(input: ScanMetadataInput!): ID!
   "Start generating content. Returns the job ID"
   metadataGenerate(input: GenerateMetadataInput!): ID!
+  "Score transcode_benefit for scenes. Empty sceneIDs scores the whole library. Returns job ID"
+  metadataScoreTranscodeBenefit(input: ScoreTranscodeBenefitInput!): ID!
+  "Library-rewrite transcode: downscale, validate, replace primary, delete source. sceneIDs required. Returns job ID"
+  metadataLibraryTranscode(input: LibraryTranscodeInput!): ID!
+
   "Start auto-tagging. Returns the job ID"
   metadataAutoTag(input: AutoTagMetadataInput!): ID!
   "Detect scene cuts via ffmpeg and create markers at each. Returns the job ID"

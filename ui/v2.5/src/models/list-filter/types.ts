@@ -138,6 +138,8 @@ export type CriterionType =
   | "duration"
   | "filter_favorites"
   | "favorite"
+  | "transcode_benefit"
+
   | "has_markers"
   | "is_missing"
   | "tags"

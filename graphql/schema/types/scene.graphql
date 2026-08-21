@@ -49,6 +49,9 @@ type Scene {
   rating100: Int
   organized: Boolean!
   favorite: Boolean!
+  "Benefit of library downscale transcode to 360/480p"
+  transcode_benefit: TranscodeBenefitEnum
+
   o_counter: Int
   interactive: Boolean!
   interactive_speed: Int
@@ -85,6 +88,13 @@ type Scene {
   "Return valid stream paths"
   sceneStreams: [SceneStreamEndpoint!]!
 }
+
+enum TranscodeBenefitEnum {
+  HIGH
+  MEDIUM
+  LOW
+}
+
 
 input SceneMovieInput {
   movie_id: ID!

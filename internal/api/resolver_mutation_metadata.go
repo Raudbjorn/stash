@@ -83,6 +83,22 @@ func (r *mutationResolver) MetadataGenerate(ctx context.Context, input manager.G
 	return strconv.Itoa(jobID), nil
 }
 
+func (r *mutationResolver) MetadataScoreTranscodeBenefit(ctx context.Context, input manager.ScoreTranscodeBenefitInput) (string, error) {
+	jobID, err := manager.GetInstance().ScoreTranscodeBenefit(ctx, input)
+	if err != nil {
+		return "", err
+	}
+	return strconv.Itoa(jobID), nil
+}
+
+func (r *mutationResolver) MetadataLibraryTranscode(ctx context.Context, input manager.LibraryTranscodeInput) (string, error) {
+	jobID, err := manager.GetInstance().LibraryTranscode(ctx, input)
+	if err != nil {
+		return "", err
+	}
+	return strconv.Itoa(jobID), nil
+}
+
 func (r *mutationResolver) MetadataAutoTag(ctx context.Context, input manager.AutoTagMetadataInput) (string, error) {
 	jobID := manager.GetInstance().AutoTag(ctx, input)
 	return strconv.Itoa(jobID), nil

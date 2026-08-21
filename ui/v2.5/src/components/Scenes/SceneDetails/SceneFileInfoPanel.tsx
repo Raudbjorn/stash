@@ -309,6 +309,11 @@ const _SceneFileInfoPanel: React.FC<ISceneFileInfoPanelProps> = (
         {renderFunscript()}
         {renderInteractiveSpeed()}
         <URLsField id="urls" urls={props.scene.urls} truncate />
+        <TextField
+          id="transcode_benefit"
+          value={props.scene.transcode_benefit ?? "—"}
+        />
+
         {renderStashIDs()}
       </dl>
 

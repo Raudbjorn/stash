@@ -393,6 +393,14 @@ export const SceneSpecsOverlay: React.FC<ISceneSpecsOverlay> = React.memo(
         ) : (
           ""
         )}
+        {scene.transcode_benefit ? (
+          <span className="overlay-transcode-benefit">
+            {scene.transcode_benefit}
+          </span>
+        ) : (
+          ""
+        )}
+
         {file.duration > 0 ? (
           <span className="overlay-duration">
             {TextUtils.secondsToTimestamp(file.duration)}

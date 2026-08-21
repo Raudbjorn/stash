@@ -896,6 +896,15 @@ func (qb *FileStore) IsPrimary(ctx context.Context, fileID models.FileID) (bool,
 	return ret > 0, nil
 }
 
+func (qb *FileStore) PrimaryVideoFileSizes(ctx context.Context) ([]int64, error) {
+	const q = `SELECT files.size FROM files INNER JOIN scenes_files ON files.id = scenes_files.file_id WHERE scenes_files."primary" = 1 AND files.size > 0`
+	var sizes []int64
+	if err := querySelect(ctx, q, nil, &sizes); err != nil {
+		return nil, err
+	}
+	return sizes, nil
+}
+
 func (qb *FileStore) validateFilter(fileFilter *models.FileFilterType) error {
 	const and = "AND"
 	const or = "OR"
