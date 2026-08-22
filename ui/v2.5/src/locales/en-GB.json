@@ -83,6 +83,8 @@
     "hide": "Hide",
     "hide_configuration": "Hide Configuration",
     "identify": "Identify",
+    "library_transcode": "Library transcode",
+
     "ignore": "Ignore",
     "import": "Import…",
     "import_from_file": "Import from file",
@@ -101,6 +103,8 @@
     "optimise_database": "Optimise database",
     "overwrite": "Overwrite",
     "play": "Play",
+    "score_transcode_benefit": "Score transcode benefit",
+
     "play_queue": "Play queue",
     "play_random": "Play Random",
     "play_selected": "Play selected",
@@ -2050,6 +2054,13 @@
     "updated_entity": "Updated {entity}",
     "upload_caption_success": "Caption uploaded"
   },
+  "transcode_benefit": "Transcode Benefit",
+  "transcode_benefit_enum": {
+    "HIGH": "HIGH",
+    "MEDIUM": "MEDIUM",
+    "LOW": "LOW"
+  },
+
   "total": "Total",
   "true": "True",
   "twitter": "Twitter",

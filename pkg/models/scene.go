@@ -50,6 +50,9 @@ type SceneFilterType struct {
 	// Filter by organized
 	Organized *bool `json:"organized"`
 	Favorite  *bool `json:"favorite"`
+	// Filter by transcode benefit
+	TranscodeBenefit *StringCriterionInput `json:"transcode_benefit"`
+
 	// Filter by o-counter
 	OCounter *IntCriterionInput `json:"o_counter"`
 	// Filter Scenes by duplication criteria

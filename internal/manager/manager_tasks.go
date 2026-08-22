@@ -239,6 +239,29 @@ func (s *Manager) Generate(ctx context.Context, input GenerateMetadataInput) (in
 	return s.JobManager.Add(ctx, "Generating...", j), nil
 }
 
+func (s *Manager) ScoreTranscodeBenefit(ctx context.Context, input ScoreTranscodeBenefitInput) (int, error) {
+	j := &ScoreTranscodeBenefitJob{
+		repository: s.Repository,
+		input:      input,
+	}
+	return s.JobManager.Add(ctx, "Scoring transcode benefit...", j), nil
+}
+
+func (s *Manager) LibraryTranscode(ctx context.Context, input LibraryTranscodeInput) (int, error) {
+	if err := s.validateFFmpeg(); err != nil {
+		return 0, err
+	}
+	profile := resolveLibraryTranscodeProfile(input.Profile)
+	if (profile == LibraryTranscodeHQ480 || profile == LibraryTranscodeLQ480) && !hasNVENC() {
+		return 0, fmt.Errorf("h264_nvenc not available")
+	}
+	j := &LibraryTranscodeJob{
+		repository: s.Repository,
+		input:      input,
+	}
+	return s.JobManager.Add(ctx, "Library transcoding...", j), nil
+}
+
 func (s *Manager) GenerateDefaultScreenshot(ctx context.Context, sceneId string) int {
 	return s.generateScreenshot(ctx, sceneId, nil)
 }

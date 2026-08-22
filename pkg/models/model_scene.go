@@ -17,10 +17,12 @@ type Scene struct {
 	Director string `json:"director"`
 	Date     *Date  `json:"date"`
 	// Rating expressed in 1-100 scale
-	Rating    *int `json:"rating"`
-	Organized bool `json:"organized"`
-	Favorite  bool `json:"favorite"`
-	StudioID  *int `json:"studio_id"`
+	Rating           *int                  `json:"rating"`
+	Organized        bool                  `json:"organized"`
+	Favorite         bool                  `json:"favorite"`
+	TranscodeBenefit *TranscodeBenefitEnum `json:"transcode_benefit"`
+
+	StudioID *int `json:"studio_id"`
 
 	// transient - not persisted
 	Files         RelatedVideoFiles
@@ -77,9 +79,11 @@ type ScenePartial struct {
 	Director OptionalString
 	Date     OptionalDate
 	// Rating expressed in 1-100 scale
-	Rating       OptionalInt
-	Organized    OptionalBool
-	Favorite     OptionalBool
+	Rating           OptionalInt
+	Organized        OptionalBool
+	Favorite         OptionalBool
+	TranscodeBenefit OptionalString
+
 	StudioID     OptionalInt
 	CreatedAt    OptionalTime
 	UpdatedAt    OptionalTime

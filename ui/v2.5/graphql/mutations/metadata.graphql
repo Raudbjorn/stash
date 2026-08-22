@@ -22,6 +22,14 @@ mutation MetadataGenerate($input: GenerateMetadataInput!) {
   metadataGenerate(input: $input)
 }
 
+mutation MetadataScoreTranscodeBenefit($input: ScoreTranscodeBenefitInput!) {
+  metadataScoreTranscodeBenefit(input: $input)
+}
+mutation MetadataLibraryTranscode($input: LibraryTranscodeInput!) {
+  metadataLibraryTranscode(input: $input)
+}
+
+
 mutation MetadataAutoTag($input: AutoTagMetadataInput!) {
   metadataAutoTag(input: $input)
 }

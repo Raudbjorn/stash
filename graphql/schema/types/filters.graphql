@@ -290,6 +290,9 @@ input SceneFilterType {
   organized: Boolean
   "Filter by favorite"
   favorite: Boolean
+  "Filter by transcode benefit"
+  transcode_benefit: StringCriterionInput
+
   "Filter by o-counter"
   o_counter: IntCriterionInput
   "Filter Scenes by duplication criteria"

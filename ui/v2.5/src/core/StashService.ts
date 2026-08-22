@@ -3317,6 +3317,23 @@ export const mutateMetadataGenerate = (input: GQL.GenerateMetadataInput) =>
     variables: { input },
   });
 
+export const mutateMetadataScoreTranscodeBenefit = (
+  input: GQL.ScoreTranscodeBenefitInput
+) =>
+  client.mutate<GQL.MetadataScoreTranscodeBenefitMutation>({
+    mutation: GQL.MetadataScoreTranscodeBenefitDocument,
+    variables: { input },
+  });
+
+export const mutateMetadataLibraryTranscode = (
+  input: GQL.LibraryTranscodeInput
+) =>
+  client.mutate<GQL.MetadataLibraryTranscodeMutation>({
+    mutation: GQL.MetadataLibraryTranscodeDocument,
+    variables: { input },
+  });
+
+
 export const mutateMetadataClean = (input: GQL.CleanMetadataInput) =>
   client.mutate<GQL.MetadataCleanMutation>({
     mutation: GQL.MetadataCleanDocument,

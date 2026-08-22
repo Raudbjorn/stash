@@ -124,6 +124,13 @@ models:
     model: github.com/stashapp/stash/internal/manager.ScanMetadataInput
   GenerateMetadataInput:
     model: github.com/stashapp/stash/internal/manager.GenerateMetadataInput
+  ScoreTranscodeBenefitInput:
+    model: github.com/stashapp/stash/internal/manager.ScoreTranscodeBenefitInput
+  LibraryTranscodeInput:
+    model: github.com/stashapp/stash/internal/manager.LibraryTranscodeInput
+  LibraryTranscodeProfile:
+    model: github.com/stashapp/stash/internal/manager.LibraryTranscodeProfile
+
   GeneratePreviewOptionsInput:
     model: github.com/stashapp/stash/internal/manager.GeneratePreviewOptionsInput
   AutoTagMetadataInput:

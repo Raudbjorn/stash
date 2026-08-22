@@ -4,8 +4,13 @@ import { FormattedMessage, useIntl } from "react-intl";
 import { useHistory, useLocation } from "react-router-dom";
 import Mousetrap from "mousetrap";
 import * as GQL from "src/core/generated-graphql";
-import { queryFindScenes, useFindScenes } from "src/core/StashService";
+import {
+  queryFindScenes,
+  useFindScenes,
+  mutateMetadataScoreTranscodeBenefit,
+} from "src/core/StashService";
 import { ListFilterModel } from "src/models/list-filter/filter";
+
 import { DisplayMode } from "src/models/list-filter/types";
 import { Tagger } from "../Tagger/scenes/SceneTagger";
 import { IPlaySceneOptions, SceneQueue } from "src/models/sceneQueue";
@@ -14,11 +19,15 @@ import { SceneListTable } from "./SceneListTable";
 import { EditScenesDialog } from "./EditScenesDialog";
 import { DeleteScenesDialog } from "./DeleteScenesDialog";
 import { GenerateDialog } from "../Dialogs/GenerateDialog";
+import { LibraryTranscodeDialog } from "../Dialogs/LibraryTranscodeDialog";
+
 import { ExportDialog } from "../Shared/ExportDialog";
 import { SceneCardGrid } from "./SceneCardGrid";
 import { TaggerContext } from "../Tagger/context";
 import { IdentifyDialog } from "../Dialogs/IdentifyDialog/IdentifyDialog";
 import { useConfigurationContext } from "src/hooks/Config";
+import { useToast } from "src/hooks/Toast";
+
 import { SceneMergeModal } from "./SceneMergeDialog";
 import { objectTitle } from "src/core/files";
 import TextUtils from "src/utils/text";
@@ -365,6 +374,8 @@ export const FilteredSceneList = PatchComponent(
   "FilteredSceneList",
   (props: IFilteredScenes) => {
     const intl = useIntl();
+    const Toast = useToast();
+
     const history = useHistory();
     const location = useLocation();
 
@@ -598,6 +609,41 @@ export const FilteredSceneList = PatchComponent(
           ),
         isDisplayed: () => hasSelection,
       },
+      {
+        text: `${intl.formatMessage({ id: "actions.library_transcode" })}…`,
+        onClick: () =>
+          showModal(
+            <LibraryTranscodeDialog
+              selectedIds={Array.from(selectedIds.values())}
+              onClose={() => closeModal()}
+            />
+          ),
+        isDisplayed: () => hasSelection,
+      },
+      {
+        text: intl.formatMessage({ id: "actions.score_transcode_benefit" }),
+        onClick: () => {
+          const sceneIDs = hasSelection
+            ? Array.from(selectedIds.values())
+            : [];
+          mutateMetadataScoreTranscodeBenefit({ sceneIDs })
+            .then(() => {
+              Toast.success(
+                intl.formatMessage(
+                  { id: "config.tasks.added_job_to_queue" },
+                  {
+                    operation_name: intl.formatMessage({
+                      id: "actions.score_transcode_benefit",
+                    }),
+                  }
+                )
+              );
+            })
+            .catch((e) => Toast.error(e));
+        },
+        isDisplayed: () => true,
+      },
+
       {
         text: `${intl.formatMessage({ id: "actions.identify" })}…`,
         onClick: () =>

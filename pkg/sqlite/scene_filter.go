@@ -124,6 +124,7 @@ func (qb *sceneFilterHandler) criterionHandler() criterionHandler {
 		qb.oCountCriterionHandler(sceneFilter.OCounter),
 		boolCriterionHandler(sceneFilter.Organized, "scenes.organized", nil),
 		boolCriterionHandler(sceneFilter.Favorite, "scenes.favorite", nil),
+		stringCriterionHandler(sceneFilter.TranscodeBenefit, "scenes.transcode_benefit"),
 
 		floatIntCriterionHandler(sceneFilter.Duration, "video_files.duration", qb.addVideoFilesTable),
 		resolutionCriterionHandler(sceneFilter.Resolution, "video_files.height", "video_files.width", qb.addVideoFilesTable),

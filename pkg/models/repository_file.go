@@ -70,6 +70,7 @@ type FileReader interface {
 
 	GetCaptions(ctx context.Context, fileID FileID) ([]*VideoCaption, error)
 	IsPrimary(ctx context.Context, fileID FileID) (bool, error)
+	PrimaryVideoFileSizes(ctx context.Context) ([]int64, error)
 }
 
 type FileFingerprintWriter interface {

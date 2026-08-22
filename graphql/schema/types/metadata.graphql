@@ -41,6 +41,25 @@ input GenerateMetadataInput {
   overwrite: Boolean
 }
 
+input ScoreTranscodeBenefitInput {
+  sceneIDs: [ID!]
+}
+
+enum LibraryTranscodeProfile {
+  "480p h264_nvenc p4 cq 24 aac 96k (default)"
+  HQ_480
+  "480p h264_nvenc p4 cq 30 aac 64k"
+  LQ_480
+  "360p h264_nvenc cq 35 fps 24, x265/x264 fallback"
+  MAX_360
+}
+
+input LibraryTranscodeInput {
+  sceneIDs: [ID!]!
+  profile: LibraryTranscodeProfile
+}
+
+
 input GeneratePreviewOptionsInput {
   "Number of segments in a preview file"
   previewSegments: Int

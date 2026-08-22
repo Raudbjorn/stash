@@ -50,9 +50,11 @@ type sceneRow struct {
 	Date          NullDate    `db:"date"`
 	DatePrecision null.Int    `db:"date_precision"`
 	// expressed as 1-100
-	Rating       null.Int  `db:"rating"`
-	Organized    bool      `db:"organized"`
-	Favorite     bool      `db:"favorite"`
+	Rating           null.Int    `db:"rating"`
+	Organized        bool        `db:"organized"`
+	Favorite         bool        `db:"favorite"`
+	TranscodeBenefit zero.String `db:"transcode_benefit"`
+
 	StudioID     null.Int  `db:"studio_id,omitempty"`
 	CreatedAt    Timestamp `db:"created_at"`
 	UpdatedAt    Timestamp `db:"updated_at"`
@@ -74,6 +76,10 @@ func (r *sceneRow) fromScene(o models.Scene) {
 	r.Rating = intFromPtr(o.Rating)
 	r.Organized = o.Organized
 	r.Favorite = o.Favorite
+	if o.TranscodeBenefit != nil {
+		r.TranscodeBenefit = zero.StringFrom(string(*o.TranscodeBenefit))
+	}
+
 	r.StudioID = intFromPtr(o.StudioID)
 	r.CreatedAt = Timestamp{Timestamp: o.CreatedAt}
 	r.UpdatedAt = Timestamp{Timestamp: o.UpdatedAt}
@@ -92,16 +98,18 @@ type sceneQueryRow struct {
 
 func (r *sceneQueryRow) resolve() *models.Scene {
 	ret := &models.Scene{
-		ID:        r.ID,
-		Title:     r.Title.String,
-		Code:      r.Code.String,
-		Details:   r.Details.String,
-		Director:  r.Director.String,
-		Date:      r.Date.DatePtr(r.DatePrecision),
-		Rating:    nullIntPtr(r.Rating),
-		Organized: r.Organized,
-		Favorite:  r.Favorite,
-		StudioID:  nullIntPtr(r.StudioID),
+		ID:               r.ID,
+		Title:            r.Title.String,
+		Code:             r.Code.String,
+		Details:          r.Details.String,
+		Director:         r.Director.String,
+		Date:             r.Date.DatePtr(r.DatePrecision),
+		Rating:           nullIntPtr(r.Rating),
+		Organized:        r.Organized,
+		Favorite:         r.Favorite,
+		TranscodeBenefit: transcodeBenefitFromString(r.TranscodeBenefit),
+
+		StudioID: nullIntPtr(r.StudioID),
 
 		PrimaryFileID: nullIntFileIDPtr(r.PrimaryFileID),
 		OSHash:        r.PrimaryFileOshash.String,
@@ -134,6 +142,8 @@ func (r *sceneRowRecord) fromPartial(o models.ScenePartial) {
 	r.setNullInt("rating", o.Rating)
 	r.setBool("organized", o.Organized)
 	r.setBool("favorite", o.Favorite)
+	r.setNullString("transcode_benefit", o.TranscodeBenefit)
+
 	r.setNullInt("studio_id", o.StudioID)
 	r.setTimestamp("created_at", o.CreatedAt)
 	r.setTimestamp("updated_at", o.UpdatedAt)
@@ -1184,6 +1194,8 @@ var sceneSortOptions = sortOptions{
 	"movie_scene_number",
 	"o_counter",
 	"organized",
+	"transcode_benefit",
+
 	"performer_count",
 	"play_count",
 	"play_duration",
@@ -1346,6 +1358,9 @@ func (qb *SceneStore) setSceneSort(query *queryBuilder, findFilter *models.FindF
 	case "studio":
 		query.joinSort(studioTable, "", "scenes.studio_id = studios.id")
 		query.sortAndPagination += getSort("name", direction, studioTable)
+	case "transcode_benefit":
+		query.sortAndPagination += fmt.Sprintf(" ORDER BY CASE scenes.transcode_benefit WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 1 WHEN 'LOW' THEN 0 ELSE -1 END %s", direction)
+
 	default:
 		query.sortAndPagination += getSort(sort, direction, "scenes")
 	}
@@ -1629,4 +1644,15 @@ func getFirstPath(scenes []*models.Scene) string {
 		}
 	}
 	return firstPath
+}
+
+func transcodeBenefitFromString(v zero.String) *models.TranscodeBenefitEnum {
+	if !v.Valid || v.String == "" {
+		return nil
+	}
+	e := models.TranscodeBenefitEnum(v.String)
+	if !e.IsValid() {
+		return nil
+	}
+	return &e
 }
