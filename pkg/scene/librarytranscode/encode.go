@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/stashapp/stash/pkg/ffmpeg"
@@ -20,44 +21,57 @@ type EncodeSpec struct {
 	VideoArgs    ffmpeg.Args
 	AudioBitrate string
 	UseCUDA      bool
+	// FrameRate, when > 0, is set as the output -r (keeps fps out of CUDA graphs).
+	FrameRate int
 }
 
-func nvencSpec(scaleFilter string, cq int, audioBitrate string) EncodeSpec {
+func nvencSpec(scaleFilter string, cq int, audioBitrate string, fps int) EncodeSpec {
 	return EncodeSpec{
 		ScaleFilter:  scaleFilter,
 		VideoCodec:   ffmpeg.VideoCodecN264,
 		VideoArgs:    ffmpeg.Args{"-preset", "p4", "-cq", fmt.Sprint(cq)},
 		AudioBitrate: audioBitrate,
 		UseCUDA:      true,
+		FrameRate:    fps,
 	}
 }
 
-// NVENCSpec returns the NVENC encode spec for a target height.
-func NVENCSpec(targetHeight int, cq int, audioBitrate string, fps int) EncodeSpec {
-	scale := fmt.Sprintf("scale_cuda=-2:%d", targetHeight)
-	if fps > 0 {
-		scale = fmt.Sprintf("scale_cuda=-2:%d,fps=fps=%d", targetHeight, fps)
+// MinSideScaleFilter scales the short side to target. Even long side via -2.
+func MinSideScaleFilter(target, width, height int, cuda bool) string {
+	name := "scale"
+	if cuda {
+		name = "scale_cuda"
 	}
-	return nvencSpec(scale, cq, audioBitrate)
+	if height > width {
+		return fmt.Sprintf("%s=%d:-2", name, target)
+	}
+	return fmt.Sprintf("%s=-2:%d", name, target)
+}
+
+// NVENCSpec returns the NVENC encode spec for a target min-side.
+func NVENCSpec(target int, cq int, audioBitrate string, fps int, width, height int) EncodeSpec {
+	return nvencSpec(MinSideScaleFilter(target, width, height, true), cq, audioBitrate, fps)
 }
 
 // SoftwareX265Spec is MAX_360 fallback (2).
-func SoftwareX265Spec() EncodeSpec {
+func SoftwareX265Spec(width, height int) EncodeSpec {
 	return EncodeSpec{
-		ScaleFilter:  "scale=-2:360,fps=fps=24",
+		ScaleFilter:  MinSideScaleFilter(360, width, height, false),
 		VideoCodec:   ffmpeg.VideoCodecLibX265,
 		VideoArgs:    ffmpeg.Args{"-preset", "slow", "-crf", "35", "-g", "48", "-pix_fmt", "yuv420p"},
 		AudioBitrate: "48k",
+		FrameRate:    24,
 	}
 }
 
 // SoftwareX264Spec is MAX_360 fallback (3).
-func SoftwareX264Spec() EncodeSpec {
+func SoftwareX264Spec(width, height int) EncodeSpec {
 	return EncodeSpec{
-		ScaleFilter:  "scale=-2:360,fps=fps=24",
+		ScaleFilter:  MinSideScaleFilter(360, width, height, false),
 		VideoCodec:   ffmpeg.VideoCodecLibX264,
 		VideoArgs:    ffmpeg.Args{"-preset", "medium", "-crf", "32", "-g", "48", "-pix_fmt", "yuv420p"},
 		AudioBitrate: "48k",
+		FrameRate:    24,
 	}
 }
 
@@ -72,6 +86,11 @@ func Encode(ctx context.Context, encoder *ffmpeg.FFMpeg, inputPath, outputPath s
 		extraInput = []string{"-hwaccel", "cuda", "-hwaccel_output_format", "cuda"}
 	}
 
+	extraOut := []string{"-vf", spec.ScaleFilter, "-movflags", "+faststart"}
+	if spec.FrameRate > 0 {
+		extraOut = append(extraOut, "-r", strconv.Itoa(spec.FrameRate))
+	}
+
 	args := transcoder.Transcode(inputPath, transcoder.TranscodeOptions{
 		OutputPath:      outputPath,
 		Format:          ffmpeg.FormatMP4,
@@ -80,7 +99,7 @@ func Encode(ctx context.Context, encoder *ffmpeg.FFMpeg, inputPath, outputPath s
 		AudioCodec:      ffmpeg.AudioCodecAAC,
 		AudioArgs:       ffmpeg.Args{"-b:a", spec.AudioBitrate},
 		ExtraInputArgs:  extraInput,
-		ExtraOutputArgs: []string{"-vf", spec.ScaleFilter, "-movflags", "+faststart"},
+		ExtraOutputArgs: extraOut,
 	})
 
 	logger.Tracef("library transcode: ffmpeg %s", strings.Join(args.Args(), " "))
