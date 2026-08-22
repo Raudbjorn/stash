@@ -7,7 +7,6 @@ import { useToast } from "src/hooks/Toast";
 import { useConfigurationContext } from "src/hooks/Config";
 import { FormattedMessage, useIntl } from "react-intl";
 import { faTrashAlt } from "@fortawesome/free-solid-svg-icons";
-import { objectPath } from "src/core/files";
 
 interface IDeleteSceneDialogProps {
   selected: GQL.SlimSceneDataFragment[];
@@ -70,14 +69,6 @@ export const DeleteScenesDialog: React.FC<IDeleteSceneDialogProps> = (
     setIsDeleting(false);
   }
 
-  function funscriptPath(sp: string) {
-    const extIndex = sp.lastIndexOf(".");
-    if (extIndex !== -1) {
-      return sp.substring(0, extIndex + 1) + "funscript";
-    }
-
-    return sp;
-  }
 
   function maybeRenderDeleteFileAlert() {
     if (!deleteFile) {
@@ -89,9 +80,6 @@ export const DeleteScenesDialog: React.FC<IDeleteSceneDialogProps> = (
     props.selected.forEach((s) => {
       const paths = s.files.map((f) => f.path);
       deletedFiles.push(...paths);
-      if (s.interactive && s.files.length) {
-        deletedFiles.push(funscriptPath(objectPath(s)));
-      }
     });
 
     const deleteTrashPath = config?.general.deleteTrashPath;
@@ -154,7 +142,7 @@ export const DeleteScenesDialog: React.FC<IDeleteSceneDialogProps> = (
           id="delete-file"
           checked={deleteFile}
           label={intl.formatMessage({
-            id: "actions.delete_file_and_funscript",
+            id: "actions.delete_file",
           })}
           onChange={() => setDeleteFile(!deleteFile)}
         />

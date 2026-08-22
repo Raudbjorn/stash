@@ -454,8 +454,6 @@ func (r *mutationResolver) ConfigureGeneral(ctx context.Context, input ConfigGen
 		c.SetInterface(config.LiveTranscodeOutputArgs, input.LiveTranscodeOutputArgs)
 	}
 
-	r.setConfigBool(config.DrawFunscriptHeatmapRange, input.DrawFunscriptHeatmapRange)
-
 	if input.ScraperPackageSources != nil {
 		c.SetInterface(config.ScraperPackageSources, input.ScraperPackageSources)
 		refreshScraperSource = true
@@ -560,10 +558,6 @@ func (r *mutationResolver) ConfigureInterface(ctx context.Context, input ConfigI
 		r.setConfigBool(config.DisableDropdownCreateMovie, ddc.Movie)
 		r.setConfigBool(config.DisableDropdownCreateGallery, ddc.Gallery)
 	}
-
-	r.setConfigString(config.HandyKey, input.HandyKey)
-	r.setConfigInt(config.FunscriptOffset, input.FunscriptOffset)
-	r.setConfigBool(config.UseStashHostedFunscript, input.UseStashHostedFunscript)
 
 	if err := c.Write(); err != nil {
 		return makeConfigInterfaceResult(), err

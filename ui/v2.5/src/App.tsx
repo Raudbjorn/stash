@@ -37,7 +37,6 @@ import {
   useConfigurationContextOptional,
 } from "./hooks/Config";
 import { ManualProvider } from "./components/Help/context";
-import { InteractiveProvider } from "./hooks/Interactive/context";
 import { ReleaseNotesDialog } from "./components/Dialogs/ReleaseNotesDialog";
 import { releaseNotes } from "./docs/en/ReleaseNotes";
 import { getPlatformURL } from "./core/createClient";
@@ -417,11 +416,9 @@ export const App: React.FC = () => {
                 <Suspense fallback={<LoadingIndicator />}>
                   <LightboxProvider>
                     <ManualProvider>
-                      <InteractiveProvider>
-                        <Helmet {...titleProps} htmlAttributes={htmlAttributes} />
-                        {maybeRenderNavbar()}
-                        <MainContainer>{renderContent()}</MainContainer>
-                      </InteractiveProvider>
+                      <Helmet {...titleProps} htmlAttributes={htmlAttributes} />
+                      {maybeRenderNavbar()}
+                      <MainContainer>{renderContent()}</MainContainer>
                     </ManualProvider>
                   </LightboxProvider>
                 </Suspense>

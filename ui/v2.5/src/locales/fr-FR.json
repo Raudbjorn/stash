@@ -31,7 +31,6 @@
         "delete": "Supprimer",
         "delete_entity": "Supprimer {entityType}",
         "delete_file": "Supprimer le fichier",
-        "delete_file_and_funscript": "Supprimer le fichier (et script interactif)",
         "delete_generated_supporting_files": "Supprimer les fichiers générés associés",
         "disallow": "Refuser",
         "download": "Télécharger",
@@ -390,8 +389,6 @@
                     "heading": "Chemin de l'exécutable FFprobe"
                 }
             },
-            "funscript_heatmap_draw_range": "Inclure l'amplitude dans les cartes thermiques générées",
-            "funscript_heatmap_draw_range_desc": "Dessiner l'étendue du mouvement sur l'axe des ordonnées de la carte thermique générée. Les cartes thermiques existantes devront être régénérées après modifications.",
             "gallery_cover_regex_desc": "Expressions régulières utilisées pour identifier une image comme vignette de la galerie.",
             "gallery_cover_regex_label": "Modèle de vignette de la galerie",
             "gallery_ext_desc": "Liste d'extensions de fichiers séparées par des virgules qui seront reconnues comme des archives ZIP de la galerie.",
@@ -401,7 +398,6 @@
             "generated_files_location": "Emplacement des fichiers générés (marqueurs de scène, aperçus de scène, sprites, etc.).",
             "generated_path_head": "Chemin des fichiers générés",
             "hashing": "Hachage",
-            "heatmap_generation": "Génération de la carte thermique du script interactif",
             "image_ext_desc": "Liste d'extensions de fichiers séparées par des virgules qui seront reconnues comme des images.",
             "image_ext_head": "Extensions des images",
             "include_audio_desc": "Inclure le flux audio lors de la génération des aperçus.",
@@ -721,24 +717,6 @@
                     }
                 }
             },
-            "funscript_offset": {
-                "description": "Décalage temporel en millisecondes pour la lecture des scripts interactifs.",
-                "heading": "Décalage du script interactif (ms)"
-            },
-            "handy_connection": {
-                "connect": "Connecter",
-                "server_offset": {
-                    "heading": "Offset serveur"
-                },
-                "status": {
-                    "heading": "Statut de connexion Handy"
-                },
-                "sync": "Synchroniser"
-            },
-            "handy_connection_key": {
-                "description": "Clé de connexion Handy à utiliser pour les scènes interactives. En définissant cette clé, vous permettez à Stash de partager les informations de votre scène actuelle avec handyfeeling.com.",
-                "heading": "Clé de connexion Handy"
-            },
             "image_lightbox": {
                 "heading": "Visionneuse d'images"
             },
@@ -760,7 +738,6 @@
                     }
                 }
             },
-            "interactive_options": "Options Interactives",
             "language": {
                 "heading": "Langue"
             },
@@ -863,10 +840,6 @@
                 }
             },
             "title": "Interface utilisateur",
-            "use_stash_hosted_funscript": {
-                "description": "Activée, les scripts interactifs sont transmis directement de Stash à votre dispositif Handy sans recourir au serveur Handy de tierce partie. Nécessite que Stash soit accessible depuis votre dispositif Handy, et qu'une clé API soit générée si Stash a des informations d'identification configurées.",
-                "heading": "Transmettre directement les funscripts"
-            },
             "performer_list": {
                 "heading": "Liste de performeurs",
                 "options": {
@@ -1028,7 +1001,6 @@
             "force_transcodes_tooltip": "Par défaut, les transcodes ne sont générés que lorsque le fichier vidéo n'est pas pris en charge par le navigateur. Activé, les transcodes seront générés même si le fichier vidéo semble être pris en charge par le navigateur.",
             "image_previews": "Aperçus d'images animées",
             "image_previews_tooltip": "Génère également des aperçus animés (webp), uniquement requis lorsque le mode de prévisualisation Scène/Mur de marqueurs est défini sur Image animée. Lors de la navigation, ils utilisent moins de ressources CPU que les aperçus vidéo, mais sont générés en complément de ceux-ci et constituent des fichiers plus volumineux.",
-            "interactive_heatmap_speed": "Générer des cartes thermiques et vitesses pour les scènes interactives",
             "marker_image_previews": "Aperçus animés des marqueurs",
             "marker_image_previews_tooltip": "Génère également des aperçus animés (webp), uniquement requis lorsque le mode de prévisualisation Scène/Mur de marqueurs est défini sur Image animée. Lors de la navigation, ils utilisent moins de ressources CPU que les aperçus vidéo, mais sont générés en complément de ceux-ci et constituent des fichiers plus volumineux.",
             "marker_screenshots": "Captures d'écran des marqueurs",
@@ -1194,15 +1166,6 @@
         "TRANSGENDER_MALE": "Homme transgenre"
     },
     "hair_color": "Couleur des cheveux",
-    "handy_connection_status": {
-        "connecting": "Connexion",
-        "disconnected": "Déconnecté",
-        "error": "Erreur de connexion à Handy",
-        "missing": "Manquant",
-        "ready": "Prêt",
-        "syncing": "Synchronisation avec le serveur",
-        "uploading": "Script de chargement"
-    },
     "hasChapters": "Chapitres",
     "hasMarkers": "Marqueurs",
     "height": "Taille",
@@ -1218,8 +1181,6 @@
     "include_sub_tags": "Inclure les étiquettes affiliées",
     "index_of_total": "{index} de {total}",
     "instagram": "Instagram",
-    "interactive": "Interactif",
-    "interactive_speed": "Vitesse interactive",
     "isMissing": "Est manquant",
     "last_played_at": "Dernière lecture le",
     "library": "Bibliothèque",
@@ -1233,7 +1194,6 @@
     "media_info": {
         "audio_codec": "Codec audio",
         "downloaded_from": "Téléchargé depuis",
-        "interactive_speed": "Vitesse interactive",
         "performer_card": {
             "age": "{age} {years_old}",
             "age_context": "{age} {years_old} à la production"

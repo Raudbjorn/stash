@@ -29,7 +29,6 @@
         "delete": "Kustuta",
         "delete_entity": "Kustuta {entityType}",
         "delete_file": "Kustuta fail",
-        "delete_file_and_funscript": "Kustuta fail (ja funscript)",
         "delete_generated_supporting_files": "Kustuta genereeritud toetusfailid",
         "disallow": "Keela",
         "download": "Lae alla",
@@ -382,8 +381,6 @@
                     "heading": "Lae alla FFmpeg"
                 }
             },
-            "funscript_heatmap_draw_range": "Kaasa vahemik genereeritud kuumkaartidel",
-            "funscript_heatmap_draw_range_desc": "Joonista liikumisvahemik genereeritud kuumkaardi y-teljel. Olemasolevad kuumkaardid tuleb peale muutmist uuesti genereerida.",
             "gallery_cover_regex_desc": "Regexpte kasutakse, et tuvastada pilti kui galerii kaanepildina.",
             "gallery_cover_regex_label": "Galerii kaanepildi muster",
             "gallery_ext_desc": "Komadega eraldatud faililaiendite loend, mis tuvastatakse galerii ZIP-failidena.",
@@ -393,7 +390,6 @@
             "generated_files_location": "Loodud failide (stseenimarkerid, stseeni eelvaated, spraidid jne) asukoht failiteel.",
             "generated_path_head": "Genereeritud failitee",
             "hashing": "Räsimine",
-            "heatmap_generation": "Funscripti Kuumkaardi Genereerimine",
             "image_ext_desc": "Komadega eraldatud faililaiendite loend, mis tuvastatakse piltidena.",
             "image_ext_head": "Pildilaiendused",
             "include_audio_desc": "Kaasa eelvaadete loomisel helivoog.",
@@ -690,24 +686,6 @@
                     }
                 }
             },
-            "funscript_offset": {
-                "description": "Interaktiivsete skriptide taasesituse aja nihe millisekundites.",
-                "heading": "Funscripti nihe (ms)"
-            },
-            "handy_connection": {
-                "connect": "Ühenda",
-                "server_offset": {
-                    "heading": "Serveri Nihe"
-                },
-                "status": {
-                    "heading": "Handy Ühenduse Staatus"
-                },
-                "sync": "Sünkroniseeri"
-            },
-            "handy_connection_key": {
-                "description": "Handy ühendusvõti interaktiivsete stseenide jaoks. Selle määramine võimaldab Stashil jagada teie praeguse stseeni teavet saidiga handyfeeling.com.",
-                "heading": "Handy ühendusvõti"
-            },
             "image_lightbox": {
                 "heading": "Pildi Valguskast"
             },
@@ -729,7 +707,6 @@
                     }
                 }
             },
-            "interactive_options": "Interaktiivsed Valikud",
             "language": {
                 "heading": "Keel"
             },
@@ -831,10 +808,6 @@
                 }
             },
             "title": "Kasutajaliides",
-            "use_stash_hosted_funscript": {
-                "description": "Kui see on lubatud, edastatakse funscriptid otse Stashist teie Handy seadmesse ilma kolmanda osapoole Handy serverit kasutamata. See nõuab, et Stash oleks teie Handy seadmest juurdepääsetav ja API võti on genereeritud, kui Stashil on ligipääs piiratud.",
-                "heading": "Serveeri funscripte otse"
-            },
             "detail": {
                 "show_all_details": {
                     "description": "Kui see on lubatud, kuvatakse vaikimisi kõik sisu üksikasjad ja iga üksikasjade üksus mahub ühte veergu.",
@@ -999,7 +972,6 @@
             "force_transcodes_tooltip": "Vaikimisi genereeritakse ümbertöötlemisi ainult siis, kui brauser videofaili ei toeta. Kui see on lubatud, genereeritakse ümbertöötlemisi isegi siis, kui videofail näib olevat brauseris toetatud.",
             "image_previews": "Animeeritud piltide eelvaated",
             "image_previews_tooltip": "Looge ka animeeritud (webp) eelvaateid, mis on nõutavad ainult siis, kui Stseeni/Markeri Seina Eelvaate tüüp on seatud väärtusele Animeeritud pilt. Sirvimisel kasutavad nad vähem CPUd kui video eelvaated, kuid genereeritakse neile lisaks ja need on suuremad failid.",
-            "interactive_heatmap_speed": "Looge interaktiivsete stseenide jaoks soojuskaarte ja kiirusi",
             "marker_image_previews": "Markeri animeeritud piltide eelvaated",
             "marker_image_previews_tooltip": "Looge ka animeeritud (webp) eelvaateid, mis on nõutavad ainult siis, kui Stseeni/Markeri Seina Eelvaate tüüp on seatud väärtusele Animeeritud pilt. Sirvimisel kasutavad nad vähem CPUd kui video eelvaated, kuid genereeritakse neile lisaks ja need on suuremad failid.",
             "marker_screenshots": "Markeri ekraanipildid",
@@ -1166,15 +1138,6 @@
         "TRANSGENDER_MALE": "Transmees"
     },
     "hair_color": "Juuksevärv",
-    "handy_connection_status": {
-        "connecting": "Ühendan",
-        "disconnected": "Lahti ühendatud",
-        "error": "Handyga ühendamisel tekkis viga",
-        "missing": "Kadunud",
-        "ready": "Valmis",
-        "syncing": "Serveriga sünkroniseerimine",
-        "uploading": "Skripti üleslaadimine"
-    },
     "hasChapters": "Peatükid",
     "hasMarkers": "Markerid",
     "height": "Pikkus",
@@ -1189,8 +1152,6 @@
     "include_sub_studios": "Kaasa tütarstuudioid",
     "include_sub_tags": "Kaasa alamsilte",
     "instagram": "Instagram",
-    "interactive": "Interaktiivne",
-    "interactive_speed": "Interaktiivne kiirus",
     "isMissing": "On Kadunud",
     "last_played_at": "Viimati Esitatud",
     "library": "Kogu",
@@ -1204,7 +1165,6 @@
     "media_info": {
         "audio_codec": "Heli Koodek",
         "downloaded_from": "Allalaetud Asukohast",
-        "interactive_speed": "Interaktiivne kiirus",
         "performer_card": {
             "age": "{age} {years_old}",
             "age_context": "{age} {years_old} filmimisel"

@@ -38,7 +38,6 @@
         "delete": "Изтрий",
         "delete_entity": "Изтрий {entityType}",
         "delete_file": "Изтрий файла",
-        "delete_file_and_funscript": "Изтрий файл (и funscript)",
         "delete_generated_supporting_files": "Изтрий генерирани поддържащи файлове",
         "disable": "Изключи",
         "disallow": "Забрани",
@@ -373,23 +372,6 @@
                         }
                     }
                 }
-            },
-            "funscript_offset": {
-                "description": "Време за разминаване в милисекунди за пускане на интерактивни скриптове.",
-                "heading": "Funscript разминаване (ms)"
-            },
-            "handy_connection": {
-                "connect": "Свързване",
-                "server_offset": {
-                    "heading": "Сървърно разминаване"
-                },
-                "status": {
-                    "heading": "Статус на връзка с Handy"
-                },
-                "sync": "Синхронизиране"
-            },
-            "handy_connection_key": {
-                "description": "Handy connection key за ползване със интерактивни сцени. Слагането на този ключ ще позволи на Stash да сподели иформация за текущата сцена със handyfeeling.com"
             }
         }
     }

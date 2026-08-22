@@ -29,7 +29,6 @@
         "delete": "Löschen",
         "delete_entity": "Lösche {entityType}",
         "delete_file": "Lösche Datei",
-        "delete_file_and_funscript": "Datei löschen (inkl. funscript)",
         "delete_generated_supporting_files": "Lösche generierte Hilfsdaten",
         "disallow": "Nicht erlauben",
         "download": "Herunterladen",
@@ -385,8 +384,6 @@
                     "heading": "FFprobe.exe Pfad"
                 }
             },
-            "funscript_heatmap_draw_range": "Reichweite in generierte Heatmaps einbeziehen",
-            "funscript_heatmap_draw_range_desc": "Zeichnet den Bewegungsbereich auf der y-Achse der erzeugten Heatmap. Vorhandene Heatmaps müssen nach der Änderung neu generiert werden.",
             "gallery_cover_regex_desc": "Regulärer Ausdruck, der verwendet wird um ein Bild als Galerietitelbild zu identifizieren.",
             "gallery_cover_regex_label": "Schema für Galerietitelbilder",
             "gallery_ext_desc": "Durch Kommas getrennte Liste von Dateiformaten, welche als Galeriecontainer gelesen werden sollen.",
@@ -396,7 +393,6 @@
             "generated_files_location": "Verzeichnisspeicherort für die generierten Dateien (Markierungen, Vorschauen, Sprites usw.)",
             "generated_path_head": "Pfad für generierte Dateien",
             "hashing": "Hashwertberechnung",
-            "heatmap_generation": "Funscript Heatmap Erzeugung",
             "image_ext_desc": "Durch Kommas getrennte Liste von Dateierweiterungen, die als Bilder identifiziert werden.",
             "image_ext_head": "Bilderweiterungen",
             "include_audio_desc": "Binde Audiostream bei der Erstellung der Videovorschau ein.",
@@ -667,24 +663,6 @@
                     }
                 }
             },
-            "funscript_offset": {
-                "description": "Zeitversatz in Millisekunden für interaktive Skriptwiedergabe.",
-                "heading": "Funscript Zeitversatz (ms)"
-            },
-            "handy_connection": {
-                "connect": "Verbinden",
-                "server_offset": {
-                    "heading": "Server Kompensation"
-                },
-                "status": {
-                    "heading": "Handy Verbindungsstatus"
-                },
-                "sync": "Synchronisieren"
-            },
-            "handy_connection_key": {
-                "description": "Handy Verbindungsschlüssel für interaktive Szenen. Wenn dieser Schlüssel gesetzt wird, kann Stash aktuellen Szeneinformationen mit handyfeeling.com teilen",
-                "heading": "Handy Verbindungsschlüssel"
-            },
             "image_lightbox": {
                 "heading": "Bild-Lightbox"
             },
@@ -706,7 +684,6 @@
                     }
                 }
             },
-            "interactive_options": "Interaktive Optionen",
             "language": {
                 "heading": "Sprache"
             },
@@ -822,10 +799,6 @@
                     "description": "Wenn aktiviert, werden alle Inhaltsdetails standardmäßig angezeigt, und jedes Detail passt in eine einzelne Spalte",
                     "heading": "Alle Details anzeigen"
                 }
-            },
-            "use_stash_hosted_funscript": {
-                "description": "Wenn aktiviert, werden Funscripts direkt von Stash an dein Handy-Gerät gesendet, ohne Handy-Server von Drittanbietern zu verwenden. Erfordert, dass Stash von deinem Handy-Gerät aus zugänglich ist und ein API-Schlüssel generiert wurde, falls Stash mit Zugangsdaten konfiguriert ist.",
-                "heading": "Funscripts direkt bereitstellen"
             },
             "performer_list": {
                 "options": {
@@ -965,7 +938,6 @@
             "force_transcodes_tooltip": "Standardmäßig werden Transkodierungen nur erzeugt, wenn die Videodatei im Browser nicht unterstützt wird. Wenn diese Option aktiviert ist, werden Transkodierungen auch dann erstellt, wenn die Videodatei vom Browser unterstützt zu werden scheint.",
             "image_previews": "Animierte Bildvorschauen",
             "image_previews_tooltip": "Animierte WebP-Vorschaubilder, nur erforderlich, wenn der Vorschautyp auf Animiertes Bild eingestellt ist.",
-            "interactive_heatmap_speed": "Erzeugen von Heatmaps und Geschwindigkeiten für interaktive Szenen",
             "marker_image_previews": "Animierte Vorschau für Markierungen",
             "marker_image_previews_tooltip": "Animierte WebP-Vorschau für Markierungen, nur erforderlich, wenn der Vorschautyp auf Animiertes Bild eingestellt ist.",
             "marker_screenshots": "Screenshots für Markierungen",
@@ -1129,15 +1101,6 @@
         "TRANSGENDER_MALE": "Trans* männlich"
     },
     "hair_color": "Haarfarbe",
-    "handy_connection_status": {
-        "connecting": "Verbindet",
-        "disconnected": "Getrennt",
-        "error": "Fehler bei der Verbindung zu Handy",
-        "missing": "Fehlt",
-        "ready": "Bereit",
-        "syncing": "Synchronisiert mit Server",
-        "uploading": "Skript wird hochgeladen"
-    },
     "hasChapters": "Kapitel",
     "hasMarkers": "Markierungen",
     "height": "Größe",
@@ -1152,8 +1115,6 @@
     "include_sub_studios": "Untergeordnete Studios einbeziehen",
     "include_sub_tags": "Untergeordnete Tags einbeziehen",
     "instagram": "Instagram",
-    "interactive": "Interaktiv",
-    "interactive_speed": "Interaktive Geschwindigkeit",
     "isMissing": "Fehlt",
     "last_played_at": "Zuletzt Abgespielt Am",
     "library": "Bibliothek",
@@ -1167,7 +1128,6 @@
     "media_info": {
         "audio_codec": "Audio-Codec",
         "downloaded_from": "Heruntergeladen von",
-        "interactive_speed": "Interaktive Geschwindigkeit",
         "performer_card": {
             "age": "{age} {years_old}",
             "age_context": "{age} {years_old} bei der Produktion"

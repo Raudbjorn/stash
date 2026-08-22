@@ -111,7 +111,7 @@ func TestMarkerSyncSubmitIntegration(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		sub, err = buildSceneSubmission(ctx, r, sc, false)
+		sub, err = buildSceneSubmission(ctx, r, sc)
 		return err
 	}); err != nil {
 		t.Fatalf("buildSceneSubmission: %v", err)

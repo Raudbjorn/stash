@@ -11,8 +11,8 @@ import (
 func TestPlaceSidecar(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	src := filepath.Join(dir, "a.funscript")
-	dst := filepath.Join(dir, "b.funscript")
+	src := filepath.Join(dir, "a.srt")
+	dst := filepath.Join(dir, "b.srt")
 	if err := os.WriteFile(src, []byte("script"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -45,36 +45,6 @@ func TestPlaceSidecar(t *testing.T) {
 	res, err = PlaceSidecar(filepath.Join(dir, "missing"), dst)
 	if err != nil || res != PlaceSkipped {
 		t.Fatalf("missing src should skip, res=%v err=%v", res, err)
-	}
-}
-
-func TestRelocateFunscript(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	srcVideo := filepath.Join(dir, "clip.mp4")
-	dstVideo := filepath.Join(dir, "clip_480p.mp4")
-	if err := os.WriteFile(filepath.Join(dir, "clip.funscript"), []byte("{}"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	dest, err := RelocateFunscript(srcVideo, dstVideo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := filepath.Join(dir, "clip_480p.funscript")
-	if dest != want {
-		t.Fatalf("dest = %q, want %q", dest, want)
-	}
-	if _, err := os.Stat(want); err != nil {
-		t.Fatal(err)
-	}
-
-	dest, err = RelocateFunscript(srcVideo, dstVideo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if dest != "" {
-		t.Fatalf("reuse must not report created path, got %q", dest)
 	}
 }
 

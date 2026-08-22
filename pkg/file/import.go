@@ -65,17 +65,15 @@ func (i *Importer) fileJSONToFile(ctx context.Context, fileJSON jsonschema.DirEn
 			return nil, err
 		}
 		return &models.VideoFile{
-			BaseFile:         baseFile,
-			Format:           ff.Format,
-			Width:            ff.Width,
-			Height:           ff.Height,
-			Duration:         ff.Duration,
-			VideoCodec:       ff.VideoCodec,
-			AudioCodec:       ff.AudioCodec,
-			FrameRate:        ff.FrameRate,
-			BitRate:          ff.BitRate,
-			Interactive:      ff.Interactive,
-			InteractiveSpeed: ff.InteractiveSpeed,
+			BaseFile:   baseFile,
+			Format:     ff.Format,
+			Width:      ff.Width,
+			Height:     ff.Height,
+			Duration:   ff.Duration,
+			VideoCodec: ff.VideoCodec,
+			AudioCodec: ff.AudioCodec,
+			FrameRate:  ff.FrameRate,
+			BitRate:    ff.BitRate,
 		}, nil
 	case *jsonschema.ImageFile:
 		baseFile, err := i.baseFileJSONToBaseFile(ctx, ff.BaseFile)

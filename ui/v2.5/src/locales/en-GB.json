@@ -52,7 +52,6 @@
     "delete": "Delete",
     "delete_entity": "Delete {entityType}",
     "delete_file": "Delete file",
-    "delete_file_and_funscript": "Delete file (and funscript)",
     "delete_generated_supporting_files": "Delete generated supporting files",
     "delete_playlist": "Delete playlist",
     "detect_scene_cuts": "Detect scene cuts",
@@ -84,7 +83,6 @@
     "hide_configuration": "Hide Configuration",
     "identify": "Identify",
     "library_transcode": "Library transcode",
-
     "ignore": "Ignore",
     "import": "Import…",
     "import_from_file": "Import from file",
@@ -104,7 +102,6 @@
     "overwrite": "Overwrite",
     "play": "Play",
     "score_transcode_benefit": "Score transcode benefit",
-
     "play_queue": "Play queue",
     "play_random": "Play Random",
     "play_selected": "Play selected",
@@ -528,8 +525,6 @@
       },
       "default_marker_preview_duration_desc": "Duration (seconds) for marker previews without an end time. Must be greater than 0.",
       "default_marker_preview_duration_head": "Default marker preview duration",
-      "funscript_heatmap_draw_range": "Include range in generated heatmaps",
-      "funscript_heatmap_draw_range_desc": "Draw range of motion on the y-axis of the generated heatmap. Existing heatmaps will need to be regenerated after changing.",
       "gallery_cover_regex_desc": "Regexps used to identify an image as gallery cover.",
       "gallery_cover_regex_label": "Gallery cover pattern",
       "gallery_ext_desc": "Comma-delimited list of file extensions that will be identified as gallery ZIP files.",
@@ -539,7 +534,6 @@
       "generated_files_location": "Directory location for the generated files (scene markers, scene previews, sprites, etc).",
       "generated_path_head": "Generated path",
       "hashing": "Hashing",
-      "heatmap_generation": "Funscript Heatmap Generation",
       "image_ext_desc": "Comma-delimited list of file extensions that will be identified as images.",
       "image_ext_head": "Image extensions",
       "include_audio_desc": "Includes audio stream when generating previews.",
@@ -1049,24 +1043,6 @@
           }
         }
       },
-      "funscript_offset": {
-        "description": "Time offset in milliseconds for interactive scripts playback.",
-        "heading": "Funscript offset (ms)"
-      },
-      "handy_connection": {
-        "connect": "Connect",
-        "server_offset": {
-          "heading": "Server Offset"
-        },
-        "status": {
-          "heading": "Handy Connection Status"
-        },
-        "sync": "Sync"
-      },
-      "handy_connection_key": {
-        "description": "Handy connection key to use for interactive scenes. Setting this key will allow Stash to share your current scene information with handyfeeling.com.",
-        "heading": "Handy connection key"
-      },
       "image_lightbox": {
         "heading": "Image Lightbox"
       },
@@ -1088,7 +1064,6 @@
           }
         }
       },
-      "interactive_options": "Interactive Options",
       "language": {
         "heading": "Language"
       },
@@ -1215,11 +1190,7 @@
           }
         }
       },
-      "title": "User Interface",
-      "use_stash_hosted_funscript": {
-        "description": "When enabled, funscripts will be served directly from Stash to your Handy device without using the third party Handy server. Requires that Stash be accessible from your Handy device, and that an API key is generated if Stash has credentials configured.",
-        "heading": "Serve funscripts directly"
-      }
+      "title": "User Interface"
     }
   },
   "configuration": "Configuration",
@@ -1359,7 +1330,7 @@
     "library_transcode": {
       "title": "Library transcode",
       "confirm": "Rewrite and delete originals",
-      "desc": "{count, plural, one {Rewrite this scene's primary file at the selected profile, then delete the original. Funscripts and captions are copied onto the new file. This cannot be undone.} other {Rewrite # selected scenes' primary files at the selected profile, then delete the originals. Funscripts and captions are copied onto the new files. This cannot be undone.}}",
+      "desc": "{count, plural, one {Rewrite this scene's primary file at the selected profile, then delete the original. Captions are copied onto the new file. This cannot be undone.} other {Rewrite # selected scenes' primary files at the selected profile, then delete the originals. Captions are copied onto the new files. This cannot be undone.}}",
       "profile": "Profile",
       "profiles": {
         "HQ_480": "HQ 480p (NVENC cq 24, AAC 96k)",
@@ -1386,7 +1357,6 @@
       "image_previews": "Animated image previews",
       "image_previews_tooltip": "Also generate animated (webp) previews, only required when Scene/Marker Wall Preview type is set to Animated image. When browsing they use less CPU than the video previews, but are generated in addition to them and are larger files.",
       "image_thumbnails": "Image thumbnails",
-      "interactive_heatmap_speed": "Generate heatmaps and speeds for interactive scenes",
       "marker_image_previews": "Marker animated image previews",
       "marker_image_previews_tooltip": "Also generate animated (webp) previews, only required when Scene/Marker Wall Preview type is set to Animated image. When browsing they use less CPU than the video previews, but are generated in addition to them and are larger files.",
       "marker_screenshots": "Marker screenshots",
@@ -1429,7 +1399,7 @@
     "scrape_results_scraped": "Scraped",
     "set_default_filter_confirm": "Are you sure you want to set this filter as the default?",
     "set_image_url_title": "Image URL",
-    "library_transcode_confirm": "This replaces each scene's primary file with a downscaled transcode and deletes the original. Funscripts and captions are copied onto the new file.",
+    "library_transcode_confirm": "This replaces each scene's primary file with a downscaled transcode and deletes the original. Captions are copied onto the new file.",
     "library_transcode_profile": "Transcode profile",
     "score_transcode_benefit_all": "Score transcode benefit for every scene in the library? This does not delete files.",
     "unsaved_changes": "Unsaved changes. Are you sure you want to leave?"
@@ -1560,15 +1530,6 @@
   "group_scene_number": "Scene Number",
   "groups": "Groups",
   "hair_color": "Hair Colour",
-  "handy_connection_status": {
-    "connecting": "Connecting",
-    "disconnected": "Disconnected",
-    "error": "Error connecting to Handy",
-    "missing": "Missing",
-    "ready": "Ready",
-    "syncing": "Syncing with server",
-    "uploading": "Uploading script"
-  },
   "hasChapters": "Chapters",
   "hasMarkers": "Markers",
   "height": "Height",
@@ -1590,8 +1551,6 @@
   "include_sub_tags": "Include sub-tags",
   "index_of_total": "{index} of {total}",
   "instagram": "Instagram",
-  "interactive": "Interactive",
-  "interactive_speed": "Interactive Speed",
   "isMissing": "Is Missing",
   "last_o_at": "Last O At",
   "last_o_at_sfw": "Last Like At",
@@ -1615,7 +1574,6 @@
   "media_info": {
     "audio_codec": "Audio Codec",
     "downloaded_from": "Downloaded From",
-    "interactive_speed": "Interactive Speed",
     "md5": "MD5 Checksum",
     "o_count": "O Count",
     "oshash": "OSHash",
@@ -2078,7 +2036,6 @@
     "LQ_480": "LQ 480 (NVENC)",
     "MAX_360": "MAX 360 (NVENC, then x265/x264)"
   },
-
   "total": "Total",
   "true": "True",
   "twitter": "Twitter",

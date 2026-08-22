@@ -29,7 +29,6 @@
         "delete": "Slet",
         "delete_entity": "Slet {entityType}",
         "delete_file": "Slet fil",
-        "delete_file_and_funscript": "Slet fil (og funscript)",
         "delete_generated_supporting_files": "Slet genereret filer",
         "disallow": "Tillad ikke",
         "download": "Download",
@@ -420,11 +419,8 @@
                 "description": "Stien slettede filer flyttes til, i stedet for at blive slettet permanent. Efterlad tom hvis filer skal slettes permanent.",
                 "heading": "Sti til Papirkurv"
             },
-            "funscript_heatmap_draw_range": "Inkludér interval i genererede heatmaps",
-            "funscript_heatmap_draw_range_desc": "Tegn bevægelsesomfang på y-aksen af det genererede heatmap. Eksisterende heatmaps vil blive regenereret efter ændringen.",
             "gallery_cover_regex_label": "Galleri cover mønster",
-            "hashing": "Hashing",
-            "heatmap_generation": "Funscript Heatmap Generering"
+            "hashing": "Hashing"
         },
         "library": {
             "exclusions": "Udelukkelser",
@@ -644,24 +640,6 @@
                     "label": "Maksimalt antal elementer, der skal vises i udvalgte rullemenuer"
                 }
             },
-            "funscript_offset": {
-                "description": "Tidsforskydning i millisekunder for interaktiv afspilning af scripts.",
-                "heading": "Funscript-forskydning (ms)"
-            },
-            "handy_connection": {
-                "connect": "Forbinde",
-                "server_offset": {
-                    "heading": "Server offset"
-                },
-                "status": {
-                    "heading": "Handy forbindelsesstatus"
-                },
-                "sync": "Synkronisere"
-            },
-            "handy_connection_key": {
-                "description": "Praktisk forbindelsesnøgle til at bruge til interaktive scener. Indstilling af denne tast giver Stash mulighed for at dele dine aktuelle sceneoplysninger med handyfeeling.com",
-                "heading": "Handy forbindelsesnøgle"
-            },
             "image_lightbox": {
                 "heading": "Billed lysboks"
             },
@@ -678,7 +656,6 @@
                     }
                 }
             },
-            "interactive_options": "Interaktive muligheder",
             "language": {
                 "heading": "Sprog"
             },
@@ -788,10 +765,6 @@
                 },
                 "heading": "Mærke-visning"
             },
-            "use_stash_hosted_funscript": {
-                "heading": "Send funscripts direkte",
-                "description": "Når aktiveret, vil funscripts blive sendt direkte fra Stash til din Handy-enhed uden brug af tredjeparts Handy-serveren. Kræver, at Stash er tilgængelig fra din Handy-enhed."
-            },
             "studio_panel": {
                 "heading": "Studie visning",
                 "options": {
@@ -887,7 +860,6 @@
             "force_transcodes_tooltip": "Som standard genereres omkoder kun, når videofilen ikke understøttes i browseren. Når det er aktiveret, genereres omkoder, selv når videofilen ser ud til at være understøttet i browseren.",
             "image_previews": "Animerede billedforhåndsvisninger",
             "image_previews_tooltip": "Animerede WebP-forhåndsvisninger, kun påkrævet, hvis Eksempeltype er indstillet til Animeret billede.",
-            "interactive_heatmap_speed": "Generer heatmaps og hastigheder til interaktive scener",
             "marker_image_previews": "Markør Animerede billedforhåndsvisninger",
             "marker_image_previews_tooltip": "Generer også animerede (webp) forhåndsvisninger, kun påkrævet, når Scene/Mærkevæg Forhåndsvisnings Type er indstillet til Animerede Billeder. Når der kigges, bruger de mindre CPU end videoeksemplerne, men genereres ud over dem og er større filer.",
             "marker_screenshots": "Skærmbilleder af markør",
@@ -1042,15 +1014,6 @@
         "TRANSGENDER_MALE": "Transkønnet mand"
     },
     "hair_color": "Hårfarve",
-    "handy_connection_status": {
-        "connecting": "Opretter forbindelse",
-        "disconnected": "Afbrudt",
-        "error": "Fejl ved forbindelse til Handy",
-        "missing": "Mangler",
-        "ready": "Klar",
-        "syncing": "Synkroniser med server",
-        "uploading": "Uploader script"
-    },
     "hasMarkers": "Har Markører",
     "height": "Højde",
     "help": "Hjælp",
@@ -1062,8 +1025,6 @@
     "include_sub_studios": "Inkluder underliggende studier",
     "include_sub_tags": "Inkluder undertags",
     "instagram": "Instagram",
-    "interactive": "Interaktiv",
-    "interactive_speed": "Interaktiv hastighed",
     "isMissing": "Mangler",
     "library": "Bibliotek",
     "loading": {
@@ -1075,7 +1036,6 @@
     "media_info": {
         "audio_codec": "Audio Codec",
         "downloaded_from": "Downloadet fra",
-        "interactive_speed": "Interaktiv hastighed",
         "performer_card": {
             "age": "{age} {years_old}",
             "age_context": "{age} {years_old} i denne scene"

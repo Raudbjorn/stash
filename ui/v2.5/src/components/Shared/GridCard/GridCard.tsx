@@ -28,7 +28,6 @@ interface ICardProps {
   onSelectedChanged?: (selected: boolean, shiftKey: boolean) => void;
   resumeTime?: number;
   duration?: number;
-  interactiveHeatmap?: string;
 
   // move logic - both of the following are required to enable move dragging
   objectId?: string; // required for move dragging
@@ -193,18 +192,6 @@ export const GridCard: React.FC<ICardProps> = PatchComponent(
       }
     }
 
-    function maybeRenderInteractiveHeatmap() {
-      if (props.interactiveHeatmap) {
-        return (
-          <img
-            loading="lazy"
-            src={props.interactiveHeatmap}
-            alt="interactive heatmap"
-            className="interactive-heatmap"
-          />
-        );
-      }
-    }
 
     function maybeRenderProgressBar() {
       if (
@@ -260,7 +247,6 @@ export const GridCard: React.FC<ICardProps> = PatchComponent(
           {props.overlays}
           {maybeRenderProgressBar()}
         </div>
-        {maybeRenderInteractiveHeatmap()}
         <div className="card-section">
           <Link to={props.url} onClick={handleImageClick}>
             <h5 className="card-section-title flex-aligned">

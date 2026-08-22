@@ -27,7 +27,6 @@
         "delete": "মুছুন",
         "delete_entity": "{entityType} মুছুন",
         "delete_file": "ফাইল মুছুন",
-        "delete_file_and_funscript": "ফাইল মুছুন (সাথে funscript ও)",
         "delete_generated_supporting_files": "জেনারেট হওয়া সমর্থিত ফাইলসমূহ মুছুন",
         "disallow": "অনুমতি নাকচ করুন",
         "download": "ডাউনলোড",

@@ -263,14 +263,12 @@ type markerSyncTask struct {
 	opts      markersync.ApplyOptions
 	fireHooks bool
 
-	// extras toggles (Stage 5): merge extra scene URLs, link galleries,
-	// create/link groups, copy matched funscripts. Each is gated independently and
-	// only acts on sources that implement the matching capability-provider
-	// interface.
-	syncURLs        bool
-	syncGalleries   bool
-	syncGroups      bool
-	matchFunscripts bool
+	// Extras toggles merge extra scene URLs, link galleries, and create/link
+	// groups. Each is gated independently and only acts on sources that implement
+	// the matching capability-provider interface.
+	syncURLs      bool
+	syncGalleries bool
+	syncGroups    bool
 }
 
 // ttSkipSyncTagName is the tag whose presence on a gallery excludes it from
@@ -343,7 +341,7 @@ func (t *markerSyncTask) Start(ctx context.Context) {
 // any transaction and writes INSIDE its own transaction, mirroring the marker
 // path's discipline.
 func (t *markerSyncTask) applyExtras(ctx context.Context, id markersync.SceneIdentity) {
-	if !t.syncURLs && !t.syncGalleries && !t.syncGroups && !t.matchFunscripts {
+	if !t.syncURLs && !t.syncGalleries && !t.syncGroups {
 		return
 	}
 
@@ -368,104 +366,7 @@ func (t *markerSyncTask) applyExtras(ctx context.Context, id markersync.SceneIde
 				t.applyGroups(ctx, r, src.Name(), p, id)
 			}
 		}
-		if t.matchFunscripts {
-			if p, ok := src.(markersync.FunscriptProvider); ok {
-				t.applyFunscripts(ctx, r, src.Name(), p, id)
-			}
-		}
 	}
-}
-
-// applyFunscripts copies indexed funscripts whose md5 matches a source-provided
-// funscript hash next to the scene's primary video file. The md5 lookups run in
-// a read transaction; the file copy is a filesystem op performed OUTSIDE any
-// transaction. An existing destination is never overwritten (protects
-// user-authored scripts) - see copyFirstFunscript's dest-exists guard.
-func (t *markerSyncTask) applyFunscripts(ctx context.Context, r models.Repository, srcName string, p markersync.FunscriptProvider, id markersync.SceneIdentity) {
-	refs, err := p.FetchFunscripts(ctx, id)
-	if err != nil {
-		logger.Warnf("Marker Sync: scene %d: source %s: fetching funscripts: %v", t.scene.ID, srcName, err)
-		return
-	}
-	if len(refs) == 0 {
-		return
-	}
-
-	// Resolve the scene's primary video path (copy destination directory + stem).
-	videoPath, err := t.funscriptVideoPath(ctx, r)
-	if err != nil {
-		logger.Warnf("Marker Sync: scene %d: source %s: resolving video path: %v", t.scene.ID, srcName, err)
-		return
-	}
-	if videoPath == "" {
-		return
-	}
-
-	// Gather candidate source funscript files (DB reads) INSIDE a read txn.
-	var sources []string
-	if err := r.WithReadTxn(ctx, func(ctx context.Context) error {
-		for _, ref := range refs {
-			if ref.MD5 == "" {
-				continue
-			}
-			rows, err := r.FunscriptIndex.FindByMD5(ctx, ref.MD5)
-			if err != nil {
-				return fmt.Errorf("finding funscript by md5 %s: %w", ref.MD5, err)
-			}
-			for _, row := range rows {
-				sources = append(sources, row.Filename)
-			}
-		}
-		return nil
-	}); err != nil {
-		logger.Warnf("Marker Sync: scene %d: source %s: looking up funscripts: %v", t.scene.ID, srcName, err)
-		return
-	}
-	if len(sources) == 0 {
-		return
-	}
-
-	// Copy the first matching funscript OUTSIDE any transaction.
-	dest, err := copyFirstFunscript(sources, videoPath)
-	if err != nil {
-		logger.Warnf("Marker Sync: scene %d: source %s: copying funscript: %v", t.scene.ID, srcName, err)
-		return
-	}
-	if dest != "" {
-		logger.Infof("Marker Sync: scene %d: source %s: copied funscript to %s", t.scene.ID, srcName, dest)
-	}
-}
-
-// funscriptVideoPath resolves the scene's primary video file path, used as the
-// funscript copy destination directory + stem. It uses the already-loaded
-// transient Path when present, otherwise loads the primary file in a read txn.
-func (t *markerSyncTask) funscriptVideoPath(ctx context.Context, r models.Repository) (string, error) {
-	if t.scene.Path != "" {
-		return t.scene.Path, nil
-	}
-
-	var path string
-	err := r.WithReadTxn(ctx, func(ctx context.Context) error {
-		sc, err := r.Scene.Find(ctx, t.scene.ID)
-		if err != nil {
-			return err
-		}
-		if sc == nil {
-			return nil
-		}
-		if sc.Path != "" {
-			path = sc.Path
-			return nil
-		}
-		if err := sc.LoadPrimaryFile(ctx, r.File); err != nil {
-			return err
-		}
-		if pf := sc.Files.Primary(); pf != nil {
-			path = pf.Base().Path
-		}
-		return nil
-	})
-	return path, err
 }
 
 // applyExtraURLs merges source-provided extra URLs into the scene's URLs,
@@ -777,14 +678,13 @@ func (s *Manager) MarkerSync(ctx context.Context, input MarkerSyncInput) int {
 			}
 
 			task := &markerSyncTask{
-				scene:           sc,
-				sources:         sources,
-				opts:            opts,
-				fireHooks:       fireHooks,
-				syncURLs:        cfg.SyncURLs,
-				syncGalleries:   cfg.SyncGalleries,
-				syncGroups:      cfg.SyncGroups,
-				matchFunscripts: cfg.MatchFunscripts,
+				scene:         sc,
+				sources:       sources,
+				opts:          opts,
+				fireHooks:     fireHooks,
+				syncURLs:      cfg.SyncURLs,
+				syncGalleries: cfg.SyncGalleries,
+				syncGroups:    cfg.SyncGroups,
 			}
 			progress.ExecuteTask(task.GetDescription(), func() {
 				task.Start(ctx)

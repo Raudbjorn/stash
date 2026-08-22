@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -18,23 +17,11 @@ import (
 // avoid scanning a file that is still being copied in.
 const defaultWriteDebounce = 30 * time.Second
 
-// findAssociatedVideo maps a sidecar file event (funscript/caption) to the
-// sibling video it belongs to, so the video is (re)scanned and the association
-// is picked up. Returns "" if no associated video is found.
+// findAssociatedVideo maps a caption sidecar event to the sibling video it
+// belongs to, so the video is (re)scanned and the association is picked up.
+// Returns "" if no associated video is found.
 func (s *Manager) findAssociatedVideo(eventPath string) string {
 	dir := filepath.Dir(eventPath)
-
-	// funscript: same basename as the video, different extension.
-	if fsutil.MatchExtension(eventPath, []string{"funscript"}) {
-		stem := strings.TrimSuffix(filepath.Base(eventPath), filepath.Ext(eventPath))
-		for _, ve := range s.Config.GetVideoExtensions() {
-			cand := filepath.Join(dir, stem+"."+ve)
-			if _, err := os.Stat(cand); err == nil {
-				return cand
-			}
-		}
-		return ""
-	}
 
 	// caption (.srt/.vtt): find the sibling video it matches.
 	if fsutil.MatchExtension(eventPath, video.CaptionExts) {

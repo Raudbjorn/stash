@@ -146,12 +146,6 @@ export const GenerateOptions: React.FC<IGenerateOptions> = ({
             onChange={(v) => setOptions({ phashes: v })}
           />
 
-          <BooleanSetting
-            id="interactive-heatmap-speed-task"
-            checked={options.interactiveHeatmapsSpeeds ?? false}
-            headingID="dialogs.scene_gen.interactive_heatmap_speed"
-            onChange={(v) => setOptions({ interactiveHeatmapsSpeeds: v })}
-          />
         </>
       )}
       {showImageOptions && (

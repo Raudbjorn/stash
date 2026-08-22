@@ -29,7 +29,6 @@
         "delete": "Poista",
         "delete_entity": "Poista {entityType}",
         "delete_file": "Poista tiedosto",
-        "delete_file_and_funscript": "Poista tiedosto (ja funscript)",
         "delete_generated_supporting_files": "Poista generoidut lisätiedostot",
         "disallow": "Kiellä",
         "download": "Lataa",
@@ -420,11 +419,8 @@
                 "description": "Mihin tallentaa binaaridataa, kuten kohtauksen kansia, esiintyjä-, studio- ja tagikuvia. Tämän arvon muuttamisen jälkeen olemassa olevat tiedot on siirrettävä käyttämällä Migrate Blobs -tehtäviä. Katso Tehtävät-sivulta siirtyminen.",
                 "heading": "Binääritietojen tallennustyyppi"
             },
-            "funscript_heatmap_draw_range_desc": "Piirrä liikealue generoidun lämpökartan y-akselille. Olemassa olevat lämpökartat on luotava uudelleen vaihtamisen jälkeen.",
-            "funscript_heatmap_draw_range": "Sisällytä alue luotuihin lämpökarttoihin",
             "gallery_cover_regex_desc": "Regexp käytetään kuvaamaan gallerian kansikuvaa",
             "gallery_cover_regex_label": "Gallerian kansikuvio",
-            "heatmap_generation": "Funscript-lämpökarttageneraattori﻿",
             "delete_trash_path": {
                 "description": "Polku johon poistetut tiedostot siirretään sen sijaan, että ne poistettaisiin lopullisesti. Jätä tyhjäksi poistaaksesi tiedostot lopullisesti.",
                 "heading": "Roskakorin polku"
@@ -649,13 +645,6 @@
                     "label": "Valintavalikoissa näytettävien kohteiden enimmäismäärä"
                 }
             },
-            "funscript_offset": {
-                "description": "Viive millisekunneissa interaktiivisille skripteille kun toistetaan."
-            },
-            "handy_connection": {
-                "connect": "Yhdistä",
-                "sync": "Synkronoi"
-            },
             "image_wall": {
                 "direction": "Suunta",
                 "heading": "Kuvaseinä"
@@ -669,7 +658,6 @@
                     }
                 }
             },
-            "interactive_options": "Interaktiivisuuden asetukset",
             "language": {
                 "heading": "Kieli"
             },
@@ -983,15 +971,6 @@
         "TRANSGENDER_MALE": "Transmies"
     },
     "hair_color": "Hiusten väri",
-    "handy_connection_status": {
-        "connecting": "Yhdistetään",
-        "disconnected": "Ei yhdistetty",
-        "error": "Virhe yhdistettäessä Handyyn",
-        "missing": "Puuttuu",
-        "ready": "Valmis",
-        "syncing": "Synkronoidaan palvelimelle",
-        "uploading": "Ladataan skriptiä"
-    },
     "hasMarkers": "Merkit",
     "height": "Pituus",
     "height_cm": "Pituus (cm)",
@@ -1003,8 +982,6 @@
     "include_sub_studios": "Sisällytä alistudiot",
     "include_sub_tags": "Sisällytä alitunnisteet",
     "instagram": "Instagram",
-    "interactive": "Interaktiivinen",
-    "interactive_speed": "Interaktiivinen nopeus",
     "isMissing": "Puuttuu",
     "last_played_at": "Viimeksi toistettu",
     "library": "Kirjasto",
@@ -1017,7 +994,6 @@
     "media_info": {
         "audio_codec": "Audiokodekki",
         "downloaded_from": "Ladattu kohteesta",
-        "interactive_speed": "Interaktiivinen nopeus",
         "performer_card": {
             "age": "{age} {years_old}",
             "age_context": "{age} {years_old} tuotantovaiheessa"

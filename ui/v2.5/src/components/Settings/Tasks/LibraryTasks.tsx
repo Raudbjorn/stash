@@ -1012,7 +1012,6 @@ export const LibraryTasks: React.FC = () => {
         transcodes: generateOptions.transcodes,
         forceTranscodes: generateOptions.forceTranscodes,
         phashes: generateOptions.phashes,
-        interactiveHeatmapsSpeeds: generateOptions.interactiveHeatmapsSpeeds,
         imagePhashes: generateOptions.imagePhashes,
         imageThumbnails: generateOptions.imageThumbnails,
         clipPreviews: generateOptions.clipPreviews,

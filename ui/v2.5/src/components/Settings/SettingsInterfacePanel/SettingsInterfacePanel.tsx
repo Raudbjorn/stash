@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo } from "react";
-import { Button, Form } from "react-bootstrap";
-import { FormattedMessage, useIntl } from "react-intl";
+import { Form } from "react-bootstrap";
+import { useIntl } from "react-intl";
 import { DurationInput } from "src/components/Shared/DurationInput";
 import { PercentInput } from "src/components/Shared/PercentInput";
 import { LoadingIndicator } from "src/components/Shared/LoadingIndicator";
@@ -25,11 +25,6 @@ import {
   useInterfaceLocalForage,
   ILightboxConfig,
 } from "src/hooks/LocalForage";
-import {
-  ConnectionState,
-  connectionStateLabel,
-  InteractiveContext,
-} from "src/hooks/Interactive/context";
 import {
   defaultRatingStarPrecision,
   defaultRatingSystemOptions,
@@ -89,15 +84,6 @@ export const SettingsInterfacePanel: React.FC = PatchComponent(
       return massageMenuItems(iface.menuItems);
     }, [iface.menuItems, massageMenuItems]);
 
-    const {
-      interactive,
-      state: interactiveState,
-      error: interactiveError,
-      serverOffset: interactiveServerOffset,
-      initialised: interactiveInitialised,
-      initialise: initialiseInteractive,
-      sync: interactiveSync,
-    } = React.useContext(InteractiveContext);
 
     const [, setInterfaceLocalForage] = useInterfaceLocalForage();
 
@@ -949,92 +935,6 @@ export const SettingsInterfacePanel: React.FC = PatchComponent(
           />
         </SettingSection>
 
-        <SettingSection headingID="config.ui.interactive_options">
-          <StringSetting
-            headingID="config.ui.handy_connection_key.heading"
-            subHeadingID="config.ui.handy_connection_key.description"
-            value={iface.handyKey ?? undefined}
-            onChange={(v) => saveInterface({ handyKey: v })}
-          />
-          {interactive.handyKey && (
-            <>
-              <div className="setting" id="handy-status">
-                <div>
-                  <h3>
-                    {intl.formatMessage({
-                      id: "config.ui.handy_connection.status.heading",
-                    })}
-                  </h3>
-
-                  <div className="value">
-                    <FormattedMessage
-                      id={connectionStateLabel(interactiveState)}
-                    />
-                    {interactiveError && <span>: {interactiveError}</span>}
-                  </div>
-                </div>
-                <div>
-                  {!interactiveInitialised && (
-                    <Button
-                      disabled={
-                        interactiveState === ConnectionState.Connecting ||
-                        interactiveState === ConnectionState.Syncing
-                      }
-                      onClick={() => initialiseInteractive()}
-                    >
-                      {intl.formatMessage({
-                        id: "config.ui.handy_connection.connect",
-                      })}
-                    </Button>
-                  )}
-                </div>
-              </div>
-              <div className="setting" id="handy-server-offset">
-                <div>
-                  <h3>
-                    {intl.formatMessage({
-                      id: "config.ui.handy_connection.server_offset.heading",
-                    })}
-                  </h3>
-
-                  <div className="value">
-                    {interactiveServerOffset.toFixed()}ms
-                  </div>
-                </div>
-                <div>
-                  {interactiveInitialised && (
-                    <Button
-                      disabled={
-                        !interactiveInitialised ||
-                        interactiveState === ConnectionState.Syncing
-                      }
-                      onClick={() => interactiveSync()}
-                    >
-                      {intl.formatMessage({
-                        id: "config.ui.handy_connection.sync",
-                      })}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-
-          <NumberSetting
-            headingID="config.ui.funscript_offset.heading"
-            subHeadingID="config.ui.funscript_offset.description"
-            value={iface.funscriptOffset ?? undefined}
-            onChange={(v) => saveInterface({ funscriptOffset: v })}
-          />
-
-          <BooleanSetting
-            id="use-stash-hosted-funscript"
-            headingID="config.ui.use_stash_hosted_funscript.heading"
-            subHeadingID="config.ui.use_stash_hosted_funscript.description"
-            checked={iface.useStashHostedFunscript ?? false}
-            onChange={(v) => saveInterface({ useStashHostedFunscript: v })}
-          />
-        </SettingSection>
       </>
     );
   }

@@ -28,13 +28,12 @@ type GenerateMetadataInput struct {
 	MarkerScreenshots   bool                         `json:"markerScreenshots"`
 	Transcodes          bool                         `json:"transcodes"`
 	// Generate transcodes even if not required
-	ForceTranscodes           bool `json:"forceTranscodes"`
-	Phashes                   bool `json:"phashes"`
-	ImagePhashes              bool `json:"imagePhashes"`
-	InteractiveHeatmapsSpeeds bool `json:"interactiveHeatmapsSpeeds"`
-	ClipPreviews              bool `json:"clipPreviews"`
-	ImageThumbnails           bool `json:"imageThumbnails"`
-	ContactSheets             bool `json:"contactSheets"`
+	ForceTranscodes bool `json:"forceTranscodes"`
+	Phashes         bool `json:"phashes"`
+	ImagePhashes    bool `json:"imagePhashes"`
+	ClipPreviews    bool `json:"clipPreviews"`
+	ImageThumbnails bool `json:"imageThumbnails"`
+	ContactSheets   bool `json:"contactSheets"`
 	// scene ids to generate for
 	SceneIDs []string `json:"sceneIDs"`
 	// marker ids to generate for
@@ -86,20 +85,19 @@ type GenerateJob struct {
 }
 
 type totalsGenerate struct {
-	covers                   int64
-	sprites                  int64
-	previews                 int64
-	imagePreviews            int64
-	markers                  int64
-	transcodes               int64
-	phashes                  int64
-	imagePhashes             int64
-	interactiveHeatmapSpeeds int64
-	clipPreviews             int64
-	imageThumbnails          int64
-	contactSheets            int64
-	subtitles                int64
-	dubbing                  int64
+	covers          int64
+	sprites         int64
+	previews        int64
+	imagePreviews   int64
+	markers         int64
+	transcodes      int64
+	phashes         int64
+	imagePhashes    int64
+	clipPreviews    int64
+	imageThumbnails int64
+	contactSheets   int64
+	subtitles       int64
+	dubbing         int64
 
 	tasks int
 }
@@ -276,9 +274,6 @@ func (j *GenerateJob) Execute(ctx context.Context, progress *job.Progress) error
 		}
 		if j.input.ImagePhashes {
 			logMsg += fmt.Sprintf(" %d image phashes", totals.imagePhashes)
-		}
-		if j.input.InteractiveHeatmapsSpeeds {
-			logMsg += fmt.Sprintf(" %d heatmaps & speeds", totals.interactiveHeatmapSpeeds)
 		}
 		if j.input.ClipPreviews {
 			logMsg += fmt.Sprintf(" %d image clip previews", totals.clipPreviews)
@@ -582,21 +577,6 @@ func (j *GenerateJob) queueSceneJobs(ctx context.Context, g *generate.Generator,
 				j.totals.tasks++
 				queue <- task
 			}
-		}
-	}
-
-	if j.input.InteractiveHeatmapsSpeeds {
-		task := &GenerateInteractiveHeatmapSpeedTask{
-			repository:          r,
-			Scene:               *scene,
-			Overwrite:           j.overwrite,
-			fileNamingAlgorithm: j.fileNamingAlgo,
-		}
-
-		if task.required() {
-			j.totals.interactiveHeatmapSpeeds++
-			j.totals.tasks++
-			queue <- task
 		}
 	}
 

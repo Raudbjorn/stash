@@ -27,7 +27,6 @@
         "delete": "Odstranit",
         "delete_entity": "Odstranit {entityType}",
         "delete_file": "Odstranit soubor",
-        "delete_file_and_funscript": "Odstranit soubor (a funscript)",
         "delete_generated_supporting_files": "Odstranit generované podpůrné soubory",
         "disallow": "Zakázat",
         "download": "Stáhnout",
@@ -414,10 +413,7 @@
                 "heading": "Cesty pluginů",
                 "description": "Umístění adresáře konfiguračních souborů pluginu."
             },
-            "funscript_heatmap_draw_range": "Zahrnout rozsah do vygenerovaných heatmap",
-            "funscript_heatmap_draw_range_desc": "Nakreslete rozsah pohybu na ose y vygenerované heatmapy. Stávající heatmapy bude nutné po změně zregenerovat.",
             "gallery_cover_regex_label": "Vzor obalu galerií",
-            "heatmap_generation": "Generace heatmapy funscriptu",
             "blobs_storage": {
                 "description": "Kde ukládat binární data, jako jsou obaly scén, účinkující, studia a obrázky tagů. Po změně této hodnoty musí být stávající data zmigrována pomocí úlohy Zmigrování blobů. Podívej se na stránku Úloh pro migraci.",
                 "heading": "Binární typ úložení dat"
@@ -690,24 +686,6 @@
                     "label": "Maximální počet položek k zobrazení ve vybíracích rozbalovacích seznamech"
                 }
             },
-            "funscript_offset": {
-                "description": "Offset v milisekundách pro přehrávání interaktivních skriptů.",
-                "heading": "Offset funscriptu (ms)"
-            },
-            "handy_connection": {
-                "connect": "Připojit",
-                "server_offset": {
-                    "heading": "Offset serveru"
-                },
-                "status": {
-                    "heading": "Status připojení Handy"
-                },
-                "sync": "Synchronizovat"
-            },
-            "handy_connection_key": {
-                "description": "Connection Key k Handy pro použití v interaktivních scénách. Nastavení tohoto klíče umožní Stash ke sdílení aktuální scény s handyfeeling.com.",
-                "heading": "Handy connection klíč"
-            },
             "image_lightbox": {
                 "heading": "Lightbox pro obrázek"
             },
@@ -724,7 +702,6 @@
                     }
                 }
             },
-            "interactive_options": "Možnosti Interaktivní",
             "language": {
                 "heading": "Jazyk"
             },
@@ -850,10 +827,6 @@
                     }
                 },
                 "heading": "Zobrazení Tagů"
-            },
-            "use_stash_hosted_funscript": {
-                "description": "Je-li povoleno, budou funscripty poskytovány přímo ze Stash do vašeho zařízení Handy bez použití serveru Handy třetí strany. Vyžaduje, aby byl Stash dostupný z vašeho zařízení Handy a vygenerovaný API klíč, pokud má Stash nakonfigurované údaje.",
-                "heading": "Funscripty podávejte přímo"
             },
             "sfw_mode": {
                 "description": "Zapněte zda použáváte stash k ukládání SFW obsahu. Schová nebo změní některé aspekty uživatelského rozhraní související s obsahem pro dospělé.",
@@ -991,7 +964,6 @@
             "force_transcodes_tooltip": "Ve výchozím nastavení, transkódy jsou generovány pouze tehdy, když video soubor není podporován prohlížečem. V případě aktivování, transkódy budou generovány i v ostatních případech.",
             "image_previews": "Animované náhledy obrázků",
             "image_previews_tooltip": "Vytvářejte také animované (webp) náhledy, které jsou vyžadovány pouze v případě, že je typ náhledu scény/značky nastaven na Animovaný Obrázek. Při procházení využívají zatěžují procesor méně než náhledy videí, ale jsou generovány navíc a jsou to větší soubory.",
-            "interactive_heatmap_speed": "Generovat heatmapy a rychlosti pro interaktivní scény",
             "marker_image_previews": "Animované náhledy značek",
             "marker_image_previews_tooltip": "Vytvářejte také animované (webp) náhledy, které jsou vyžadovány pouze v případě, že je typ náhledu scény/značky nastaven na Animovaný Obrázek. Při procházení využívají zatěžují procesor méně než náhledy videí, ale jsou generovány navíc a jsou to větší soubory.",
             "marker_screenshots": "Screenshoty značek",
@@ -1371,20 +1343,9 @@
     "filters": "Filtry",
     "folder": "Složka",
     "framerate": "Počet snímků za vteřinu",
-    "handy_connection_status": {
-        "error": "Chyba při připojování k Handy",
-        "missing": "Chybějící",
-        "ready": "Připraveno",
-        "connecting": "Připojuji",
-        "disconnected": "Odpojeno",
-        "syncing": "Probíhá synchronizace se serverem",
-        "uploading": "Nahrávání skriptu"
-    },
     "hasMarkers": "Značky",
     "height_cm": "Výška (cm)",
     "include_sub_studios": "Zahrnout dceřiná studia",
-    "interactive": "Interaktivní",
-    "interactive_speed": "Interaktivní rychlost",
     "isMissing": "Chybí",
     "last_played_at": "Naposledy přehráno",
     "loading": {
@@ -1405,7 +1366,6 @@
         "play_duration": "Délka přehrávání",
         "stream": "Stream",
         "video_codec": "Video Kodek",
-        "interactive_speed": "Interaktivní rychlost",
         "phash": "PHash",
         "play_count": "Počet přehrání",
         "o_count": "Počet O",

@@ -62,16 +62,6 @@ type MarkerSyncConfig struct {
 	// SyncGroups, when true, creates/links source-provided groups on the scene.
 	// Default true.
 	SyncGroups bool `json:"sync_groups" koanf:"sync_groups"`
-	// FunscriptPath is the root directory recursively scanned for *.funscript
-	// files by the funscript index task. Empty disables funscript indexing.
-	FunscriptPath string `json:"funscript_path" koanf:"funscript_path"`
-	// MatchFunscripts, when true, copies a source-provided funscript (matched by
-	// md5 against the local index) next to the scene's video during a sync.
-	// Default true.
-	MatchFunscripts bool `json:"match_funscripts" koanf:"match_funscripts"`
-	// SubmitFunscriptHash, when true, attaches the scene's indexed funscript
-	// hashes to the submit payload. Default true.
-	SubmitFunscriptHash bool `json:"submit_funscript_hash" koanf:"submit_funscript_hash"`
 	// ThePornDB configures the ThePornDB (fetch-only) source.
 	ThePornDB MarkerSyncSourceConfig `json:"theporndb" koanf:"theporndb"`
 	// TimestampTrade configures the timestamp.trade (bidirectional) source.
@@ -117,19 +107,16 @@ func (in *MarkerSyncSourceConfigInput) applyTo(base MarkerSyncSourceConfig) Mark
 // unspecified fields (notably the per-source API keys). Bound to the GraphQL
 // MarkerSyncConfigInput (see gqlgen.yml).
 type MarkerSyncConfigInput struct {
-	ToleranceSeconds    *float64                     `json:"tolerance_seconds"`
-	Mode                *string                      `json:"mode"`
-	SkipTags            []string                     `json:"skip_tags"`
-	TagAware            *bool                        `json:"tag_aware"`
-	FireHooks           *bool                        `json:"fire_hooks"`
-	SyncURLs            *bool                        `json:"sync_urls"`
-	SyncGalleries       *bool                        `json:"sync_galleries"`
-	SyncGroups          *bool                        `json:"sync_groups"`
-	FunscriptPath       *string                      `json:"funscript_path"`
-	MatchFunscripts     *bool                        `json:"match_funscripts"`
-	SubmitFunscriptHash *bool                        `json:"submit_funscript_hash"`
-	ThePornDB           *MarkerSyncSourceConfigInput `json:"theporndb"`
-	TimestampTrade      *MarkerSyncSourceConfigInput `json:"timestamp_trade"`
+	ToleranceSeconds *float64                     `json:"tolerance_seconds"`
+	Mode             *string                      `json:"mode"`
+	SkipTags         []string                     `json:"skip_tags"`
+	TagAware         *bool                        `json:"tag_aware"`
+	FireHooks        *bool                        `json:"fire_hooks"`
+	SyncURLs         *bool                        `json:"sync_urls"`
+	SyncGalleries    *bool                        `json:"sync_galleries"`
+	SyncGroups       *bool                        `json:"sync_groups"`
+	ThePornDB        *MarkerSyncSourceConfigInput `json:"theporndb"`
+	TimestampTrade   *MarkerSyncSourceConfigInput `json:"timestamp_trade"`
 }
 
 // ApplyTo returns base with every provided (non-nil) field overlaid. SkipTags is
@@ -163,15 +150,6 @@ func (in *MarkerSyncConfigInput) ApplyTo(base MarkerSyncConfig) MarkerSyncConfig
 	if in.SyncGroups != nil {
 		base.SyncGroups = *in.SyncGroups
 	}
-	if in.FunscriptPath != nil {
-		base.FunscriptPath = *in.FunscriptPath
-	}
-	if in.MatchFunscripts != nil {
-		base.MatchFunscripts = *in.MatchFunscripts
-	}
-	if in.SubmitFunscriptHash != nil {
-		base.SubmitFunscriptHash = *in.SubmitFunscriptHash
-	}
 	base.ThePornDB = in.ThePornDB.applyTo(base.ThePornDB)
 	base.TimestampTrade = in.TimestampTrade.applyTo(base.TimestampTrade)
 	return base
@@ -203,19 +181,16 @@ func (c MarkerSyncConfig) Validate() error {
 // behaviour of an installation that has never configured marker sync.
 func markerSyncDefaults() MarkerSyncConfig {
 	return MarkerSyncConfig{
-		ToleranceSeconds:    markerSyncDefaultTolerance,
-		Mode:                markerSyncDefaultMode,
-		SkipTags:            append([]string(nil), markerSyncDefaultSkipTags...),
-		TagAware:            true,
-		FireHooks:           false,
-		SyncURLs:            true,
-		SyncGalleries:       true,
-		SyncGroups:          true,
-		FunscriptPath:       "",
-		MatchFunscripts:     true,
-		SubmitFunscriptHash: true,
-		ThePornDB:           MarkerSyncSourceConfig{Enabled: true},
-		TimestampTrade:      MarkerSyncSourceConfig{Enabled: true},
+		ToleranceSeconds: markerSyncDefaultTolerance,
+		Mode:             markerSyncDefaultMode,
+		SkipTags:         append([]string(nil), markerSyncDefaultSkipTags...),
+		TagAware:         true,
+		FireHooks:        false,
+		SyncURLs:         true,
+		SyncGalleries:    true,
+		SyncGroups:       true,
+		ThePornDB:        MarkerSyncSourceConfig{Enabled: true},
+		TimestampTrade:   MarkerSyncSourceConfig{Enabled: true},
 	}
 }
 

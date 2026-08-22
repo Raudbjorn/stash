@@ -74,18 +74,6 @@ func sameFile(a, b string, aSize, bSize int64) (bool, error) {
 	return bytes.Equal(ab, bb), nil
 }
 
-// RelocateFunscript copies a sibling .funscript onto the new video stem.
-// created is the dest path only when this call wrote the file.
-func RelocateFunscript(srcVideo, dstVideo string) (created string, err error) {
-	src := video.GetFunscriptPath(srcVideo)
-	dst := video.GetFunscriptPath(dstVideo)
-	res, err := PlaceSidecar(src, dst)
-	if err != nil || res != PlaceCreated {
-		return "", err
-	}
-	return dst, nil
-}
-
 // RelocateCaption copies one caption sidecar onto the new video stem.
 // created is true only when dest was written by this call.
 func RelocateCaption(srcVideo, dstVideo string, cap models.VideoCaption) (*models.VideoCaption, string, bool, error) {

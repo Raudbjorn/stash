@@ -174,8 +174,7 @@ textarea.scene-description {
   }
 }
 
-.scene-specs-overlay,
-.scene-interactive-speed-overlay {
+.scene-specs-overlay {
   bottom: 1rem;
   color: $text-color;
   display: block;
@@ -186,17 +185,11 @@ textarea.scene-description {
   text-shadow: 0 0 3px #000;
 }
 
-.scene-specs-overlay {
-  right: 0.7rem;
-}
 
 .scene-specs-overlay > span:not(:last-child) {
   margin-right: 0.3rem;
 }
 
-.scene-interactive-speed-overlay {
-  left: 0.7rem;
-}
 
 .extra-scene-info {
   display: none;

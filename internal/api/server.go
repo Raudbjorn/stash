@@ -656,7 +656,6 @@ func isURL(s string) bool {
 }
 
 func setPageSecurityHeaders(w http.ResponseWriter, r *http.Request, plugins []*plugin.Plugin) {
-	c := config.GetInstance()
 
 	defaultSrc := "data: 'self' 'unsafe-inline'"
 	connectSrcSlice := []string{
@@ -686,10 +685,6 @@ func setPageSecurityHeaders(w http.ResponseWriter, r *http.Request, plugins []*p
 		connectSrcSlice = append(connectSrcSlice, "https://cdn.jsdelivr.net")
 		scriptSrcSlice = append(scriptSrcSlice, "https://cdn.jsdelivr.net")
 		styleSrcSlice = append(styleSrcSlice, "https://cdn.jsdelivr.net")
-	}
-
-	if !c.IsNewSystem() && c.GetHandyKey() != "" {
-		connectSrcSlice = append(connectSrcSlice, "https://www.handyfeeling.com")
 	}
 
 	for _, plugin := range plugins {

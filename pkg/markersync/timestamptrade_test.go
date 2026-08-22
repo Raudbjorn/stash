@@ -282,8 +282,8 @@ func TestTimestampTradeSource_FetchExtras(t *testing.T) {
 
 // TestTimestampTradeSource_FetchSceneData_Memoised asserts the single-entry memo
 // collapses the repeated resolve+scene fetches performed by FetchMarkers and the
-// four extras providers into ONE resolve GET and ONE scene GET for the same
-// scene identity.
+// three remaining extras providers into ONE resolve GET and ONE scene GET for
+// the same scene identity.
 func TestTimestampTradeSource_FetchSceneData_Memoised(t *testing.T) {
 	var resolveCalls, sceneCalls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -298,7 +298,6 @@ func TestTimestampTradeSource_FetchSceneData_Memoised(t *testing.T) {
 				"markers": [{"name": "M", "tag_name": "T", "start_time": 1000}],
 				"urls": ["https://example.com/a"],
 				"galleries": [{"files": [{"md5": "aaa"}], "urls": []}],
-				"funscripts": [{"md5": "fs1"}],
 				"movies": [{"id": 42, "title": "G", "scenes": [{"scene_id": 555, "scene_index": 1}]}]
 			}`))
 		default:
@@ -327,15 +326,12 @@ func TestTimestampTradeSource_FetchSceneData_Memoised(t *testing.T) {
 	if _, err := s.FetchExtraURLs(ctx, id); err != nil {
 		t.Fatalf("FetchExtraURLs: %v", err)
 	}
-	if _, err := s.FetchFunscripts(ctx, id); err != nil {
-		t.Fatalf("FetchFunscripts: %v", err)
-	}
 
 	if resolveCalls != 1 {
-		t.Errorf("resolve GETs = %d, want 1 (memoised across 5 providers)", resolveCalls)
+		t.Errorf("resolve GETs = %d, want 1 (memoised across 4 providers)", resolveCalls)
 	}
 	if sceneCalls != 1 {
-		t.Errorf("scene GETs = %d, want 1 (memoised across 5 providers)", sceneCalls)
+		t.Errorf("scene GETs = %d, want 1 (memoised across 4 providers)", sceneCalls)
 	}
 }
 
@@ -440,116 +436,5 @@ func TestTimestampTradeSource_SubmitScene(t *testing.T) {
 	}
 	if len(body.Performers) != 1 || body.Performers[0].Name != "Perf One" {
 		t.Errorf("performers = %+v, want [Perf One]", body.Performers)
-	}
-}
-
-// TestTimestampTradeSource_FetchFunscripts asserts the /json-scene
-// funscripts[].md5 surface via FetchFunscripts (empty-md5 entries dropped).
-func TestTimestampTradeSource_FetchFunscripts(t *testing.T) {
-	body := `{
-		"scene_id": 555,
-		"markers": [],
-		"funscripts": [
-			{"md5": "fs1md5"},
-			{"md5": ""},
-			{"md5": "fs2md5"}
-		]
-	}`
-
-	srv := newTTStub(t,
-		map[string]string{"stash-abc": "555"},
-		map[string]string{"555": body},
-	)
-	defer srv.Close()
-
-	s := NewTimestampTradeSource(TimestampTradeOptions{Enabled: true})
-	s.baseURL = srv.URL
-
-	id := SceneIdentity{StashIDs: []StashID{
-		{Endpoint: "https://ignored/graphql", StashID: "stash-abc"},
-	}}
-
-	refs, err := s.FetchFunscripts(context.Background(), id)
-	if err != nil {
-		t.Fatalf("FetchFunscripts: %v", err)
-	}
-	if len(refs) != 2 {
-		t.Fatalf("got %d funscript refs, want 2 (empty md5 dropped)", len(refs))
-	}
-	if refs[0].MD5 != "fs1md5" || refs[1].MD5 != "fs2md5" {
-		t.Errorf("funscript refs = %+v, want md5s [fs1md5 fs2md5]", refs)
-	}
-}
-
-// TestTimestampTradeSource_SubmitScene_FunscriptHashes asserts SubmitScene
-// includes funscriptHashes with the correct filename/md5 and passes metadata
-// through as RAW JSON when populated, and OMITS the field entirely when empty.
-func TestTimestampTradeSource_SubmitScene_FunscriptHashes(t *testing.T) {
-	// captureRaw returns a server that records the raw request body and the
-	// SceneSubmission source used to produce it.
-	capture := func(t *testing.T, sub SceneSubmission) map[string]any {
-		t.Helper()
-		var raw map[string]any
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
-				http.Error(w, "bad body", http.StatusBadRequest)
-				return
-			}
-			_, _ = w.Write([]byte("ok"))
-		}))
-		defer srv.Close()
-
-		s := NewTimestampTradeSource(TimestampTradeOptions{Enabled: true})
-		s.baseURL = srv.URL
-		if err := s.SubmitScene(context.Background(), sub); err != nil {
-			t.Fatalf("SubmitScene: %v", err)
-		}
-		return raw
-	}
-
-	// --- populated: funscriptHashes present, metadata is raw JSON object ---
-	raw := capture(t, SceneSubmission{
-		Title: "With Funscripts",
-		FunscriptHashes: []FunscriptHash{
-			{Filename: "clip.funscript", Metadata: `{"creator":"tester","range":90}`, MD5: "md5abc"},
-			{Filename: "nometa.funscript", Metadata: "", MD5: "md5def"},
-		},
-	})
-
-	fhRaw, ok := raw["funscriptHashes"].([]any)
-	if !ok {
-		t.Fatalf("funscriptHashes missing/not an array: %v", raw["funscriptHashes"])
-	}
-	if len(fhRaw) != 2 {
-		t.Fatalf("got %d funscriptHashes, want 2", len(fhRaw))
-	}
-
-	first, _ := fhRaw[0].(map[string]any)
-	if first["filename"] != "clip.funscript" || first["md5"] != "md5abc" {
-		t.Errorf("funscriptHashes[0] = %v, want filename clip.funscript / md5 md5abc", first)
-	}
-	// metadata decoded as a nested JSON object (raw JSON passed through, NOT a
-	// double-encoded string).
-	meta, ok := first["metadata"].(map[string]any)
-	if !ok {
-		t.Fatalf("funscriptHashes[0].metadata = %v (%T), want a JSON object", first["metadata"], first["metadata"])
-	}
-	if meta["creator"] != "tester" {
-		t.Errorf("metadata.creator = %v, want tester", meta["creator"])
-	}
-
-	// second entry: empty metadata omitted (null / absent).
-	second, _ := fhRaw[1].(map[string]any)
-	if second["filename"] != "nometa.funscript" || second["md5"] != "md5def" {
-		t.Errorf("funscriptHashes[1] = %v, want filename nometa.funscript / md5 md5def", second)
-	}
-	if m, present := second["metadata"]; present && m != nil {
-		t.Errorf("funscriptHashes[1].metadata = %v, want omitted/null for empty metadata", m)
-	}
-
-	// --- empty: funscriptHashes field omitted entirely ---
-	rawEmpty := capture(t, SceneSubmission{Title: "No Funscripts"})
-	if _, present := rawEmpty["funscriptHashes"]; present {
-		t.Errorf("funscriptHashes must be omitted when there are none, got %v", rawEmpty["funscriptHashes"])
 	}
 }

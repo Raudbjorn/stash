@@ -2,7 +2,6 @@ import React, { useMemo, useState } from "react";
 import { Accordion, Button, Card } from "react-bootstrap";
 import {
   FormattedMessage,
-  FormattedNumber,
   FormattedTime,
   useIntl,
 } from "react-intl";
@@ -212,28 +211,6 @@ const _SceneFileInfoPanel: React.FC<ISceneFileInfoPanelProps> = (
     );
   }
 
-  function renderFunscript() {
-    if (props.scene.interactive) {
-      return (
-        <URLField
-          name="Funscript"
-          url={props.scene.paths.funscript}
-          value={props.scene.paths.funscript}
-          truncate
-        />
-      );
-    }
-  }
-
-  function renderInteractiveSpeed() {
-    if (props.scene.interactive_speed) {
-      return (
-        <TextField id="media_info.interactive_speed">
-          <FormattedNumber value={props.scene.interactive_speed} />
-        </TextField>
-      );
-    }
-  }
 
   const filesPanel = useMemo(() => {
     if (props.scene.files.length === 0) {
@@ -307,8 +284,7 @@ const _SceneFileInfoPanel: React.FC<ISceneFileInfoPanelProps> = (
             truncate
           />
         )}
-        {renderFunscript()}
-        {renderInteractiveSpeed()}
+        <URLsField id="urls" urls={props.scene.urls} truncate />
         <TextField
           id="transcode_benefit"
           value={

@@ -37,7 +37,6 @@
         "delete": "Xóa",
         "delete_entity": "Xóa {entityType}",
         "delete_file": "Xóa file",
-        "delete_file_and_funscript": "Xóa file (và script)",
         "disable": "Vô hiệu hóa",
         "disallow": "Không cho phép",
         "download": "Tải xuống",
@@ -365,7 +364,6 @@
                     }
                 }
             },
-            "funscript_heatmap_draw_range": "Bao gồm khoảng giá trị trong các bản đồ nhiệt được tạo ra",
             "gallery_cover_regex_desc": "Biểu thức chính quy dùng để nhận diện ảnh bìa của thư viện",
             "gallery_cover_regex_label": "Mẫu tên file ảnh dùng làm bìa thư viện",
             "gallery_ext_desc": "Danh sách phần mở rộng tệp (file extensions), phân cách bằng dấu phẩy, sẽ được nhận diện là tệp thư viện dạng nén (zip).",
@@ -374,7 +372,6 @@
             "generated_files_location": "Vị trí thư mục lưu trữ các tệp được tạo (dấu cảnh, ảnh xem trước cảnh, ảnh sprite, v.v.)",
             "generated_path_head": "Thư mục lưu trữ các tệp sinh ra tự động",
             "hashing": "Băm (tạo mã băm)",
-            "heatmap_generation": "Tạo bản đồ nhiệt từ Funscript",
             "image_ext_desc": "Danh sách phần mở rộng tệp được nhận diện là hình ảnh, ngăn cách bằng dấu phẩy.",
             "image_ext_head": "Đuôi file ảnh",
             "include_audio_desc": "Bao gồm luồng âm thanh khi tạo bản xem trước.",
@@ -408,7 +405,6 @@
             "chrome_cdp_path": "Đường dẫn giao thức CDP của Chrome",
             "chrome_cdp_path_desc": "Đường dẫn đến tệp thực thi của Chrome, hoặc một địa chỉ từ xa (bắt đầu bằng http:// hoặc https://, ví dụ http://localhost:9222/json/version) trỏ đến một phiên bản Chrome đang chạy.",
             "excluded_image_gallery_patterns_desc": "Biểu thức chính quy (regex) của tệp ảnh và thư mục thư viện cần loại trừ khỏi quá trình Quét và thêm vào mục Dọn dẹp",
-            "funscript_heatmap_draw_range_desc": "Vẽ phạm vi chuyển động trên trục y của bản đồ nhiệt được tạo. Các bản đồ nhiệt hiện có sẽ cần được tạo lại sau khi thay đổi tùy chọn này.",
             "generated_file_naming_hash_desc": "Sử dụng MD5 hoặc oshash để đặt tên cho các tệp được tạo. Việc thay đổi tùy chọn này yêu cầu tất cả các cảnh (scenes) phải có giá trị MD5/oshash tương ứng. Sau khi thay đổi, các tệp đã tạo trước đó sẽ cần được di chuyển hoặc tạo lại. Vui lòng xem trang Nhiệm vụ (Tasks) để thực hiện di chuyển.",
             "maximum_streaming_transcode_size_desc": "Kích thước tối đa cho các luồng video đã chuyển mã",
             "number_of_parallel_task_for_scan_generation_desc": "Đặt giá trị là 0 để hệ thống tự động phát hiện. Cảnh báo: chạy nhiều tác vụ hơn mức cần thiết để sử dụng 100% CPU sẽ làm giảm hiệu suất và có thể gây ra các sự cố khác.",
@@ -662,24 +658,6 @@
                     "label": "Số lượng mục tối đa hiển thị trong danh sách thả xuống"
                 }
             },
-            "funscript_offset": {
-                "description": "Độ lệch thời gian tính bằng mili giây cho việc phát lại các kịch bản tương tác.",
-                "heading": "Độ lệch Funscript (ms)"
-            },
-            "handy_connection": {
-                "connect": "Kết nối",
-                "status": {
-                    "heading": "Trạng thái Kết nối Handy"
-                },
-                "sync": "Đồng bộ hóa",
-                "server_offset": {
-                    "heading": "Độ lệch Máy chủ"
-                }
-            },
-            "handy_connection_key": {
-                "heading": "Khóa Kết nối Handy",
-                "description": "Khóa kết nối Handy để sử dụng cho các cảnh tương tác. Việc thiết lập khóa này sẽ cho phép Stash chia sẻ thông tin cảnh hiện tại của bạn với handyfeeling.com"
-            },
             "image_lightbox": {
                 "heading": "Hộp đèn ảnh"
             },
@@ -701,7 +679,6 @@
                     }
                 }
             },
-            "interactive_options": "Tùy chọn Tương tác",
             "menu_items": {
                 "description": "Hiển thị hoặc ẩn các loại nội dung khác nhau trên thanh điều hướng",
                 "heading": "Mục Menu"
@@ -773,10 +750,6 @@
                 }
             },
             "title": "Giao diện Người dùng",
-            "use_stash_hosted_funscript": {
-                "heading": "Phục vụ/Truyền funscript trực tiếp",
-                "description": "Khi được bật, funscript sẽ được phục vụ trực tiếp từ Stash đến thiết bị Handy của bạn mà không sử dụng máy chủ Handy của bên thứ ba. Yêu cầu Stash phải truy cập được từ thiết bị Handy của bạn và cần tạo khóa API nếu Stash có cấu hình thông tin xác thực."
-            },
             "max_loop_duration": {
                 "heading": "Thời lượng lặp tối đa",
                 "description": "Thời lượng cảnh tối đa (tính bằng giây) mà trình phát cảnh sẽ lặp lại video - 0 để tắt"
@@ -878,7 +851,6 @@
             "force_transcodes": "Ép chuyển mã",
             "image_previews": "Xem trước Hình ảnh Động",
             "image_thumbnails": "Hình thu nhỏ của Ảnh",
-            "interactive_heatmap_speed": "Tạo bản đồ nhiệt và tốc độ cho các cảnh tương tác",
             "marker_image_previews": "Xem trước Điểm đánh dấu Ảnh động",
             "marker_image_previews_tooltip": "Ngoài ra sẽ tạo nên những hình xem trước động (webp), chỉ bắt buộc khi Loại Cảnh/Dấu Tường Xem Trước được thành Ảnh Động. Khi lướt nó sử dụng ít CPU hơn video xem trước, nhưng khi tạo nên thì đi kèm với chúng và là những file lớn hơn.",
             "markers": "Xem trước Điểm đánh dấu",

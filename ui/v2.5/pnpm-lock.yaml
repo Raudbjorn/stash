@@ -163,9 +163,6 @@ importers:
       slick-carousel:
         specifier: ^1.8.1
         version: 1.8.1(jquery@3.7.1)
-      thehandy:
-        specifier: ^1.1.0
-        version: 1.1.0
       ua-parser-js:
         specifier: ^2.0.10
         version: 2.0.10
@@ -3845,9 +3842,6 @@ packages:
     resolution: {integrity: sha512-J/9An6vs9Us6wKRriSFXBWdRZapREHqFzdNUKk0pmu804EMR6dr6winwo7e5JDxN4xahxQsuysyYFwlwj4XN/Q==}
     engines: {node: '>=10'}
     hasBin: true
-
-  thehandy@1.1.0:
-    resolution: {integrity: sha512-ZifUw47kq6cKNiKLNgrnVPkBFbG+yR6tScgWy2INDnGT4XePhjRaQNni67rWn52nAOkotq9VyaK20OZoorHqTA==}
 
   three@0.183.2:
     resolution: {integrity: sha512-di3BsL2FEQ1PA7Hcvn4fyJOlxRRgFYBpMTcyOgkwJIaDOdJMebEFPA+t98EvjuljDx4hNulAGwF6KIjtwI5jgQ==}
@@ -8164,8 +8158,6 @@ snapshots:
       acorn: 8.17.0
       commander: 2.20.3
       source-map-support: 0.5.21
-
-  thehandy@1.1.0: {}
 
   three@0.183.2: {}
 

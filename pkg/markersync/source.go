@@ -132,23 +132,6 @@ type GroupProvider interface {
 	FetchGroups(ctx context.Context, id SceneIdentity) ([]GroupRef, error)
 }
 
-// FunscriptRef is a source-agnostic reference to a funscript associated with a
-// scene. MD5 is the checksum of the funscript file's bytes, used to locate a
-// matching locally-indexed funscript (see FunscriptIndex).
-type FunscriptRef struct {
-	// MD5 is the md5 checksum of the funscript file used to locate the local
-	// funscript in the index.
-	MD5 string
-}
-
-// FunscriptProvider is a Source that can supply funscript references for a
-// scene, matched to locally-indexed funscripts by md5.
-type FunscriptProvider interface {
-	// FetchFunscripts returns funscript references for the given scene identity.
-	// It returns (nil, nil) when the source has no record for the scene.
-	FetchFunscripts(ctx context.Context, id SceneIdentity) ([]FunscriptRef, error)
-}
-
 // The submission domain model below mirrors the fetch side: it is a neutral,
 // wire-format-free representation of a stash scene. JSON encoding (and any
 // per-source field naming) lives exclusively in the source adapter, exactly as
@@ -193,19 +176,6 @@ type SubmissionFile struct {
 	Fingerprints []Fingerprint
 }
 
-// FunscriptHash is a submitted funscript's identity: its basename, its
-// top-level metadata as raw JSON text (empty when the funscript had none), and
-// its md5 checksum.
-type FunscriptHash struct {
-	// Filename is the funscript's basename (not the full local path).
-	Filename string
-	// Metadata is the funscript's top-level "metadata" object as raw JSON text,
-	// or "" when the funscript had none (in which case it is omitted on the wire).
-	Metadata string
-	// MD5 is the md5 checksum of the funscript file's bytes.
-	MD5 string
-}
-
 // SceneSubmission is the neutral representation of a stash scene submitted to a
 // bidirectional source.
 type SceneSubmission struct {
@@ -220,10 +190,6 @@ type SceneSubmission struct {
 	Studio     *NamedEntity
 	Markers    []SubmissionMarker
 	Files      []SubmissionFile
-	// FunscriptHashes are the scene's indexed funscripts (submitted so the source
-	// can match funscripts across users by md5). Empty when submission is disabled
-	// or the scene has no indexed funscripts.
-	FunscriptHashes []FunscriptHash
 }
 
 // Submitter is an external database that additionally accepts scene submissions

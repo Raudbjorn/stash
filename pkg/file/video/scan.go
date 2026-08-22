@@ -37,12 +37,6 @@ func (d *Decorator) Decorate(ctx context.Context, fs models.FS, f models.File) (
 		return f, fmt.Errorf("matching container for %q: %w", base.Path, err)
 	}
 
-	// check if there is a funscript file
-	interactive := false
-	if _, err := fs.Lstat(GetFunscriptPath(base.Path)); err == nil {
-		interactive = true
-	}
-
 	return &models.VideoFile{
 		BaseFile:       base,
 		Format:         string(container),
@@ -53,7 +47,6 @@ func (d *Decorator) Decorate(ctx context.Context, fs models.FS, f models.File) (
 		Duration:       videoFile.FileDuration,
 		FrameRate:      videoFile.FrameRate,
 		BitRate:        videoFile.Bitrate,
-		Interactive:    interactive,
 		CreationTime:   videoFile.CreationTime,
 		Title:          videoFile.Title,
 		Comment:        videoFile.Comment,
@@ -63,7 +56,7 @@ func (d *Decorator) Decorate(ctx context.Context, fs models.FS, f models.File) (
 	}, nil
 }
 
-func (d *Decorator) IsMissingMetadata(ctx context.Context, fs models.FS, f models.File) bool {
+func (d *Decorator) IsMissingMetadata(ctx context.Context, _ models.FS, f models.File) bool {
 	const (
 		unsetString = "unset"
 		unsetNumber = -1
@@ -74,14 +67,9 @@ func (d *Decorator) IsMissingMetadata(ctx context.Context, fs models.FS, f model
 		return true
 	}
 
-	interactive := false
-	if _, err := fs.Lstat(GetFunscriptPath(vf.Base().Path)); err == nil {
-		interactive = true
-	}
-
 	return vf.VideoCodec == unsetString || vf.AudioCodec == unsetString ||
 		vf.Format == unsetString || vf.Width == unsetNumber ||
 		vf.Height == unsetNumber || vf.FrameRate == unsetNumber ||
 		vf.Duration == unsetNumber ||
-		vf.BitRate == unsetNumber || interactive != vf.Interactive
+		vf.BitRate == unsetNumber
 }

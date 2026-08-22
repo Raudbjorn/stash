@@ -710,8 +710,6 @@ type Mutation {
   "Submit scene markers (and enclosing scene metadata) to external databases. Returns the job ID."
   markerSyncSubmit(input: MarkerSyncSubmitInput!): String!
 
-  "Index local funscripts and match them to scenes for native marker sync. Returns the job ID."
-  markerSyncFunscriptIndex: String!
 
   "Enables DLNA for an optional duration. Has no effect if DLNA is enabled by default"
   enableDLNA(input: EnableDLNAInput!): Boolean!

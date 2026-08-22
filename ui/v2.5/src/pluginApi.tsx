@@ -20,8 +20,6 @@ import { useToast } from "./hooks/Toast";
 import Event from "./hooks/event";
 import { after, before, components, instead, RegisterComponent } from "./patch";
 import { useSettings } from "./components/Settings/context";
-import { useInteractive } from "./hooks/Interactive/context";
-import InteractiveUtils from "./hooks/Interactive/utils";
 import { useLightbox, useGalleryLightbox } from "./hooks/Lightbox/hooks";
 
 // due to code splitting, some components may not have been loaded when a plugin
@@ -157,7 +155,6 @@ export const PluginApi = {
   },
   components,
   utils: {
-    InteractiveUtils,
     NavUtils,
     StashService,
     loadComponents,
@@ -167,7 +164,6 @@ export const PluginApi = {
     useSpriteInfo,
     useToast,
     useSettings,
-    useInteractive,
     useLightbox,
     useGalleryLightbox,
   },

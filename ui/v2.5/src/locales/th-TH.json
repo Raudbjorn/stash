@@ -27,7 +27,6 @@
         "delete": "ลบ",
         "delete_entity": "ลบ{entityType}",
         "delete_file": "ลบไฟล์",
-        "delete_file_and_funscript": "ลบไฟล์ (และ funscript)",
         "delete_generated_supporting_files": "ลบไฟล์ที่เกี่ยวข้อง",
         "disallow": "ไม่อนุญาต",
         "download": "ดาวน์โหลด",
@@ -370,7 +369,6 @@
                     "heading": "ใช้ฮาร์ดแวร์เข้ารหัสวิดีโอสำหรับ FFmpeg"
                 }
             },
-            "funscript_heatmap_draw_range_desc": "ระบุค่าสูงต่ำ (ตามแกน y) ในการสร้าง heatmaps เมื่อเปลี่ยนแปลงค่านี้ต้องทำการสร้าง heatmaps ขึ้นใหม่",
             "plugins_path": {
                 "description": "ไดเร็กทอรีสำหรับไฟล์การตั้งค่าปลั๊กอิน",
                 "heading": "ตำแหน่งปลั๊กอิน"
@@ -380,10 +378,8 @@
                 "description": "ไดเด็กทอรีสำหรับการสำรองฐานข้อมูล SQLite"
             },
             "database": "ฐานข้อมูล",
-            "funscript_heatmap_draw_range": "ระบุค่าสูงต่ำในการสร้าง heatmaps",
             "gallery_cover_regex_desc": "ข้อมูล regexp ที่จะใช้ระบุภาพให้เป็นภาพหน้าปกแกลเลอรี",
-            "gallery_cover_regex_label": "รูปแบบชื่อหน้าปกแกลเลอรี",
-            "heatmap_generation": "การสร้าง heatmap Funscript"
+            "gallery_cover_regex_label": "รูปแบบชื่อหน้าปกแกลเลอรี"
         },
         "library": {
             "exclusions": "ไม่รวม",
@@ -621,7 +617,6 @@
                 "description": "ซ่อนหรือแสดงเมนูเนื้อหาต่างๆ บนแถบนำทาง",
                 "heading": "รายการเมนู"
             },
-            "interactive_options": "ตัวเลือกอุปกรณ์อินเตอร์แอ็คทีฟ",
             "preview_type": {
                 "description": "ค่าปริยายชนิดภาพตัวอย่างคือไฟล์วิดีโอ mp4 เลือกใช้ภาพเคลื่อนไหว (webp) หากต้องการลดการใช้ทรัพยากรระบบ โดยภาพเคลื่อนไหวจะถูกสร้างขึ้นเพิ่มเติมจากไฟล์วิดีโอและจะมีขนาดใหญ่กว่า",
                 "heading": "ชนิดภาพตัวอย่าง",
@@ -671,10 +666,6 @@
                     }
                 },
                 "heading": "มุมมองแท็ก"
-            },
-            "use_stash_hosted_funscript": {
-                "heading": "เปิดใช้เรียกใช้ funscripts ได้โดยตรง",
-                "description": "เมื่อเปิดใช้งานตัวเลือกนี้ อุปกรณ์ Handy จะสามารถเรียกใช้ funscripts จาก Stash ได้โดยตรงโดยไม่ต้องผ่านเซิร์ฟเวอร์เจ้าอื่น โดย Stash จำเป็นต้องเข้าถึงได้จากอุปกรณ์ และต้องใช้กุญแจ API หากตั้งค่าความปลอดภัยไว้"
             },
             "title": "ส่วนติดต่อผู้ใช้",
             "studio_panel": {
@@ -729,24 +720,6 @@
             "show_tag_card_on_hover": {
                 "heading": "กล่องแท็ก",
                 "description": "แสดงกล่องแท็กเมื่อวางเคอร์เซอร์บนแท็ก"
-            },
-            "funscript_offset": {
-                "heading": "หน่วงเวลา Funscript",
-                "description": "หน่วงเวลาการเล่นสคริปต์อินเตอร์แอ็คทีฟ หน่วยมิลลิวินาที"
-            },
-            "handy_connection": {
-                "connect": "เชื่อมต่อ",
-                "server_offset": {
-                    "heading": "หน่วงเวลาเซิร์ฟเวอร์"
-                },
-                "status": {
-                    "heading": "สถานะการเชื่อมต่ออุปกรณ์ Handy"
-                },
-                "sync": "ซิงค์"
-            },
-            "handy_connection_key": {
-                "description": "ระบุคีย์สำหรับเชื่อมต่ออุปกรณ์ Handy และแบ่งปันข้อมูลการเล่นซีนกับเว็บไซต์ handyfeeling.com",
-                "heading": "คีย์สำหรับเชื่อมต่อ Handy"
             }
         },
         "tools": {
@@ -1008,7 +981,6 @@
             "preview_exclude_start_time_head": "ไม่รวมช่วงต้นวิดีโอ",
             "covers": "หน้าปกซีน",
             "image_previews": "ภาพเคลื่อนไหวตัวอย่าง",
-            "interactive_heatmap_speed": "สร้าง heatmaps และกราฟความเร็วสำหรับซีนอินเตอร์แอ็คทีฟ",
             "marker_image_previews": "สร้างภาพเคลื่อนไหวตัวอย่างสำหรับมาร์คเกอร์",
             "marker_screenshots": "ภาพหน้าจอมาร์คเกอร์",
             "override_preview_generation_options_desc": "ไม่สนใจการตั้งค่าตัวเลือกการสร้างพรีวิวของระบบ เปลี่ยนค่าปริยายที่หน้า ระบบ -> การสร้างพริวิว",
@@ -1150,8 +1122,7 @@
         "downloaded_from": "ดาวน์โหลดมาจาก",
         "play_duration": "ระยะเวลาที่เล่น",
         "stream": "สตรีม",
-        "video_codec": "โคเด็ควิดีโอ",
-        "interactive_speed": "ความเร็วอินเตอร์แอ็คทีฟ"
+        "video_codec": "โคเด็ควิดีโอ"
     },
     "package_manager": {
         "add_source": "เพิ่มแหล่งข้อมูล",
@@ -1251,24 +1222,13 @@
     },
     "gallery": "แกลเลอรี",
     "gallery_count": "จำนวนแกลเลอรี",
-    "handy_connection_status": {
-        "missing": "ไม่พบอุปกรณ์",
-        "connecting": "กำลังเชื่อมต่อ",
-        "disconnected": "ตัดการเชื่อมต่อ",
-        "error": "พบข้อผิดพลาดในการติดต่อ Handy",
-        "ready": "พร้อมใช้งาน",
-        "syncing": "กำลังซิงค์กับเซิร์ฟเวอร์",
-        "uploading": "กำลังอัปโหลดสคริปท์"
-    },
     "index_of_total": "รายการที่ {index} จาก {total}",
     "galleries": "แกลเลอรี",
-    "interactive_speed": "ความเร็วอินเตอร์แอ็คทีฟ",
     "include_sub_studios": "นับรวมสตูดิโอลูกด้วย",
     "isMissing": "ที่ไม่มี",
     "include_sub_tags": "นับรวมแท็กย่อยด้วย",
     "last_o_at": "O ครั้งสุดท้ายเมื่อ",
     "instagram": "อินสตาแกรม",
-    "interactive": "อินเตอร์แอ็คทีฟ",
     "performer": "นักแสดง",
     "name": "ชื่อเรื่อง",
     "new": "เพิ่ม",

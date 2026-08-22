@@ -27,7 +27,6 @@
         "customise": "Personalitza",
         "delete_entity": "Suprimeix {entityType}",
         "delete_file": "Suprimeix el fitxer",
-        "delete_file_and_funscript": "Suprimeix el fitxer (i funscript)",
         "delete_generated_supporting_files": "Suprimeix els fitxers de suport generats",
         "disable": "Desactiva",
         "disallow": "No permetre",
@@ -295,7 +294,6 @@
                     }
                 }
             },
-            "funscript_heatmap_draw_range_desc": "Dibuixar rang de moviment en l'eix \"i\" del mapa de calor generada. Els mapes de calor existents hauran de ser generats de nou després del canvi.",
             "include_audio_head": "Incloure àudio",
             "maximum_transcode_size_desc": "Mida màxima per als transcodificats generats",
             "number_of_parallel_task_for_scan_generation_desc": "Estableix a 0 per a la detecció automàtica. L'avís d'executar més tasques de les necessàries per aconseguir una utilització del 100% de la CPU disminuirà el rendiment i potencialment causarà altres problemes.",
@@ -329,7 +327,6 @@
             "excluded_image_gallery_patterns_head": "Patrons d'imatges/galeries exclosos",
             "excluded_video_patterns_desc": "Expressions regulars d'arxius/rutes de vídeos que seran exclosos de l'escaneig i que seran afegits a la tasca de depuració/neteja",
             "excluded_video_patterns_head": "Patrons de vídeo exclosos",
-            "funscript_heatmap_draw_range": "Incloure rang en els mapes de calor generats",
             "gallery_cover_regex_desc": "Expressió regular utilitzada per a identificar una imatge com a caràtula d'una galeria",
             "gallery_cover_regex_label": "Patró de la portada de la galeria",
             "gallery_ext_desc": "Llista delimitada per comes d'extensions de fitxers que s'identificaran com a fitxers zip de galeria.",
@@ -338,7 +335,6 @@
             "generated_files_location": "Ruta relativa del directori per als fitxers generats (marcadors d'escena, vistes prèvies d'escena, conjunts d'imatges o “sprites”, etc)",
             "generated_path_head": "Ruta relativa per al directori d'arxius generats",
             "hashing": "Hashing",
-            "heatmap_generation": "Generació mapa de calor Funscript",
             "image_ext_desc": "Llista delimitada per comes de les extensions d'arxiu que seran identificades com a imatges.",
             "image_ext_head": "Extensions d'imatge",
             "include_audio_desc": "Inclou flux d'àudio quan es generin vistes prèvies.",

@@ -29,7 +29,6 @@
         "delete": "删除",
         "delete_entity": "删除{entityType}",
         "delete_file": "删除文件",
-        "delete_file_and_funscript": "删除文件 (和 funscript)",
         "delete_generated_supporting_files": "删除已生成的附加文件",
         "disallow": "不允许",
         "download": "下载",
@@ -387,8 +386,6 @@
                     "description": "将FFmpeg下载到配置目录并清除要从配置目录解析的ffmpeg和ffprobe路径。"
                 }
             },
-            "funscript_heatmap_draw_range": "在生成的热图中包括范围",
-            "funscript_heatmap_draw_range_desc": "在生成的热图的y轴上绘制运动范围。更改后需要重新生成现有热图。",
             "gallery_cover_regex_desc": "正则表达式用于将图像识别为图库封面。",
             "gallery_cover_regex_label": "图库封面模式",
             "gallery_ext_desc": "逗号(半角)分隔的文件扩展名列表，将被标识为基于压缩文件的图库。",
@@ -398,7 +395,6 @@
             "generated_files_location": "生成数据的存储目录（短片标记，短片预览，预览图等）。",
             "generated_path_head": "生成数据的存储路径",
             "hashing": "识别码设置",
-            "heatmap_generation": "Funscript 热图生成",
             "image_ext_desc": "逗号(半角)分隔的文件扩展名列表，将被标识为图片。",
             "image_ext_head": "图片扩展名",
             "include_audio_desc": "生成预览时包括音频流.",
@@ -697,24 +693,6 @@
                     }
                 }
             },
-            "funscript_offset": {
-                "description": "交互式脚本播放的时间偏移量（以毫秒为单位）。",
-                "heading": "Funscript偏移量（毫秒）"
-            },
-            "handy_connection": {
-                "connect": "连接",
-                "server_offset": {
-                    "heading": "服务器偏差值"
-                },
-                "status": {
-                    "heading": "Handy 连接状态"
-                },
-                "sync": "同步"
-            },
-            "handy_connection_key": {
-                "description": "用于互动场景的快速连接密钥。设定此密匙会允许Stash分享你当前的短片资料到handyfeeling.com。",
-                "heading": "Handy 连接密钥"
-            },
             "image_lightbox": {
                 "heading": "图片灯箱"
             },
@@ -736,7 +714,6 @@
                     }
                 }
             },
-            "interactive_options": "互动功能选项",
             "language": {
                 "heading": "语言"
             },
@@ -852,10 +829,6 @@
                     "heading": "启用背景图像",
                     "description": "在详情页面上显示背景图片。"
                 }
-            },
-            "use_stash_hosted_funscript": {
-                "description": "启用后，funscript将直接从Stash提供到您的Handy设备，而无需使用第三方Handy服务器。要求可以从您的Handy设备访问Stash，并且如果stash配置了凭据，则会生成API密钥。",
-                "heading": "直接提供funscripts服务"
             },
             "performer_list": {
                 "heading": "表演者列表",
@@ -1016,7 +989,6 @@
             "force_transcodes_tooltip": "默认情况下，转码文件只会在浏览器不支持的情况下生成。如果开启此选项，即使浏览器支持该视频，也会生成转码文件。",
             "image_previews": "动图预览",
             "image_previews_tooltip": "同时生成动图（webp）预览，仅当短片/标记墙预览类型设置为动图时才需要。浏览时，它们使用的CPU比视频预览少，但会额外生成更大的文件。",
-            "interactive_heatmap_speed": "产生热图和速度资料给有互动的短片",
             "marker_image_previews": "标记动图预览",
             "marker_image_previews_tooltip": "同时生成动图（webp）预览，仅当短片/标记墙预览类型设置为动图时才需要。浏览时，它们使用的CPU比视频预览少，但会额外生成更大的文件。",
             "marker_screenshots": "标记的屏幕截图",
@@ -1184,15 +1156,6 @@
         "TRANSGENDER_MALE": "跨性别男性"
     },
     "hair_color": "头发颜色",
-    "handy_connection_status": {
-        "connecting": "连接中",
-        "disconnected": "连接已断开",
-        "error": "连接到 Handy 时出错",
-        "missing": "无",
-        "ready": "准备好",
-        "syncing": "正在和服务器同步",
-        "uploading": "上传脚本中"
-    },
     "hasChapters": "章节",
     "hasMarkers": "章节标记",
     "height": "身高",
@@ -1207,8 +1170,6 @@
     "include_sub_studios": "包含子工作室",
     "include_sub_tags": "包含子标签",
     "instagram": "Instagram",
-    "interactive": "互动",
-    "interactive_speed": "互动速度",
     "isMissing": "缺失",
     "last_played_at": "最后播放在",
     "library": "收藏库",
@@ -1222,7 +1183,6 @@
     "media_info": {
         "audio_codec": "声音编码",
         "downloaded_from": "下载地址",
-        "interactive_speed": "互动速度",
         "performer_card": {
             "age": "{age} {years_old}",
             "age_context": "制作时 {age} {years_old}"
