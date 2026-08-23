@@ -179,6 +179,7 @@ interface ISceneFileInfoPanelProps {
 const _SceneFileInfoPanel: React.FC<ISceneFileInfoPanelProps> = (
   props: ISceneFileInfoPanelProps
 ) => {
+  const intl = useIntl();
   const Toast = useToast();
 
   const [loading, setLoading] = useState(false);
@@ -308,10 +309,16 @@ const _SceneFileInfoPanel: React.FC<ISceneFileInfoPanelProps> = (
         )}
         {renderFunscript()}
         {renderInteractiveSpeed()}
-        <URLsField id="urls" urls={props.scene.urls} truncate />
         <TextField
           id="transcode_benefit"
-          value={props.scene.transcode_benefit ?? "—"}
+          value={
+            props.scene.transcode_benefit
+              ? intl.formatMessage({
+                  id: `transcode_benefit_enum.${props.scene.transcode_benefit}`,
+                  defaultMessage: props.scene.transcode_benefit,
+                })
+              : "—"
+          }
         />
 
         {renderStashIDs()}

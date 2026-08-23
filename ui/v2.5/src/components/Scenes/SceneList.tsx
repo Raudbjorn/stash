@@ -19,7 +19,7 @@ import { SceneListTable } from "./SceneListTable";
 import { EditScenesDialog } from "./EditScenesDialog";
 import { DeleteScenesDialog } from "./DeleteScenesDialog";
 import { GenerateDialog } from "../Dialogs/GenerateDialog";
-import { LibraryTranscodeDialog } from "../Dialogs/LibraryTranscodeDialog";
+import { LibraryTranscodeDialog, ScoreTranscodeBenefitDialog } from "../Dialogs/LibraryTranscodeDialog";
 
 import { ExportDialog } from "../Shared/ExportDialog";
 import { SceneCardGrid } from "./SceneCardGrid";
@@ -614,7 +614,7 @@ export const FilteredSceneList = PatchComponent(
         onClick: () =>
           showModal(
             <LibraryTranscodeDialog
-              selectedIds={Array.from(selectedIds.values())}
+              selected={selectedItems}
               onClose={() => closeModal()}
             />
           ),
@@ -623,23 +623,27 @@ export const FilteredSceneList = PatchComponent(
       {
         text: intl.formatMessage({ id: "actions.score_transcode_benefit" }),
         onClick: () => {
-          const sceneIDs = hasSelection
-            ? Array.from(selectedIds.values())
-            : [];
-          mutateMetadataScoreTranscodeBenefit({ sceneIDs })
-            .then(() => {
-              Toast.success(
-                intl.formatMessage(
-                  { id: "config.tasks.added_job_to_queue" },
-                  {
-                    operation_name: intl.formatMessage({
-                      id: "actions.score_transcode_benefit",
-                    }),
-                  }
-                )
-              );
-            })
-            .catch((e) => Toast.error(e));
+          if (hasSelection) {
+            const sceneIDs = Array.from(selectedIds.values());
+            mutateMetadataScoreTranscodeBenefit({ sceneIDs })
+              .then(() => {
+                Toast.success(
+                  intl.formatMessage(
+                    { id: "config.tasks.added_job_to_queue" },
+                    {
+                      operation_name: intl.formatMessage({
+                        id: "actions.score_transcode_benefit",
+                      }),
+                    }
+                  )
+                );
+              })
+              .catch((e) => Toast.error(e));
+            return;
+          }
+          showModal(
+            <ScoreTranscodeBenefitDialog onClose={() => closeModal()} />
+          );
         },
         isDisplayed: () => true,
       },

@@ -1429,6 +1429,9 @@
     "scrape_results_scraped": "Scraped",
     "set_default_filter_confirm": "Are you sure you want to set this filter as the default?",
     "set_image_url_title": "Image URL",
+    "library_transcode_confirm": "This replaces each scene's primary file with a downscaled transcode and deletes the original. Funscripts and captions are copied onto the new file.",
+    "library_transcode_profile": "Transcode profile",
+    "score_transcode_benefit_all": "Score transcode benefit for every scene in the library? This does not delete files.",
     "unsaved_changes": "Unsaved changes. Are you sure you want to leave?"
   },
   "dimensions": "Dimensions",
@@ -2065,11 +2068,15 @@
     "updated_entity": "Updated {entity}",
     "upload_caption_success": "Caption uploaded"
   },
-  "transcode_benefit": "Transcode Benefit",
   "transcode_benefit_enum": {
     "HIGH": "HIGH",
     "MEDIUM": "MEDIUM",
     "LOW": "LOW"
+  },
+  "library_transcode_profile": {
+    "HQ_480": "HQ 480 (NVENC)",
+    "LQ_480": "LQ 480 (NVENC)",
+    "MAX_360": "MAX 360 (NVENC, then x265/x264)"
   },
 
   "total": "Total",

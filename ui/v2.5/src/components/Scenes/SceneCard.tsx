@@ -14,7 +14,7 @@ import { useConfigurationContext } from "src/hooks/Config";
 import { PerformerPopoverButton } from "../Shared/PerformerPopoverButton";
 import { GridCard } from "../Shared/GridCard/GridCard";
 import { RatingBanner } from "../Shared/RatingBanner";
-import { FormattedMessage } from "react-intl";
+import { FormattedMessage, useIntl } from "react-intl";
 import {
   faBox,
   faCopy,
@@ -376,9 +376,9 @@ const SceneCardOverlays = React.memo(
 interface ISceneSpecsOverlay {
   scene: GQL.SlimSceneDataFragment;
 }
-
 export const SceneSpecsOverlay: React.FC<ISceneSpecsOverlay> = React.memo(
   PatchComponent("SceneCard.SceneSpecs", ({ scene }) => {
+    const intl = useIntl();
     const file = scene.files?.[0];
     if (!file) return null;
     return (
@@ -395,7 +395,10 @@ export const SceneSpecsOverlay: React.FC<ISceneSpecsOverlay> = React.memo(
         )}
         {scene.transcode_benefit ? (
           <span className="overlay-transcode-benefit">
-            {scene.transcode_benefit}
+            {intl.formatMessage({
+              id: `transcode_benefit_enum.${scene.transcode_benefit}`,
+              defaultMessage: scene.transcode_benefit,
+            })}
           </span>
         ) : (
           ""

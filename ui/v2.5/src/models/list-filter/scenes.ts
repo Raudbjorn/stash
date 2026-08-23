@@ -59,6 +59,7 @@ const sortByOptions = [
   "play_count",
   "interactive",
   "interactive_speed",
+  "transcode_benefit",
   "perceptual_similarity",
   "performer_age",
   "studio",

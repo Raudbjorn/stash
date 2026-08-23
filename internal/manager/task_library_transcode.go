@@ -2,21 +2,19 @@ package manager
 
 import (
 	"context"
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+
 	"strconv"
-	"strings"
+
 	"sync"
 
 	"github.com/remeh/sizedwaitgroup"
 	"github.com/stashapp/stash/pkg/ffmpeg"
 	"github.com/stashapp/stash/pkg/file"
 	filevideo "github.com/stashapp/stash/pkg/file/video"
-	"github.com/stashapp/stash/pkg/fsutil"
 	"github.com/stashapp/stash/pkg/job"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
@@ -299,9 +297,8 @@ func (t *LibraryTranscodeTask) rewrite(ctx context.Context, primary *models.Vide
 		return encodeErr
 	}
 
-	finalPath := libraryFinalPath(srcPath, target)
-	if err := fsutil.SafeMove(tempPath, finalPath); err != nil {
-		_ = os.Remove(tempPath)
+	finalPath := librarytranscode.FinalPath(srcPath, target)
+	if err := librarytranscode.MoveFileNoReplace(tempPath, finalPath); err != nil {
 		return fmt.Errorf("moving temp output: %w", err)
 	}
 
@@ -422,27 +419,6 @@ func (t *LibraryTranscodeTask) rewrite(ctx context.Context, primary *models.Vide
 	}
 
 	return nil
-}
-
-func libraryFinalPath(srcPath string, target int) string {
-	dir := filepath.Dir(srcPath)
-	base := filepath.Base(srcPath)
-	ext := filepath.Ext(base)
-	stem := strings.TrimSuffix(base, ext)
-	suffix := fmt.Sprintf("_%dp.mp4", target)
-	finalPath := filepath.Join(dir, stem+suffix)
-	if finalPath == srcPath {
-		return hashedLibraryPath(dir, stem, suffix, srcPath)
-	}
-	if st, err := os.Stat(finalPath); err == nil && !st.IsDir() {
-		return hashedLibraryPath(dir, stem, suffix, srcPath)
-	}
-	return finalPath
-}
-
-func hashedLibraryPath(dir, stem, suffix, srcPath string) string {
-	sum := md5.Sum([]byte(srcPath))
-	return filepath.Join(dir, stem+"_"+hex.EncodeToString(sum[:])[:8]+suffix)
 }
 
 func scanLibraryOutput(ctx context.Context, repo models.Repository, path string) (*file.ScanFileResult, error) {

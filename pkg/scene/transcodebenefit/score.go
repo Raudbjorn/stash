@@ -14,8 +14,9 @@ func MinSide(width, height int) int {
 	return height
 }
 
-// SizeP80 returns the 80th-percentile size among primary video files.
-// Empty libraries or n < 5 return 0 so the quintile never fires.
+// SizeP80 returns the 80th-percentile size among primary video files using the
+// nearest-rank method (sorted[int(0.8*n)]). Empty libraries or n < 5 return
+// 0 so the quintile never fires.
 func SizeP80(sizes []int64) int64 {
 	n := len(sizes)
 	if n < 5 {
