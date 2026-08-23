@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Form } from "react-bootstrap";
-import { faCogs } from "@fortawesome/free-solid-svg-icons";
+import { faExclamationTriangle } from "@fortawesome/free-solid-svg-icons";
 import { FormattedMessage, useIntl } from "react-intl";
 import * as GQL from "src/core/generated-graphql";
 import { mutateMetadataLibraryTranscode } from "src/core/StashService";
@@ -21,12 +21,13 @@ export const LibraryTranscodeDialog: React.FC<ILibraryTranscodeDialog> = ({
   const [profile, setProfile] = useState<GQL.LibraryTranscodeProfile>(
     GQL.LibraryTranscodeProfile.Hq_480
   );
-
+  const [running, setRunning] = useState(false);
 
   async function onSubmit() {
     if (selectedIds.length === 0) {
       return;
     }
+    setRunning(true);
     try {
       await mutateMetadataLibraryTranscode({
         sceneIDs: selectedIds,
@@ -45,6 +46,7 @@ export const LibraryTranscodeDialog: React.FC<ILibraryTranscodeDialog> = ({
     } catch (e) {
       Toast.error(e);
     } finally {
+      setRunning(false);
       onClose();
     }
   }
@@ -52,26 +54,31 @@ export const LibraryTranscodeDialog: React.FC<ILibraryTranscodeDialog> = ({
   return (
     <ModalComponent
       show
-      icon={faCogs}
-      header={intl.formatMessage({ id: "actions.library_transcode" })}
+      icon={faExclamationTriangle}
+      header={intl.formatMessage({ id: "dialogs.library_transcode.title" })}
       accept={{
         onClick: onSubmit,
-        text: intl.formatMessage({ id: "actions.library_transcode" }),
+        text: intl.formatMessage({ id: "dialogs.library_transcode.confirm" }),
+        variant: "danger",
       }}
       cancel={{
         onClick: () => onClose(),
         text: intl.formatMessage({ id: "actions.cancel" }),
         variant: "secondary",
       }}
+      isRunning={running}
+      disabled={selectedIds.length === 0}
     >
       <Form>
         <p>
-          <FormattedMessage id="actions.library_transcode" />
-          {`: ${selectedIds.length}`}
+          <FormattedMessage
+            id="dialogs.library_transcode.desc"
+            values={{ count: selectedIds.length }}
+          />
         </p>
         <Form.Group>
           <Form.Label>
-            <FormattedMessage id="transcode_benefit" />
+            <FormattedMessage id="dialogs.library_transcode.profile" />
           </Form.Label>
           <Form.Control
             as="select"
@@ -81,11 +88,22 @@ export const LibraryTranscodeDialog: React.FC<ILibraryTranscodeDialog> = ({
               setProfile(e.currentTarget.value as GQL.LibraryTranscodeProfile)
             }
           >
-            <option value={GQL.LibraryTranscodeProfile.Hq_480}>HQ_480</option>
-            <option value={GQL.LibraryTranscodeProfile.Lq_480}>LQ_480</option>
-            <option value={GQL.LibraryTranscodeProfile.Max_360}>MAX_360</option>
+            <option value={GQL.LibraryTranscodeProfile.Hq_480}>
+              {intl.formatMessage({
+                id: "dialogs.library_transcode.profiles.HQ_480",
+              })}
+            </option>
+            <option value={GQL.LibraryTranscodeProfile.Lq_480}>
+              {intl.formatMessage({
+                id: "dialogs.library_transcode.profiles.LQ_480",
+              })}
+            </option>
+            <option value={GQL.LibraryTranscodeProfile.Max_360}>
+              {intl.formatMessage({
+                id: "dialogs.library_transcode.profiles.MAX_360",
+              })}
+            </option>
           </Form.Control>
-
         </Form.Group>
       </Form>
     </ModalComponent>

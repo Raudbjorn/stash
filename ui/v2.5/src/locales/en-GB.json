@@ -1356,6 +1356,17 @@
       "empty_results": "Destination field values will be unchanged.",
       "source": "Source"
     },
+    "library_transcode": {
+      "title": "Library transcode",
+      "confirm": "Rewrite and delete originals",
+      "desc": "{count, plural, one {Rewrite this scene's primary file at the selected profile, then delete the original. Funscripts and captions are copied onto the new file. This cannot be undone.} other {Rewrite # selected scenes' primary files at the selected profile, then delete the originals. Funscripts and captions are copied onto the new files. This cannot be undone.}}",
+      "profile": "Profile",
+      "profiles": {
+        "HQ_480": "HQ 480p (NVENC cq 24, AAC 96k)",
+        "LQ_480": "LQ 480p (NVENC cq 30, AAC 64k)",
+        "MAX_360": "MAX 360p (NVENC cq 35 24fps, software fallback)"
+      }
+    },
     "overwrite_filter_warning": "Saved filter \"{entityName}\" will be overwritten.",
     "performers_found": "{count} performers found",
     "reassign_entity_title": "{count, plural, one {Reassign {singularEntity}} other {Reassign {pluralEntity}}}",

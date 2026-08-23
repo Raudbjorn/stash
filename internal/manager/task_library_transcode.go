@@ -16,6 +16,7 @@ import (
 	"github.com/stashapp/stash/pkg/ffmpeg"
 	"github.com/stashapp/stash/pkg/file"
 	filevideo "github.com/stashapp/stash/pkg/file/video"
+	"github.com/stashapp/stash/pkg/fsutil"
 	"github.com/stashapp/stash/pkg/job"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
@@ -118,14 +119,14 @@ func (p LibraryTranscodeProfile) targetHeight() int {
 	return 480
 }
 
-func (p LibraryTranscodeProfile) nvencSpec() librarytranscode.EncodeSpec {
+func (p LibraryTranscodeProfile) nvencSpec(width, height int) librarytranscode.EncodeSpec {
 	switch p {
 	case LibraryTranscodeLQ480:
-		return librarytranscode.NVENCSpec(480, 30, "64k", 0)
+		return librarytranscode.NVENCSpec(480, 30, "64k", 0, width, height)
 	case LibraryTranscodeMax360:
-		return librarytranscode.NVENCSpec(360, 35, "48k", 24)
+		return librarytranscode.NVENCSpec(360, 35, "48k", 24, width, height)
 	default:
-		return librarytranscode.NVENCSpec(480, 24, "96k", 0)
+		return librarytranscode.NVENCSpec(480, 24, "96k", 0, width, height)
 	}
 }
 
@@ -185,8 +186,12 @@ func (j *LibraryTranscodeJob) Execute(ctx context.Context, progress *job.Progres
 	}
 	wg.Wait()
 
-	logger.Infof("%d rewritten, %d failed", j.rewritten, j.failed)
+	logger.Infof("%d rewritten, %d failed, %d skipped", j.rewritten, j.failed, j.skipped)
+	if j.failed > 0 && j.rewritten == 0 {
+		return fmt.Errorf("%d failed, %d skipped", j.failed, j.skipped)
+	}
 	return nil
+
 }
 
 type LibraryTranscodeTask struct {
@@ -245,8 +250,10 @@ func (t *LibraryTranscodeTask) rewrite(ctx context.Context, primary *models.Vide
 
 	KillRunningStreams(t.scene, algo)
 
-	dir := filepath.Dir(srcPath)
-	tempPath := filepath.Join(dir, fmt.Sprintf(".stash-libtranscode-%d.tmp.mp4", t.scene.ID))
+	if err := instance.Paths.Generated.EnsureTmpDir(); err != nil {
+		return fmt.Errorf("ensuring tmp dir: %w", err)
+	}
+	tempPath := instance.Paths.Generated.GetTmpPath(fmt.Sprintf("libtranscode-%d.mp4", t.scene.ID))
 	if _, err := os.Stat(tempPath); err == nil {
 		_ = os.Remove(tempPath)
 	}
@@ -254,17 +261,18 @@ func (t *LibraryTranscodeTask) rewrite(ctx context.Context, primary *models.Vide
 	srcDuration := primary.Duration
 	target := t.profile.targetHeight()
 
-	specs := []librarytranscode.EncodeSpec{t.profile.nvencSpec()}
+	specs := []librarytranscode.EncodeSpec{t.profile.nvencSpec(primary.Width, primary.Height)}
 	if t.profile == LibraryTranscodeMax360 {
-		specs = append(specs, librarytranscode.SoftwareX265Spec(), librarytranscode.SoftwareX264Spec())
+		specs = append(specs,
+			librarytranscode.SoftwareX265Spec(primary.Width, primary.Height),
+			librarytranscode.SoftwareX264Spec(primary.Width, primary.Height),
+		)
 	}
 
 	var encodeErr error
 	encoded := false
 	for i, spec := range specs {
-		if !spec.UseCUDA {
-			spec.UseCUDA = false
-		} else if !hasNVENC() {
+		if spec.UseCUDA && !hasNVENC() {
 			encodeErr = fmt.Errorf("h264_nvenc not available")
 			continue
 		}
@@ -292,16 +300,26 @@ func (t *LibraryTranscodeTask) rewrite(ctx context.Context, primary *models.Vide
 	}
 
 	finalPath := libraryFinalPath(srcPath, target)
-	if err := os.Rename(tempPath, finalPath); err != nil {
+	if err := fsutil.SafeMove(tempPath, finalPath); err != nil {
 		_ = os.Remove(tempPath)
-		return fmt.Errorf("renaming temp output: %w", err)
+		return fmt.Errorf("moving temp output: %w", err)
 	}
 
 	committed := false
 	var newFileID models.FileID
+	var copiedSidecars []string
 	defer func() {
-		if !committed {
-			_ = os.Remove(finalPath)
+		if committed {
+			return
+		}
+		_ = os.Remove(finalPath)
+		for _, p := range copiedSidecars {
+			_ = os.Remove(p)
+		}
+		if newFileID != 0 {
+			_ = t.job.repository.WithTxn(ctx, func(ctx context.Context) error {
+				return t.job.repository.File.Destroy(ctx, newFileID)
+			})
 		}
 	}()
 
@@ -320,6 +338,38 @@ func (t *LibraryTranscodeTask) rewrite(ctx context.Context, primary *models.Vide
 	newFileID = newFile.Base().ID
 	newHash := scene.GetHash(newFile, algo)
 
+	var oldCaps []*models.VideoCaption
+	if err := t.job.repository.WithReadTxn(ctx, func(ctx context.Context) error {
+		var err error
+		oldCaps, err = t.job.repository.File.GetCaptions(ctx, oldID)
+		return err
+	}); err != nil {
+		return fmt.Errorf("loading captions: %w", err)
+	}
+
+	if dest, err := librarytranscode.RelocateFunscript(srcPath, finalPath); err != nil {
+		return fmt.Errorf("copying funscript: %w", err)
+	} else if dest != "" {
+		copiedSidecars = append(copiedSidecars, dest)
+	}
+
+	var newCaps []*models.VideoCaption
+	for _, cap := range oldCaps {
+		if cap == nil {
+			continue
+		}
+		relocated, dest, created, err := librarytranscode.RelocateCaption(srcPath, finalPath, *cap)
+		if err != nil {
+			return fmt.Errorf("copying caption %s: %w", cap.Filename, err)
+		}
+		if created {
+			copiedSidecars = append(copiedSidecars, dest)
+		}
+		if relocated != nil {
+			newCaps = append(newCaps, relocated)
+		}
+	}
+
 	if err := t.job.repository.WithTxn(ctx, func(ctx context.Context) error {
 		if err := instance.SceneService.AssignFile(ctx, t.scene.ID, newFileID); err != nil {
 			return fmt.Errorf("assigning file: %w", err)
@@ -330,11 +380,13 @@ func (t *LibraryTranscodeTask) rewrite(ctx context.Context, primary *models.Vide
 		if _, err := t.job.repository.Scene.UpdatePartial(ctx, t.scene.ID, partial); err != nil {
 			return fmt.Errorf("updating primary file: %w", err)
 		}
+		if len(newCaps) > 0 {
+			if err := t.job.repository.File.UpdateCaptions(ctx, newFileID, newCaps); err != nil {
+				return fmt.Errorf("attaching captions: %w", err)
+			}
+		}
 		return nil
 	}); err != nil {
-		_ = t.job.repository.WithTxn(ctx, func(ctx context.Context) error {
-			return t.job.repository.File.Destroy(ctx, newFileID)
-		})
 		return err
 	}
 
@@ -347,6 +399,7 @@ func (t *LibraryTranscodeTask) rewrite(ctx context.Context, primary *models.Vide
 	trashPath := instance.Config.GetDeleteTrashPath()
 	fileDeleter := file.NewDeleterWithTrash(trashPath)
 	if err := t.job.repository.WithTxn(ctx, func(ctx context.Context) error {
+		fileDeleter.RegisterHooks(ctx)
 		isPrimary, err := t.job.repository.File.IsPrimary(ctx, oldID)
 		if err != nil {
 			return fmt.Errorf("checking if file is primary: %w", err)
@@ -364,11 +417,9 @@ func (t *LibraryTranscodeTask) rewrite(ctx context.Context, primary *models.Vide
 		const deleteFile = true
 		return file.Destroy(ctx, t.job.repository.File, oldFiles[0], fileDeleter, deleteFile)
 	}); err != nil {
-		fileDeleter.Rollback()
 		logger.Errorf("library transcode scene %d: new file is primary but source delete failed: %v", t.scene.ID, err)
 		return fmt.Errorf("deleting source file: %w", err)
 	}
-	fileDeleter.Commit()
 
 	return nil
 }
