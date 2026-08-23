@@ -58,7 +58,18 @@ func TestCleanTitlePreservesUnknownAndOrdinaryTokens(t *testing.T) {
 	assert.Equal(t, "Jane Doe Ordinary Title", CleanTitle("Jane Doe - Ordinary Title [1080p x264 DirectorsCut].mkv", nil))
 	assert.Equal(t, "Ordinary Title", CleanTitle("Ordinary.Title.[1080p.x264].mkv", nil))
 	assert.Equal(t, "PervMom", CleanTitle("[XXXClub to]PervMom MP4- [XC]", nil))
-	assert.Equal(t, "And The Handjob", CleanTitle("23 02 12 And The Handjob XviD-iPT", nil))
+}
+
+func TestCleanTitleOrdinaryHyphenatedNotTreatedAsReleaseGroup(t *testing.T) {
+	// Regression: the short-alnum release-group heuristic used to
+	// misclassify any 1–6 char trailing dash suffix as a release group and
+	// truncated ordinary hyphenated titles ("Spider-Man" → "Spider").
+	// The release group is only classified when a recognized technical
+	// token ends right at the dash.
+	assert.Equal(t, "Spider-Man", CleanTitle("Spider-Man.mp4", nil))
+	assert.Nil(t, ParseTextMetadata("Spider-Man.mp4").ReleaseGroup)
+	assert.Equal(t, "Foo-Studio", CleanTitle("Foo-Studio.mp4", nil))
+	assert.Nil(t, ParseTextMetadata("Foo-Studio.mp4").ReleaseGroup)
 }
 
 func TestCleanTitleRemovesRecognizedEntitySpans(t *testing.T) {

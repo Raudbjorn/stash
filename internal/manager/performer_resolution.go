@@ -840,6 +840,19 @@ func (j *analyzeSceneMetadataJob) planVerifiedPerformer(ctx context.Context, can
 	}); err != nil {
 		return resolution, err
 	}
+	if j.ignoreMale() {
+		// Drop male library matches before computing MatchingIDs so an
+		// ignore-male policy cannot be silently bypassed by a single
+		// remaining exact-match after filtering.
+		kept := fresh[:0]
+		for _, identity := range fresh {
+			if identity.Gender == models.GenderEnumMale {
+				continue
+			}
+			kept = append(kept, identity)
+		}
+		fresh = kept
+	}
 	resolution.MatchingIDs = performerIdentityIDs(fresh)
 	if len(fresh) == 1 {
 		resolution.Status = performerResolutionExisting

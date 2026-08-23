@@ -165,16 +165,7 @@ func ParseTextMetadata(text string) ParsedText {
 					break
 				}
 			}
-			shortAlnum := len(groupText) >= 1 && len(groupText) <= 6
-			if shortAlnum {
-				for _, r := range groupText {
-					if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
-						shortAlnum = false
-						break
-					}
-				}
-			}
-			if technicalEndsAtDash || shortAlnum {
+			if technicalEndsAtDash {
 				parsed.ReleaseGroup = &EntitySpan{
 					ByteStart: dash, ByteEnd: baseEnd, Text: groupText,
 					Label: EntityLabelReleaseGroup, Score: 1,

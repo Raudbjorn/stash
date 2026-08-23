@@ -1287,3 +1287,39 @@ func TestPlanVerifiedPerformerIgnoresMaleScrapedIdentity(t *testing.T) {
 		t.Fatalf("planVerifiedPerformer male = %+v", resolution)
 	}
 }
+
+// Regression: ignoreMalePerformers used to be silently bypassed when a male
+// library performer was the only exact-name match after the global filter
+// (planVerifiedPerformer re-loaded the male identity into fresh and returned
+// single_exact_library_match before checking skipMaleGender). Filter fresh
+// immediately after the read txn.
+func TestPlanVerifiedPerformerIgnoresMaleLibraryExactMatch(t *testing.T) {
+	r := newTestRepository(t)
+	male := models.GenderEnumMale
+	malePerformer := models.NewPerformer()
+	malePerformer.Name = "Alex Doe"
+	malePerformer.Gender = &male
+	if err := r.WithTxn(context.Background(), func(ctx context.Context) error {
+		return r.Performer.Create(ctx, &models.CreatePerformerInput{Performer: &malePerformer})
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	job := newResolutionJob(r, AnalyzeSceneMetadataInput{IgnoreMalePerformers: true}, &recordingPerformerScraperCache{})
+	female := models.GenderEnumFemale
+	resolution, err := job.planVerifiedPerformer(context.Background(), "Alex Doe", []scrapedPerformerIdentity{{
+		Name: "Alex Doe", Gender: female,
+	}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolution.Status != performerResolutionProposed || resolution.Reason != performerReasonVerifiedNewPerformer {
+		t.Fatalf("expected proposed/verified_new_performer, got %+v", resolution)
+	}
+	if resolution.PerformerID != 0 {
+		t.Fatalf("male library match leaked through: %+v", resolution)
+	}
+	if len(resolution.MatchingIDs) != 0 {
+		t.Fatalf("MatchingIDs should not include filtered male library match: %+v", resolution)
+	}
+}
