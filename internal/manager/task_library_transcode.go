@@ -309,11 +309,17 @@ func (t *LibraryTranscodeTask) rewrite(ctx context.Context, primary *models.Vide
 	var newFileID models.FileID
 	var copiedSidecars []string
 	defer func() {
-		if !committed {
-			_ = os.Remove(finalPath)
-			for _, p := range copiedSidecars {
-				_ = os.Remove(p)
-			}
+		if committed {
+			return
+		}
+		_ = os.Remove(finalPath)
+		for _, p := range copiedSidecars {
+			_ = os.Remove(p)
+		}
+		if newFileID != 0 {
+			_ = t.job.repository.WithTxn(ctx, func(ctx context.Context) error {
+				return t.job.repository.File.Destroy(ctx, newFileID)
+			})
 		}
 	}()
 
@@ -352,11 +358,11 @@ func (t *LibraryTranscodeTask) rewrite(ctx context.Context, primary *models.Vide
 		if cap == nil {
 			continue
 		}
-		relocated, dest, err := librarytranscode.RelocateCaption(srcPath, finalPath, *cap)
+		relocated, dest, created, err := librarytranscode.RelocateCaption(srcPath, finalPath, *cap)
 		if err != nil {
 			return fmt.Errorf("copying caption %s: %w", cap.Filename, err)
 		}
-		if dest != "" {
+		if created {
 			copiedSidecars = append(copiedSidecars, dest)
 		}
 		if relocated != nil {
@@ -381,9 +387,6 @@ func (t *LibraryTranscodeTask) rewrite(ctx context.Context, primary *models.Vide
 		}
 		return nil
 	}); err != nil {
-		_ = t.job.repository.WithTxn(ctx, func(ctx context.Context) error {
-			return t.job.repository.File.Destroy(ctx, newFileID)
-		})
 		return err
 	}
 
