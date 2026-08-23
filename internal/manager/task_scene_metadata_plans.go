@@ -554,6 +554,7 @@ func sceneMetadataPolicyVersion(input AnalyzeSceneMetadataInput) string {
 		UseDetails         bool
 		ProviderPolicies   []ProviderPolicy
 		ReplacePerformers  bool
+		IgnoreMale         bool
 	}{
 		PerformerScrapers:  append([]string(nil), input.PerformerVerifierScraperIDs...),
 		PerformerBoxes:     append([]string(nil), input.PerformerVerifierStashBoxEndpoints...),
@@ -566,6 +567,7 @@ func sceneMetadataPolicyVersion(input AnalyzeSceneMetadataInput) string {
 		UseDetails:         input.UseDetails,
 		ProviderPolicies:   append([]ProviderPolicy(nil), input.ProviderPolicies...),
 		ReplacePerformers:  input.ReplaceLocalPerformersFromRemote,
+		IgnoreMale:         input.IgnoreMalePerformers,
 	}
 	encoded, _ := json.Marshal(payload)
 	digest := sha256.Sum256(encoded)

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button, Spinner } from "react-bootstrap";
 import { faClipboardCheck } from "@fortawesome/free-solid-svg-icons";
 import { useIntl } from "react-intl";
@@ -9,9 +9,11 @@ import {
   mutateApplySceneMetadataPlan,
   mutateRejectSceneMetadataProposalAction,
   mutateSelectSceneMetadataRemoteCandidate,
+  queryFindScenesByIDForSelect,
   useSceneMetadataAppliedPlans,
   useSceneMetadataPlans,
 } from "src/core/StashService";
+import { objectTitle } from "src/core/files";
 import { useToast } from "src/hooks/Toast";
 import { ModalComponent } from "src/components/Shared/Modal";
 
@@ -150,24 +152,70 @@ export const SceneMetadataPlanReviewModal: React.FC<
     }
     return Array.from(grouped, ([runID, plans]) => ({ runID, plans }));
   }, [data]);
+  const [sceneTitles, setSceneTitles] = useState<Record<string, string>>({});
+  const sceneTitleIDs = useMemo(() => {
+    const ids = new Set<string>();
+    for (const plan of data?.sceneMetadataPlans ?? []) {
+      ids.add(plan.sceneID);
+    }
+    return Array.from(ids).sort().join(",");
+  }, [data]);
 
-  async function reviewAction(
+  useEffect(() => {
+    if (!show) {
+      return;
+    }
+    const ids = sceneTitleIDs.length > 0 ? sceneTitleIDs.split(",") : [];
+    if (ids.length === 0) {
+      setSceneTitles({});
+      return;
+    }
+    let cancelled = false;
+    void queryFindScenesByIDForSelect(ids)
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        const titles: Record<string, string> = {};
+        for (const scene of result.data?.findScenes.scenes ?? []) {
+          titles[scene.id] = objectTitle(scene);
+        }
+        setSceneTitles(titles);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSceneTitles({});
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [show, sceneTitleIDs]);
+
+  async function reviewActions(
     runID: string,
     sceneID: string,
-    actionID: string,
+    actionIDs: string[],
     accept: boolean
   ) {
-    const key = `${accept ? "accept" : "reject"}:${actionID}`;
+    const key =
+      actionIDs.length === 1
+        ? `${accept ? "accept" : "reject"}:${actionIDs[0]}`
+        : `${accept ? "accept" : "reject"}-all:${sceneID}`;
     setBusyKey(key);
     try {
       if (accept) {
-        await mutateAcceptSceneMetadataProposalAction(runID, sceneID, [
-          actionID,
-        ]);
+        await mutateAcceptSceneMetadataProposalAction(
+          runID,
+          sceneID,
+          actionIDs
+        );
       } else {
-        await mutateRejectSceneMetadataProposalAction(runID, sceneID, [
-          actionID,
-        ]);
+        await mutateRejectSceneMetadataProposalAction(
+          runID,
+          sceneID,
+          actionIDs
+        );
       }
       await refetch();
     } catch (mutationError) {
@@ -175,6 +223,15 @@ export const SceneMetadataPlanReviewModal: React.FC<
     } finally {
       setBusyKey(undefined);
     }
+  }
+
+  async function reviewAction(
+    runID: string,
+    sceneID: string,
+    actionID: string,
+    accept: boolean
+  ) {
+    await reviewActions(runID, sceneID, [actionID], accept);
   }
 
   async function selectRemoteCandidate(
@@ -413,13 +470,7 @@ export const SceneMetadataPlanReviewModal: React.FC<
                 <div className="d-flex align-items-center mb-2">
                   <Link to={`/scenes/${plan.sceneID}`}>
                     <strong>
-                      {intl.formatMessage(
-                        {
-                          id: "scene_metadata.review.scene",
-                          defaultMessage: "Scene #{id}",
-                        },
-                        { id: plan.sceneID }
-                      )}
+                      {sceneTitles[plan.sceneID] || `#${plan.sceneID}`}
                     </strong>
                   </Link>
                   <Badge variant={stateVariant(plan.state)} className="ml-2">
@@ -432,6 +483,65 @@ export const SceneMetadataPlanReviewModal: React.FC<
                         defaultMessage: "Needs attention",
                       })}
                     </Badge>
+                  ) : null}
+                  {plan.suggested.some(
+                    (action) =>
+                      action.state === GQL.SceneMetadataPlanState.Proposed
+                  ) &&
+                  plan.state !== GQL.SceneMetadataPlanState.Applied &&
+                  plan.state !== GQL.SceneMetadataPlanState.Stale ? (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline-danger"
+                        className="ml-2"
+                        disabled={busyKey !== undefined}
+                        onClick={() =>
+                          void reviewActions(
+                            runID,
+                            plan.sceneID,
+                            plan.suggested
+                              .filter(
+                                (action) =>
+                                  action.state ===
+                                  GQL.SceneMetadataPlanState.Proposed
+                              )
+                              .map((action) => action.actionID),
+                            false
+                          )
+                        }
+                      >
+                        {intl.formatMessage({
+                          id: "scene_metadata.review.reject_remaining",
+                          defaultMessage: "Reject remaining",
+                        })}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline-success"
+                        className="ml-2"
+                        disabled={busyKey !== undefined}
+                        onClick={() =>
+                          void reviewActions(
+                            runID,
+                            plan.sceneID,
+                            plan.suggested
+                              .filter(
+                                (action) =>
+                                  action.state ===
+                                  GQL.SceneMetadataPlanState.Proposed
+                              )
+                              .map((action) => action.actionID),
+                            true
+                          )
+                        }
+                      >
+                        {intl.formatMessage({
+                          id: "scene_metadata.review.accept_remaining",
+                          defaultMessage: "Accept remaining",
+                        })}
+                      </Button>
+                    </>
                   ) : null}
                 </div>
                 {plan.remoteCandidates.length > 0 ? (
@@ -601,7 +711,7 @@ export const SceneMetadataPlanReviewModal: React.FC<
                 {plan.suggested.map((action) => (
                   <div
                     key={action.actionID}
-                    className="d-flex align-items-start justify-content-between border-top py-2"
+                    className={`scene-metadata-proposal scene-metadata-proposal--${action.state.toLowerCase()} d-flex align-items-start justify-content-between border-top py-2`}
                   >
                     <div className="pr-3">
                       <div>

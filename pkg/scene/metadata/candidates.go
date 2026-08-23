@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // wordSplitRE splits text on anything that isn't a letter, keeping
@@ -57,6 +58,12 @@ var nonNameTokens = map[string]struct{}{
 	"stepmom": {}, "stepsister": {}, "stepdad": {}, "teacher": {}, "boss": {},
 	"neighbor": {}, "teen": {}, "milf": {}, "goth": {}, "punk": {}, "nerdy": {},
 	"girls": {}, "boys": {}, "guys": {},
+	"anal": {}, "xxx": {}, "amateur": {}, "public": {}, "pov": {}, "vr": {},
+	"handjob": {}, "blowjob": {}, "squirt": {}, "creampie": {}, "pussy": {},
+	"dick": {}, "sex": {}, "fuck": {}, "fucking": {}, "oral": {}, "lesbian": {},
+	"gay": {}, "bisexual": {}, "threesome": {}, "orgy": {}, "gangbang": {},
+	"massage": {}, "casting": {}, "interview": {}, "compilation": {},
+	"trailer": {}, "clip": {},
 
 	// marketing superlatives and temporal title fragments
 	"amazing": {}, "beautiful": {}, "gorgeous": {}, "incredible": {},
@@ -143,4 +150,63 @@ func ExtractNameCandidates(text string, exclude func(candidate string) bool) []s
 	flushRun(len(words))
 
 	return ret
+}
+
+var parentheticalNameRE = regexp.MustCompile(`^(.+?)\s*\(([^)]*)\)\s*$`)
+
+// ImplausiblePerformerName reports names that must not be exact-matched,
+// verified, or created. GLiNER spans bypass ExtractNameCandidates, so this
+// gate is applied at library load, candidate collection, and resolution.
+func ImplausiblePerformerName(name string) bool {
+	return implausiblePerformerName(name, true)
+}
+
+func implausiblePerformerName(name string, unwrap bool) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return true
+	}
+	if unwrap {
+		if match := parentheticalNameRE.FindStringSubmatch(name); match != nil {
+			if implausiblePerformerName(match[1], false) || implausiblePerformerName(name, false) {
+				return true
+			}
+		}
+	}
+	if utf8.RuneCountInString(name) == 1 {
+		return true
+	}
+	key := NormalizeKey(name)
+	if key == "" || utf8.RuneCountInString(key) == 1 {
+		return true
+	}
+	tokens := strings.Fields(key)
+	if len(tokens) == 0 {
+		return true
+	}
+	if len(tokens) == 1 && isNonNameToken(tokens[0]) {
+		return true
+	}
+	allStop := true
+	for _, token := range tokens {
+		if !isNonNameToken(token) {
+			allStop = false
+			break
+		}
+	}
+	if allStop {
+		return true
+	}
+	if technicalTokenName(name) || technicalTokenName(key) {
+		return true
+	}
+	if releaseNameRE.MatchString(name) && utf8.RuneCountInString(name) <= 6 && !isNameLikeWord(name) {
+		return true
+	}
+	return false
+}
+
+func technicalTokenName(name string) bool {
+	match := technicalRE.FindStringSubmatch(name)
+	return match != nil && strings.EqualFold(strings.TrimSpace(match[1]), strings.TrimSpace(name))
 }

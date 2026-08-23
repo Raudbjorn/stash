@@ -745,6 +745,11 @@
         },
         "overwrite_date": "Overwrite an existing date only with high-confidence, uncontested evidence",
         "overwrite_title": "Overwrite a user-authored title",
+        "ignore_male_performers": {
+          "label": "Ignore male performers",
+          "help": "Skip library matches and newly discovered performers whose gender is male. Performers with unknown or other genders are kept."
+        },
+        "review_after_queue": "After the job finishes, open Review proposals. Accept or reject each change, then apply.",
         "performer_confidence": {
           "label": "Minimum raw score for new performer verification",
           "note": "Uncalibrated decision scores; not probabilities."
@@ -1744,6 +1749,37 @@
   "scene_created_at": "Scene Created At",
   "scene_date": "Date of Scene",
   "scene_id": "Scene ID",
+  "scene_metadata": {
+    "review": {
+      "action": "Review proposals",
+      "heading": "Review metadata proposals",
+      "advanced_options": "Scrapers, Stash-box, studio, and local AI",
+      "show_history": "Show earlier runs",
+      "clear_run_filter": "Show every run",
+      "waiting": "Waiting for analysis proposals…",
+      "last_applied": "Your last analysis was applied automatically on {appliedAt}.",
+      "empty": "No metadata proposals are available for the selected scenes. This view refreshes while analysis jobs run.",
+      "run": "Analysis {run}",
+      "apply": "Apply accepted changes ({count, number})",
+      "complete_before_apply": "Accept or reject every proposed change for a scene before applying it.",
+      "ambiguous": "Needs attention",
+      "remote_candidates": "Remote scene candidates",
+      "selected": "Selected",
+      "evidence": "Analysis evidence",
+      "no_changes": "No changes proposed.",
+      "nothing_to_apply": "No accepted changes to apply",
+      "applied": "Accepted metadata changes applied",
+      "accept_remaining": "Accept remaining",
+      "reject_remaining": "Reject remaining",
+      "purge": "Remove old runs",
+      "purge_age": "Remove applied runs older than",
+      "purge_hour": "1 hour",
+      "purge_day": "1 day",
+      "purge_week": "7 days",
+      "purge_month": "30 days",
+      "purged": "Removed {count, number} old analysis runs"
+    }
+  },
   "scene_tags": "Scene Tags",
   "scene_updated_at": "Scene Updated At",
   "scenes": "Scenes",

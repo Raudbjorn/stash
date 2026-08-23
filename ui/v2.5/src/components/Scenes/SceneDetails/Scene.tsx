@@ -776,6 +776,7 @@ const ScenePage: React.FC<IProps> = PatchComponent("ScenePage", (props) => {
                 <SceneMetadataAnalyzeButton
                   sceneIds={[scene.id]}
                   className="minimal"
+                  compact
                 />
               </span>
               <span>{renderOperations()}</span>

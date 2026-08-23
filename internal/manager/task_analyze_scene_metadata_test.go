@@ -1150,3 +1150,140 @@ func TestAnalyzeSceneMetadataExecuteHonorsSelectedSceneIDs(t *testing.T) {
 		t.Fatalf("excluded scene produced plans: %+v", excludedPlans)
 	}
 }
+
+func TestLoadLibraryRecordsSkipsImplausiblePerformerNames(t *testing.T) {
+	r := newTestRepository(t)
+	createTestPerformer(t, r, "Anal", "", "", nil, nil)
+	createTestPerformer(t, r, "Jane Doe", "", "", nil, nil)
+	job := newResolutionJob(r, AnalyzeSceneMetadataInput{}, &recordingPerformerScraperCache{})
+	if err := job.loadLibraryRecords(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(job.performerRecords) != 1 || job.performerRecords[0].Name != "Jane Doe" {
+		t.Fatalf("performerRecords = %+v, want only Jane Doe", job.performerRecords)
+	}
+}
+
+
+func TestResolvePerformerCandidatesRejectsImplausibleNames(t *testing.T) {
+	r := newTestRepository(t)
+	cache := &recordingPerformerScraperCache{
+		scrapers: []*scraper.Scraper{performerScraper("name", scraper.ScrapeTypeName)},
+	}
+	job := newResolutionJob(r, AnalyzeSceneMetadataInput{PerformerVerifierScraperIDs: []string{"name"}}, cache)
+	resolutions, err := job.resolvePerformerCandidates(context.Background(), 1, []string{"Anal", "XXX (Bilatinmen)"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resolutions) != 2 {
+		t.Fatalf("resolutions = %+v", resolutions)
+	}
+	for _, resolution := range resolutions {
+		if resolution.Status != performerResolutionUnverified || resolution.Reason != performerReasonImplausibleName ||
+			resolution.Proposed != nil {
+			t.Fatalf("resolution = %+v", resolution)
+		}
+	}
+	if calls := cache.recordedCalls(); len(calls) != 0 {
+		t.Fatalf("implausible names scraped: %+v", calls)
+	}
+}
+func TestLoadLibraryRecordsIgnoresMalePerformers(t *testing.T) {
+	r := newTestRepository(t)
+	jane := models.NewPerformer()
+	jane.Name = "Jane"
+	female := models.GenderEnumFemale
+	jane.Gender = &female
+	john := models.NewPerformer()
+	john.Name = "John"
+	male := models.GenderEnumMale
+	john.Gender = &male
+	if err := r.WithTxn(context.Background(), func(ctx context.Context) error {
+		if err := r.Performer.Create(ctx, &models.CreatePerformerInput{Performer: &jane}); err != nil {
+			return err
+		}
+		return r.Performer.Create(ctx, &models.CreatePerformerInput{Performer: &john})
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	ignored := newResolutionJob(r, AnalyzeSceneMetadataInput{IgnoreMalePerformers: true}, &recordingPerformerScraperCache{})
+	if err := ignored.loadLibraryRecords(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(ignored.performerRecords) != 1 || ignored.performerRecords[0].Name != "Jane" {
+		t.Fatalf("ignored male performerRecords = %+v", ignored.performerRecords)
+	}
+
+	included := newResolutionJob(r, AnalyzeSceneMetadataInput{}, &recordingPerformerScraperCache{})
+	if err := included.loadLibraryRecords(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(included.performerRecords) != 2 {
+		t.Fatalf("flag-off performerRecords = %+v, want Jane and John", included.performerRecords)
+	}
+}
+
+func TestResolvePerformerCandidatesIgnoresMaleScrapedProposal(t *testing.T) {
+	r := newTestRepository(t)
+	male := "MALE"
+	female := "FEMALE"
+	cache := &recordingPerformerScraperCache{
+		scrapers: []*scraper.Scraper{performerScraper("name", scraper.ScrapeTypeName)},
+		responses: map[performerScrapeCall][]scraper.ScrapedContent{
+			{"name", "John Doe"}: {scrapedPerformer("John Doe", func(p *models.ScrapedPerformer) {
+				p.Gender = &male
+			})},
+			{"name", "Jane Doe"}: {scrapedPerformer("Jane Doe", func(p *models.ScrapedPerformer) {
+				p.Gender = &female
+			})},
+			{"name", "Pat Doe"}: {scrapedPerformer("Pat Doe", nil)},
+		},
+	}
+	job := newResolutionJob(r, AnalyzeSceneMetadataInput{
+		IgnoreMalePerformers:        true,
+		PerformerVerifierScraperIDs: []string{"name"},
+	}, cache)
+
+	maleResolutions, err := job.resolvePerformerCandidates(context.Background(), 1, []string{"John Doe"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(maleResolutions) != 1 || maleResolutions[0].Status != performerResolutionUnverified ||
+		maleResolutions[0].Proposed != nil {
+		t.Fatalf("male resolution = %+v", maleResolutions)
+	}
+
+	femaleResolutions, err := job.resolvePerformerCandidates(context.Background(), 1, []string{"Jane Doe"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(femaleResolutions) != 1 || femaleResolutions[0].Status != performerResolutionProposed ||
+		femaleResolutions[0].Proposed == nil {
+		t.Fatalf("female resolution = %+v", femaleResolutions)
+	}
+
+	unknownResolutions, err := job.resolvePerformerCandidates(context.Background(), 1, []string{"Pat Doe"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unknownResolutions) != 1 || unknownResolutions[0].Status != performerResolutionProposed ||
+		unknownResolutions[0].Proposed == nil {
+		t.Fatalf("unknown-gender resolution = %+v", unknownResolutions)
+	}
+}
+
+func TestPlanVerifiedPerformerIgnoresMaleScrapedIdentity(t *testing.T) {
+	r := newTestRepository(t)
+	job := newResolutionJob(r, AnalyzeSceneMetadataInput{IgnoreMalePerformers: true}, &recordingPerformerScraperCache{})
+	resolution, err := job.planVerifiedPerformer(context.Background(), "John Doe", []scrapedPerformerIdentity{{
+		Name: "John Doe", Gender: models.GenderEnumMale,
+	}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolution.Status != performerResolutionUnverified || resolution.Reason != performerReasonIgnoredMale ||
+		resolution.Proposed != nil {
+		t.Fatalf("planVerifiedPerformer male = %+v", resolution)
+	}
+}

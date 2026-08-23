@@ -110,3 +110,16 @@ func TestHeuristicNamePlausibilityScorerRejectsNonNameTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestImplausiblePerformerName(t *testing.T) {
+	for _, name := range []string{"XXX (Bilatinmen)", "I (Bilatinmen)", "Anal", "XXX", "I"} {
+		if !ImplausiblePerformerName(name) {
+			t.Errorf("ImplausiblePerformerName(%q) = false, want true", name)
+		}
+	}
+	for _, name := range []string{"Jane Doe", "Cher", "María O’Neil"} {
+		if ImplausiblePerformerName(name) {
+			t.Errorf("ImplausiblePerformerName(%q) = true, want false", name)
+		}
+	}
+}

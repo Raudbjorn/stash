@@ -6,11 +6,11 @@ import (
 	"time"
 )
 
-// dateFullRE matches YYYY-MM-DD style dates with '-', '.', or '_' as the
+// dateFullRE matches YYYY-MM-DD style dates with '-', '.', '_', or space as the
 // separator, and also the common 2-digit-year site convention (YY-MM-DD),
 // assumed to be 20YY. It also matches 8 contiguous digits (YYYYMMDD).
 var (
-	dateFullSepRE = regexp.MustCompile(`\b(\d{2,4})[-._](\d{1,2})[-._](\d{1,2})\b`)
+	dateFullSepRE = regexp.MustCompile(`\b(\d{2,4})[-._ ](\d{1,2})[-._ ](\d{1,2})\b`)
 	// dateCompactRE deliberately doesn't use \b: underscore is a "word"
 	// character in RE2, so "_20200501_" has no boundary there. Instead it
 	// captures the (optional) non-digit context to ensure the 8 digits

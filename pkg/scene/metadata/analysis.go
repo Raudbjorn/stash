@@ -299,6 +299,8 @@ func analyze(ctx context.Context, inputs Inputs) (Analysis, error) {
 			case EntityLabelMovie:
 				movieSpans = append(movieSpans, span)
 				allEntitySpans = append(allEntitySpans, span)
+			case EntityLabelReleaseGroup:
+				allEntitySpans = append(allEntitySpans, span)
 			}
 		}
 	}
@@ -317,6 +319,8 @@ func analyze(ctx context.Context, inputs Inputs) (Analysis, error) {
 			allEntitySpans = append(allEntitySpans, span)
 		case EntityLabelMovie:
 			movieSpans = append(movieSpans, span)
+			allEntitySpans = append(allEntitySpans, span)
+		case EntityLabelReleaseGroup:
 			allEntitySpans = append(allEntitySpans, span)
 		}
 	}
@@ -493,8 +497,10 @@ func analyze(ctx context.Context, inputs Inputs) (Analysis, error) {
 	if titleSource != nil {
 		var recognized []EntitySpan
 		for _, span := range acceptedEntities {
-			if sameSource(span.Source, *titleSource) && span.Kind != EvidenceDeterministicSpan &&
-				(span.Label == EntityLabelPerformer || span.Label == EntityLabelStudio) {
+			if sameSource(span.Source, *titleSource) &&
+				(span.Label == EntityLabelReleaseGroup ||
+					(span.Kind != EvidenceDeterministicSpan &&
+						(span.Label == EntityLabelPerformer || span.Label == EntityLabelStudio || span.Label == EntityLabelMovie))) {
 				recognized = append(recognized, EntitySpan{
 					ByteStart: span.ByteStart, ByteEnd: span.ByteEnd, Text: span.Text, Label: span.Label, Score: span.Score,
 				})

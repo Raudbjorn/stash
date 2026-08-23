@@ -1023,3 +1023,24 @@ input[type="range"].blue-slider {
   border-left-color: #6c757d;
   opacity: 0.78;
 }
+
+.scene-metadata-proposal {
+  border-left: 3px solid transparent;
+}
+
+.scene-metadata-proposal--proposed {
+  border-left-color: #d4a017;
+}
+
+.scene-metadata-proposal--accepted {
+  border-left-color: #3d9a6a;
+}
+
+.scene-metadata-proposal--rejected,
+.scene-metadata-proposal--stale {
+  border-left-color: #6c757d;
+}
+
+.scene-metadata-proposal--applied {
+  border-left-color: #3d9a6a;
+}

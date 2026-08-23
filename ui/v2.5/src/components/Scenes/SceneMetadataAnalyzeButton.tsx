@@ -1,17 +1,26 @@
 import React, { useMemo, useState } from "react";
 import { Button, Form } from "react-bootstrap";
-import { faSearch } from "@fortawesome/free-solid-svg-icons";
+import { faClipboardCheck, faSearch } from "@fortawesome/free-solid-svg-icons";
 import { FormattedMessage, useIntl } from "react-intl";
+import cx from "classnames";
 import * as GQL from "src/core/generated-graphql";
 import {
   mutateMetadataAnalyzeScenes,
   useAIServerAvailability,
   useConfiguration,
+  useConfigureUISetting,
   useListPerformerScrapers,
   useListStudioScrapers,
 } from "src/core/StashService";
+import {
+  ANALYZE_SCENE_METADATA_UI_KEY,
+  defaultAnalyzeSceneMetadataOptions,
+  toPersistedAnalyzeSceneMetadataOptions,
+} from "src/core/analyzeSceneMetadataOptions";
+import { useDebounce } from "src/hooks/debounce";
 import { useToast } from "src/hooks/Toast";
 import { ModalComponent } from "src/components/Shared/Modal";
+import { Icon } from "src/components/Shared/Icon";
 import { SceneMetadataPlanReviewModal } from "./SceneMetadataPlanReviewModal";
 import { SelectComponent } from "src/components/Shared/Select";
 
@@ -21,33 +30,27 @@ interface ISceneMetadataAnalyzeButton {
   sceneIds: string[];
   className?: string;
   variant?: string;
-}
-
-function defaultOptions(): GQL.AnalyzeSceneMetadataInput {
-  return {
-    dryRun: true,
-    performerVerifierScraperIDs: [],
-    performerVerifierStashBoxEndpoints: [],
-    performerConfidenceThreshold: 0.6,
-    dateConfidenceThreshold: 0.6,
-    overwriteExistingDate: false,
-    overwriteExistingTitle: false,
-    useDetails: false,
-    useLocalAIContext: false,
-    studioVerifierScraperIDs: [],
-    studioVerifierStashBoxEndpoints: [],
-    useLocalAIStudioProviderSelection: false,
-    providerPolicies: [],
-    replaceLocalPerformersFromRemote: false,
-  };
+  compact?: boolean;
 }
 
 export const SceneMetadataAnalyzeButton: React.FC<
   ISceneMetadataAnalyzeButton
-> = ({ sceneIds, className, variant = "secondary" }) => {
+> = ({ sceneIds, className, variant = "secondary", compact = false }) => {
   const intl = useIntl();
   const Toast = useToast();
   const { data: configurationData } = useConfiguration();
+  const [saveUISetting] = useConfigureUISetting();
+  const persistAnalyzeOptions = useDebounce(
+    (next: GQL.AnalyzeSceneMetadataInput) => {
+      void saveUISetting({
+        variables: {
+          key: ANALYZE_SCENE_METADATA_UI_KEY,
+          value: toPersistedAnalyzeSceneMetadataOptions(next),
+        },
+      });
+    },
+    500
+  );
   const { data: performerScrapersData, loading: performerScrapersLoading } =
     useListPerformerScrapers();
   const { data: studioScrapersData, loading: studioScrapersLoading } =
@@ -105,7 +108,11 @@ export const SceneMetadataAnalyzeButton: React.FC<
       | undefined
   )?.taskDefaults?.analyzeSceneMetadata;
   const initialOptions = useMemo(
-    () => ({ ...defaultOptions(), ...persisted, sceneIDs: sceneIds }),
+    () => ({
+      ...defaultAnalyzeSceneMetadataOptions(),
+      ...persisted,
+      sceneIDs: sceneIds,
+    }),
     [persisted, sceneIds]
   );
   const [options, setOptions] =
@@ -117,10 +124,17 @@ export const SceneMetadataAnalyzeButton: React.FC<
   }
 
   function setOption(partial: Partial<GQL.AnalyzeSceneMetadataInput>) {
-    setOptions((current) => ({ ...current, ...partial }));
+    setOptions((current) => {
+      const next = { ...current, ...partial };
+      if (configurationData?.configuration) {
+        persistAnalyzeOptions(next);
+      }
+      return next;
+    });
   }
 
   async function analyze() {
+    persistAnalyzeOptions.flush();
     setSubmitting(true);
     try {
       await mutateMetadataAnalyzeScenes({
@@ -129,6 +143,7 @@ export const SceneMetadataAnalyzeButton: React.FC<
         useLocalAIContext: aiAvailable && (options.useLocalAIContext ?? false),
         useLocalAIStudioProviderSelection:
           aiAvailable && (options.useLocalAIStudioProviderSelection ?? false),
+        ignoreMalePerformers: options.ignoreMalePerformers ?? false,
       });
       Toast.success(
         intl.formatMessage(
@@ -141,7 +156,7 @@ export const SceneMetadataAnalyzeButton: React.FC<
         )
       );
       setShow(false);
-      if (options.dryRun ?? true) setShowReview(true);
+      setShowReview(true);
     } catch (error) {
       Toast.error(error);
     } finally {
@@ -151,25 +166,61 @@ export const SceneMetadataAnalyzeButton: React.FC<
 
   return (
     <>
-      <Button
-        variant={variant}
-        className={className}
-        disabled={sceneIds.length === 0}
-        onClick={open}
-      >
-        <FormattedMessage id="actions.analyze_scene_metadata" />…
-      </Button>
-      <Button
-        variant="secondary"
-        className={className ? `${className} ml-2` : "ml-2"}
-        disabled={sceneIds.length === 0}
-        onClick={() => setShowReview(true)}
-      >
-        <FormattedMessage
-          id="scene_metadata.review.action"
-          defaultMessage="Review proposals"
-        />
-      </Button>
+      {compact ? (
+        <>
+          <Button
+            variant="secondary"
+            className={cx("minimal", className)}
+            title={intl.formatMessage({
+              id: "actions.analyze_scene_metadata",
+            })}
+            aria-label={intl.formatMessage({
+              id: "actions.analyze_scene_metadata",
+            })}
+            disabled={sceneIds.length === 0}
+            onClick={open}
+          >
+            <Icon icon={faSearch} />
+          </Button>
+          <Button
+            variant="secondary"
+            className={cx("minimal", className)}
+            title={intl.formatMessage({
+              id: "scene_metadata.review.action",
+              defaultMessage: "Review proposals",
+            })}
+            aria-label={intl.formatMessage({
+              id: "scene_metadata.review.action",
+              defaultMessage: "Review proposals",
+            })}
+            onClick={() => setShowReview(true)}
+          >
+            <Icon icon={faClipboardCheck} />
+          </Button>
+        </>
+      ) : (
+        <>
+          <Button
+            variant={variant}
+            className={className}
+            disabled={sceneIds.length === 0}
+            onClick={open}
+          >
+            <FormattedMessage id="actions.analyze_scene_metadata" />…
+          </Button>
+          <Button
+            variant="secondary"
+            className={className ? `${className} ml-2` : "ml-2"}
+            disabled={sceneIds.length === 0}
+            onClick={() => setShowReview(true)}
+          >
+            <FormattedMessage
+              id="scene_metadata.review.action"
+              defaultMessage="Review proposals"
+            />
+          </Button>
+        </>
+      )}
       {show && (
         <ModalComponent
           show
@@ -193,6 +244,12 @@ export const SceneMetadataAnalyzeButton: React.FC<
               <FormattedMessage
                 id="config.tasks.analyze_scene_metadata.selection_count"
                 values={{ count: sceneIds.length }}
+              />
+            </p>
+            <p className="text-muted">
+              <FormattedMessage
+                id="config.tasks.analyze_scene_metadata.review_after_queue"
+                defaultMessage="After the job finishes, open Review proposals. Accept or reject each change, then apply."
               />
             </p>
             <div className="row">
@@ -286,6 +343,24 @@ export const SceneMetadataAnalyzeButton: React.FC<
               }
               className="mb-2"
             />
+            <Form.Check
+              id={`scene-metadata-ignore-male-${sceneIds.join("-")}`}
+              checked={options.ignoreMalePerformers ?? false}
+              label={intl.formatMessage({
+                id: "config.tasks.analyze_scene_metadata.ignore_male_performers.label",
+              })}
+              onChange={() =>
+                setOption({
+                  ignoreMalePerformers: !(
+                    options.ignoreMalePerformers ?? false
+                  ),
+                })
+              }
+              className="mb-2"
+            />
+            <Form.Text className="text-muted">
+              <FormattedMessage id="config.tasks.analyze_scene_metadata.ignore_male_performers.help" />
+            </Form.Text>
             <Form.Check
               id={`scene-metadata-replace-performers-${sceneIds.join("-")}`}
               checked={options.replaceLocalPerformersFromRemote ?? false}

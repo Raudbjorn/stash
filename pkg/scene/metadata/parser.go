@@ -32,11 +32,12 @@ type ParsedText struct {
 }
 
 var (
-	technicalRE      = regexp.MustCompile(`(?i)(?:^|[^[:alnum:]])(2160p|1440p|1080p|720p|576p|480p|4k|8k|uhd|fhd|x264|x265|h[._-]?264|h[._-]?265|hevc|av1|vp9|web[._-]?dl|webrip|blu[._-]?ray|bdrip|dvdrip|hdtv|remux|aac(?:2[._]0)?|ddp?[._]?[257][._]1|dts(?:[._-]?hd)?|truehd|atmos|hdr10\+?|hdr|dolby[._ -]?vision)(?:$|[^[:alnum:]])`)
+	technicalRE      = regexp.MustCompile(`(?i)(?:^|[^[:alnum:]])(2160p|1440p|1080p|720p|576p|480p|4k|8k|uhd|fhd|x264|x265|h[._-]?264|h[._-]?265|hevc|av1|vp9|xvid|divx|mp4|mkv|avi|wmv|mov|mpeg|mpg|webm|m4v|web[._-]?dl|webrip|blu[._-]?ray|bdrip|dvdrip|hdtv|remux|aac(?:2[._]0)?|ddp?[._]?[257][._]1|dts(?:[._-]?hd)?|truehd|atmos|hdr10\+?|hdr|dolby[._ -]?vision)(?:$|[^[:alnum:]])`)
 	mediaExtensionRE = regexp.MustCompile(`(?i)\.(mkv|mp4|m4v|mov|avi|wmv|webm|mpg|mpeg|ts|m2ts|flv|3gp)$`)
 	bracketRE        = regexp.MustCompile(`\[[^\[\]]*\]|\([^()]*\)`)
+	squareBracketRE  = regexp.MustCompile(`\[[^\[\]]*\]`)
 	sceneMarkerRE    = regexp.MustCompile(`(?i)(?:^|[^[:alnum:]])(scene|sc)[ ._-]*([0-9]{1,3})(?:$|[^[:alnum:]])`)
-	fullDateRE       = regexp.MustCompile(`(?:^|[^0-9])([0-9]{2,4})[-._]([0-9]{1,2})[-._]([0-9]{1,2})(?:$|[^0-9])`)
+	fullDateRE       = regexp.MustCompile(`(?:^|[^0-9])([0-9]{2,4})[-._ ]([0-9]{1,2})[-._ ]([0-9]{1,2})(?:$|[^0-9])`)
 	releaseNameRE    = regexp.MustCompile(`^[[:alnum:]][[:alnum:]_.-]{1,29}$`)
 	spacedDashRE     = regexp.MustCompile(`\s+[-–—]+\s+`)
 	emptyWrapperRE   = regexp.MustCompile(`\s*[\[\(]\s*[\]\)]\s*`)
@@ -142,14 +143,42 @@ func ParseTextMetadata(text string) ParsedText {
 	if extension := mediaExtensionRE.FindStringIndex(text); extension != nil {
 		baseEnd = extension[0]
 	}
-	if dash := strings.LastIndex(text[:baseEnd], "-"); dash >= 0 && releaseNameRE.MatchString(text[dash+1:baseEnd]) {
-		for _, technical := range parsed.TechnicalSpans {
-			if technical.ByteEnd == dash {
+	if dash := strings.LastIndex(text[:baseEnd], "-"); dash >= 0 {
+		groupText := strings.TrimSpace(text[dash+1 : baseEnd])
+		if len(groupText) >= 2 {
+			switch groupText[0] {
+			case '[':
+				if groupText[len(groupText)-1] == ']' {
+					groupText = strings.TrimSpace(groupText[1 : len(groupText)-1])
+				}
+			case '(':
+				if groupText[len(groupText)-1] == ')' {
+					groupText = strings.TrimSpace(groupText[1 : len(groupText)-1])
+				}
+			}
+		}
+		if releaseNameRE.MatchString(groupText) {
+			technicalEndsAtDash := false
+			for _, technical := range parsed.TechnicalSpans {
+				if technical.ByteEnd == dash {
+					technicalEndsAtDash = true
+					break
+				}
+			}
+			shortAlnum := len(groupText) >= 1 && len(groupText) <= 6
+			if shortAlnum {
+				for _, r := range groupText {
+					if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+						shortAlnum = false
+						break
+					}
+				}
+			}
+			if technicalEndsAtDash || shortAlnum {
 				parsed.ReleaseGroup = &EntitySpan{
-					ByteStart: dash + 1, ByteEnd: baseEnd, Text: text[dash+1 : baseEnd],
+					ByteStart: dash, ByteEnd: baseEnd, Text: groupText,
 					Label: EntityLabelReleaseGroup, Score: 1,
 				}
-				break
 			}
 		}
 	}
@@ -192,12 +221,13 @@ func removeSpans(text string, spans []EntitySpan) string {
 }
 
 // CleanTitle removes only supplied recognized entity spans plus deterministic
-// technical/date/scene spans. It preserves unknown words, including mixed
-// technical brackets, and keeps ordinary in-word hyphens.
+// technical/date/scene spans. Square-bracket groups are always dropped after
+// span removal. Parentheses stay unless emptied or classified as a release group.
 func CleanTitle(text string, recognized []EntitySpan) string {
 	parsed := ParseTextMetadata(text)
 	spans := append(parsed.RecognizedSpans(), recognized...)
 	clean := removeSpans(text, spans)
+	clean = squareBracketRE.ReplaceAllString(clean, " ")
 	clean = strings.NewReplacer(".", " ", "_", " ").Replace(clean)
 	clean = spacedDashRE.ReplaceAllString(clean, " ")
 	clean = emptyWrapperRE.ReplaceAllString(clean, " ")

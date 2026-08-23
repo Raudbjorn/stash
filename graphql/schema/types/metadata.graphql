@@ -248,6 +248,8 @@ input AnalyzeSceneMetadataInput {
   useLocalAIStudioProviderSelection: Boolean
   "Allow replacing a user-authored title. By default only empty or filename-derived titles are changed."
   overwriteExistingTitle: Boolean
+  "When true, skip library matches and newly discovered performers with gender male."
+  ignoreMalePerformers: Boolean
 }
 enum SceneMetadataProviderFieldMode {
   OBSERVE

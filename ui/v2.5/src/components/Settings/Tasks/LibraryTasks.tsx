@@ -21,6 +21,9 @@ import {
   useAIServerAvailability,
 } from "src/core/StashService";
 import { withoutTypename } from "src/utils/data";
+import { useDebounce } from "src/hooks/debounce";
+import { defaultAnalyzeSceneMetadataOptions } from "src/core/analyzeSceneMetadataOptions";
+import type { IAnalyzeSceneMetadataTaskDefaults } from "src/core/analyzeSceneMetadataOptions";
 import { useConfigurationContext } from "src/hooks/Config";
 import { useAutoTagTrigger } from "src/hooks/useAutoTagTrigger";
 import { IdentifyDialog } from "../../Dialogs/IdentifyDialog/IdentifyDialog";
@@ -44,23 +47,6 @@ import { SelectComponent } from "src/components/Shared/Select";
 import { FileSize } from "src/components/Shared/FileSize";
 
 const builtinStudioURLScraperID = "builtin-studio-url-map";
-
-interface IAnalyzeSceneMetadataTaskDefaults {
-  dryRun: boolean;
-  performerVerifierScraperIDs: string[];
-  performerVerifierStashBoxEndpoints: string[];
-  performerConfidenceThreshold: number;
-  dateConfidenceThreshold: number;
-  overwriteExistingDate: boolean;
-  overwriteExistingTitle: boolean;
-  useDetails: boolean;
-  useLocalAIContext: boolean;
-  studioVerifierScraperIDs: string[];
-  studioVerifierStashBoxEndpoints: string[];
-  useLocalAIStudioProviderSelection: boolean;
-  providerPolicies: GQL.SceneMetadataProviderPolicyInput[];
-  replaceLocalPerformersFromRemote: boolean;
-}
 
 interface IAutoTagOptions {
   options: GQL.AutoTagMetadataInput;
@@ -505,22 +491,9 @@ export const LibraryTasks: React.FC = () => {
     useState<GQL.GenerateMetadataInput>(getDefaultGenerateOptions());
 
   const [analyzeSceneMetadataOptions, setAnalyzeSceneMetadataOptions] =
-    useState<IAnalyzeSceneMetadataTaskDefaults>({
-      dryRun: true,
-      performerVerifierScraperIDs: [],
-      performerVerifierStashBoxEndpoints: [],
-      performerConfidenceThreshold: 0.6,
-      dateConfidenceThreshold: 0.6,
-      overwriteExistingDate: false,
-      overwriteExistingTitle: false,
-      useDetails: false,
-      useLocalAIContext: false,
-      studioVerifierScraperIDs: [],
-      studioVerifierStashBoxEndpoints: [],
-      useLocalAIStudioProviderSelection: false,
-      providerPolicies: [],
-      replaceLocalPerformersFromRemote: false,
-    });
+    useState<IAnalyzeSceneMetadataTaskDefaults>(
+      defaultAnalyzeSceneMetadataOptions()
+    );
   const [
     analyzeSceneMetadataOptionsInitialized,
     setAnalyzeSceneMetadataOptionsInitialized,
@@ -690,6 +663,7 @@ export const LibraryTasks: React.FC = () => {
       providerPolicies: reconciledProviderPolicies,
       replaceLocalPerformersFromRemote:
         persisted?.replaceLocalPerformersFromRemote ?? false,
+      ignoreMalePerformers: persisted?.ignoreMalePerformers ?? false,
     };
 
     setAnalyzeSceneMetadataOptions(nextOptions);
@@ -751,18 +725,19 @@ export const LibraryTasks: React.FC = () => {
     setAutoTagOptions(s);
   }
 
-  function persistAnalyzeSceneMetadataOptions(
-    options: IAnalyzeSceneMetadataTaskDefaults
-  ) {
-    configureDefaults({ analyzeSceneMetadata: options });
-  }
+  const persistAnalyzeSceneMetadataOptions = useDebounce(
+    (options: IAnalyzeSceneMetadataTaskDefaults) => {
+      configureDefaults({ analyzeSceneMetadata: options });
+    },
+    500
+  );
 
   function onSetAnalyzeSceneMetadataOptions(
     partial: Partial<IAnalyzeSceneMetadataTaskDefaults>
   ) {
     const nextOptions = { ...analyzeSceneMetadataOptions, ...partial };
-    persistAnalyzeSceneMetadataOptions(nextOptions);
     setAnalyzeSceneMetadataOptions(nextOptions);
+    persistAnalyzeSceneMetadataOptions(nextOptions);
   }
 
   function updateProviderPolicy(
@@ -870,6 +845,7 @@ export const LibraryTasks: React.FC = () => {
     // Re-save the complete selection at launch as well as on each change.
     // This retries any failed or superseded debounced UI-config write.
     persistAnalyzeSceneMetadataOptions(analyzeSceneMetadataOptions);
+    persistAnalyzeSceneMetadataOptions.flush();
     try {
       // A previously-persisted true value must not silently be sent once the
       // AI server is unavailable - the checkbox being disabled in the UI is
@@ -893,6 +869,7 @@ export const LibraryTasks: React.FC = () => {
           }
         )
       );
+      setShowReview(true);
     } catch (e) {
       Toast.error(e);
     }
@@ -1535,6 +1512,23 @@ export const LibraryTasks: React.FC = () => {
             className="mb-2"
           />
           <Form.Check
+            id="analyze-scene-metadata-ignore-male"
+            checked={analyzeSceneMetadataOptions.ignoreMalePerformers}
+            label={intl.formatMessage({
+              id: "config.tasks.analyze_scene_metadata.ignore_male_performers.label",
+            })}
+            onChange={() =>
+              onSetAnalyzeSceneMetadataOptions({
+                ignoreMalePerformers:
+                  !analyzeSceneMetadataOptions.ignoreMalePerformers,
+              })
+            }
+            className="mb-2"
+          />
+          <Form.Text className="text-muted">
+            <FormattedMessage id="config.tasks.analyze_scene_metadata.ignore_male_performers.help" />
+          </Form.Text>
+          <Form.Check
             id="analyze-scene-metadata-dry-run"
             checked={analyzeSceneMetadataOptions.dryRun}
             label={intl.formatMessage({ id: "config.tasks.dry_run" })}
@@ -1545,6 +1539,12 @@ export const LibraryTasks: React.FC = () => {
             }
             className="mb-2"
           />
+          <Form.Text className="text-muted">
+            <FormattedMessage
+              id="config.tasks.analyze_scene_metadata.review_after_queue"
+              defaultMessage="After the job finishes, open Review proposals. Accept or reject each change, then apply."
+            />
+          </Form.Text>
           <Button
             variant="secondary"
             type="submit"

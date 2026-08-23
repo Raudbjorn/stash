@@ -39,6 +39,8 @@ const (
 	performerReasonLocalAIUnavailable      = "local_ai_unavailable"
 	performerReasonLocalAIInvalid          = "local_ai_invalid"
 	performerReasonCancelled               = "cancelled"
+	performerReasonImplausibleName         = "implausible_name"
+	performerReasonIgnoredMale             = "ignored_male"
 )
 
 type performerResolution struct {
@@ -58,6 +60,7 @@ type performerIdentity struct {
 	Disambiguation string
 	Birthdate      *models.Date
 	URLs           []string
+	Gender         models.GenderEnum
 }
 
 type scrapedPerformerIdentity struct {
@@ -68,6 +71,7 @@ type scrapedPerformerIdentity struct {
 	Disambiguation string
 	Birthdate      string
 	URLs           []string
+	Gender         models.GenderEnum
 }
 
 type performerVerifierFailure struct {
@@ -89,6 +93,29 @@ func newPerformerStashBoxVerifier(box models.StashBox) performerStashBoxVerifier
 		ID:     "stashbox:" + box.Endpoint,
 		client: stashbox.NewClient(box),
 	}
+}
+
+func parsePerformerGender(value string) (models.GenderEnum, bool) {
+	gender := models.GenderEnum(strings.ToUpper(strings.TrimSpace(value)))
+	if !gender.IsValid() {
+		return "", false
+	}
+	return gender, true
+}
+
+func genderFromPointer(value *models.GenderEnum) models.GenderEnum {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func (j *analyzeSceneMetadataJob) ignoreMale() bool {
+	return j.input.IgnoreMalePerformers
+}
+
+func (j *analyzeSceneMetadataJob) skipMaleGender(g models.GenderEnum) bool {
+	return j.ignoreMale() && g == models.GenderEnumMale
 }
 
 type pendingPerformerResolution struct {
@@ -116,6 +143,11 @@ func (j *analyzeSceneMetadataJob) resolvePerformerCandidates(ctx context.Context
 			return resolutions, err
 		}
 
+		if metadata.ImplausiblePerformerName(candidate) {
+			finalize(performerResolution{Candidate: candidate, Status: performerResolutionUnverified, Reason: performerReasonImplausibleName})
+			continue
+		}
+
 		var library []performerIdentity
 		err := j.repository.WithReadTxn(ctx, func(ctx context.Context) error {
 			var err error
@@ -129,6 +161,15 @@ func (j *analyzeSceneMetadataJob) resolvePerformerCandidates(ctx context.Context
 			}
 			finalize(performerResolution{Candidate: candidate, Status: performerResolutionUnverified, Reason: performerReasonVerifierFailed})
 			return resolutions, fmt.Errorf("finding exact performer identities for %q: %w", candidate, err)
+		}
+		if kept := library[:0]; true {
+			for _, identity := range library {
+				if j.skipMaleGender(identity.Gender) {
+					continue
+				}
+				kept = append(kept, identity)
+			}
+			library = kept
 		}
 
 		matchingIDs := performerIdentityIDs(library)
@@ -160,6 +201,15 @@ func (j *analyzeSceneMetadataJob) resolvePerformerCandidates(ctx context.Context
 				MatchingIDs: matchingIDs, ScraperIDs: scraperIDs, Reason: performerReasonCancelled,
 			})
 			return resolutions, verifyErr
+		}
+		if kept := verified[:0]; true {
+			for _, identity := range verified {
+				if j.skipMaleGender(identity.Gender) {
+					continue
+				}
+				kept = append(kept, identity)
+			}
+			verified = kept
 		}
 		if len(verified) == 0 {
 			reason := performerReasonScraperNoExactResult
@@ -359,6 +409,7 @@ func findExactPerformerIdentities(ctx context.Context, r models.PerformerReader,
 			ID: current.ID, Name: current.Name, Aliases: aliases,
 			Disambiguation: current.Disambiguation, Birthdate: birthdate,
 			URLs: append([]string(nil), current.URLs.List()...),
+			Gender: genderFromPointer(current.Gender),
 		}
 	}
 	ret := make([]performerIdentity, 0, len(byID))
@@ -771,6 +822,11 @@ func scrapedPerformerIdentityFromModel(scraperID string, scraped *models.Scraped
 			identity.URLs = append(identity.URLs, strings.TrimSpace(*legacy))
 		}
 	}
+	if scraped.Gender != nil {
+		if gender, ok := parsePerformerGender(*scraped.Gender); ok {
+			identity.Gender = gender
+		}
+	}
 	return identity
 }
 
@@ -818,9 +874,18 @@ func (j *analyzeSceneMetadataJob) planVerifiedPerformer(ctx context.Context, can
 	}
 
 	selected := components[0][0]
+	if j.skipMaleGender(selected.Gender) {
+		resolution.Status = performerResolutionUnverified
+		resolution.Reason = performerReasonIgnoredMale
+		return resolution, nil
+	}
 	newPerformer := models.NewPerformer()
 	newPerformer.Name = strings.TrimSpace(selected.Name)
 	newPerformer.Disambiguation = strings.TrimSpace(selected.Disambiguation)
+	if selected.Gender.IsValid() {
+		gender := selected.Gender
+		newPerformer.Gender = &gender
+	}
 	if parsed, err := models.ParseDate(strings.TrimSpace(selected.Birthdate)); err == nil {
 		newPerformer.Birthdate = &parsed
 	}

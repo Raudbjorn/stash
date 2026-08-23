@@ -74,6 +74,9 @@ type AnalyzeSceneMetadataInput struct {
 	// OverwriteExistingTitle allows replacing a user-authored scene title.
 	// Without it, only empty or filename-derived default titles are changed.
 	OverwriteExistingTitle bool `json:"overwriteExistingTitle"`
+	// IgnoreMalePerformers skips library matches and newly discovered
+	// performers whose gender is male. Defaults to false.
+	IgnoreMalePerformers bool `json:"ignoreMalePerformers"`
 }
 
 func (s *Manager) AnalyzeSceneMetadata(ctx context.Context, input AnalyzeSceneMetadataInput) int {
@@ -195,11 +198,25 @@ func (j *analyzeSceneMetadataJob) loadLibraryRecords(ctx context.Context) error 
 		}
 		j.performerRecords = make([]metadata.NamedAliases, 0, len(performers))
 		for _, performer := range performers {
+			if j.input.IgnoreMalePerformers && performer.Gender != nil && *performer.Gender == models.GenderEnumMale {
+				continue
+			}
+			if metadata.ImplausiblePerformerName(performer.Name) {
+				continue
+			}
 			if err := performer.LoadAliases(ctx, j.repository.Performer); err != nil {
 				return err
 			}
+			aliases := performer.Aliases.List()
+			kept := make([]string, 0, len(aliases))
+			for _, alias := range aliases {
+				if metadata.ImplausiblePerformerName(alias) {
+					continue
+				}
+				kept = append(kept, alias)
+			}
 			j.performerRecords = append(j.performerRecords, metadata.NamedAliases{
-				ID: performer.ID, Name: performer.Name, Aliases: performer.Aliases.List(),
+				ID: performer.ID, Name: performer.Name, Aliases: kept,
 			})
 		}
 
@@ -518,6 +535,9 @@ func (j *analyzeSceneMetadataJob) processScene(ctx context.Context, sc *models.S
 	if !hasAuthoritativePerformers {
 		var performerNames []string
 		for _, candidate := range analysis.PerformerCandidates {
+			if metadata.ImplausiblePerformerName(candidate.Value) && candidate.ExistingEntityID == nil {
+				continue
+			}
 			if candidate.ExistingEntityID != nil || candidate.Confidence >= j.performerLookupThreshold() {
 				performerNames = append(performerNames, candidate.Value)
 			}
