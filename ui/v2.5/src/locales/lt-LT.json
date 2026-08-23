@@ -37,7 +37,6 @@
         "delete": "Ištrinti",
         "delete_entity": "Ištrinti {entityType}",
         "delete_file": "Ištrinti failą",
-        "delete_file_and_funscript": "Ištrinti failą (ir funscript)",
         "delete_generated_supporting_files": "Ištrinti sugeneruotus pagalbinius failus",
         "disable": "Išjungti",
         "disallow": "Neleisti",

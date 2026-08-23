@@ -31,7 +31,6 @@
         "delete": "Radera",
         "delete_entity": "Radera {entityType}",
         "delete_file": "Radera fil",
-        "delete_file_and_funscript": "Radera fil (och funskript)",
         "delete_generated_supporting_files": "Radera genererade filer",
         "disallow": "Tillåt ej",
         "download": "Ladda ner",
@@ -384,8 +383,6 @@
                     "heading": "Ladda ner FFmpeg"
                 }
             },
-            "funscript_heatmap_draw_range": "Inkludera räckvidd i genererade värmekartor",
-            "funscript_heatmap_draw_range_desc": "Visa y-axelns rörelseräckvidd på den genererade värmekartan. Existerande värmekartor kommer behöva genereras om efter ändring.",
             "gallery_cover_regex_desc": "Regexps som används för att identifiera en bild som galleriomslag.",
             "gallery_cover_regex_label": "Galleriomslagsmönster",
             "gallery_ext_desc": "Komma-avgränsad lista av filtillägg som kommer identifieras som galleri ZIP-filer.",
@@ -395,7 +392,6 @@
             "generated_files_location": "Mappsökväg för genererade filer (markörer, förhandsvisningar, sprites, m.m.).",
             "generated_path_head": "Genererad filsökväg",
             "hashing": "Hashande",
-            "heatmap_generation": "Funscript Värmekarta Generering",
             "image_ext_desc": "Kommaavgränsad lista av filändelser som kommer identifieras som bilder.",
             "image_ext_head": "Bildfiländelser",
             "include_audio_desc": "Inkluderar ljud vid förhandsvisningsgeneration.",
@@ -707,24 +703,6 @@
                     }
                 }
             },
-            "funscript_offset": {
-                "description": "Tidsfördröjning i millisekunder för interaktiva skripter.",
-                "heading": "Funscript-fördröjning (ms)"
-            },
-            "handy_connection": {
-                "connect": "Koppla ihop",
-                "server_offset": {
-                    "heading": "Serverförskjutning"
-                },
-                "status": {
-                    "heading": "Handy Uppkopplingsstatus"
-                },
-                "sync": "Synka"
-            },
-            "handy_connection_key": {
-                "description": "Handy anslutningsnyckel för interaktiva scener. Denna nyckel kommer låta Stash dela din nuvarande sceninformation med handyfeeling.com.",
-                "heading": "Handy uppkopplingsnyckel"
-            },
             "image_lightbox": {
                 "heading": "Bild Ljuslåda"
             },
@@ -746,7 +724,6 @@
                     }
                 }
             },
-            "interactive_options": "Interaktiva Inställningar",
             "language": {
                 "heading": "Språk"
             },
@@ -848,10 +825,6 @@
                 }
             },
             "title": "Användargränssnitt",
-            "use_stash_hosted_funscript": {
-                "description": "När aktiverat kommer funscripts att skickas direkt från Stash till din Handy-enhet utan att använda tredjeparts Handy-servern. Kräver att Stash kan nås från din Handy-enhet och att en API-nyckel är genererad om Stash har lösenord aktiverat.",
-                "heading": "Skicka funscripts direkt"
-            },
             "performer_list": {
                 "heading": "Stjärnlista",
                 "options": {
@@ -1003,7 +976,6 @@
             "force_transcodes_tooltip": "Som standard blir videofiler bara omkodade om formatet inte stöds i webbläsaren. Vid aktivering kommer alla videofiler bli omkodande, även om de antas vara stöttade i webbläsaren.",
             "image_previews": "Animerad bildförhandsvisning",
             "image_previews_tooltip": "Generera också animerade (webp) förhandsvisningar, krävs enbart när Förhandsvisning i Scen/Markörvägg är Animerad bild. Vid surfande använder de mindre CPU än videoförhandsvisngar, men genereras bredvid de och är större filer.",
-            "interactive_heatmap_speed": "Generera värmekartor och hastigheter för interaktiva scener",
             "marker_image_previews": "Markörer animerad bildförhandsvisning",
             "marker_image_previews_tooltip": "Generera också Animerad (webp) föhandsvisning, krävs bara när Förhandsvisning i Scen/Markörvägg är Animerad bild. Vid surfande använder de mindre CPU än videoförhandsvisngar, men genereras bredvid de och är större filer.",
             "marker_screenshots": "Markörskärmklipp",
@@ -1168,15 +1140,6 @@
         "TRANSGENDER_MALE": "Trans Man"
     },
     "hair_color": "Hårfärg",
-    "handy_connection_status": {
-        "connecting": "Kopplar ihop",
-        "disconnected": "Kopplad isär",
-        "error": "Fel vid koppling till Handy",
-        "missing": "Saknas",
-        "ready": "Redo",
-        "syncing": "Synkar med server",
-        "uploading": "Laddar upp skript"
-    },
     "hasChapters": "Kapitel",
     "hasMarkers": "Markörer",
     "height": "Längd",
@@ -1192,8 +1155,6 @@
     "include_sub_tags": "Inkludera underordnade taggar",
     "index_of_total": "{index} av {total}",
     "instagram": "Instagram",
-    "interactive": "Interaktiv",
-    "interactive_speed": "Interaktiv Hastighet",
     "isMissing": "Saknas",
     "last_played_at": "Senast spelad",
     "library": "Bibliotek",
@@ -1207,7 +1168,6 @@
     "media_info": {
         "audio_codec": "Ljudkodek",
         "downloaded_from": "Nedladdad från",
-        "interactive_speed": "Interaktiv Hastighet",
         "performer_card": {
             "age": "{age} {years_old}",
             "age_context": "{age} {years_old} vid produktion"

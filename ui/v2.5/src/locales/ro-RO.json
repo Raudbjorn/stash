@@ -25,7 +25,6 @@
         "delete": "Șterge",
         "delete_entity": "Șterge {entityType}",
         "delete_file": "Șterge fişier",
-        "delete_file_and_funscript": "Șterge fişier (şi funscript)",
         "disallow": "Nu se permite",
         "download": "Descarcă",
         "download_backup": "Descarcă Backup",
@@ -254,9 +253,6 @@
         },
         "ui": {
             "basic_settings": "Setări de bază",
-            "handy_connection": {
-                "connect": "Conectare"
-            },
             "preview_type": {
                 "options": {
                     "animated": "Imagine Animată"
@@ -348,13 +344,6 @@
         "TRANSGENDER_MALE": "Bărbat Transgender"
     },
     "hair_color": "Culoarea Părului",
-    "handy_connection_status": {
-        "connecting": "Se conectează",
-        "disconnected": "Deconectat",
-        "missing": "Lipsă",
-        "ready": "Pregătit",
-        "syncing": "Se sincronizează cu serverul"
-    },
     "height": "Inălțime",
     "help": "Ajutor",
     "ignore_auto_tag": "Ignoră Etichetele Automate",
@@ -362,8 +351,6 @@
     "image_count": "Număr Imagine",
     "images": "Imagini",
     "instagram": "Instagram",
-    "interactive": "Interactiv",
-    "interactive_speed": "Viteză interactivă",
     "isMissing": "Lipsește",
     "library": "Librărie",
     "loading": {
@@ -373,7 +360,6 @@
     "measurements": "Măsurători",
     "media_info": {
         "audio_codec": "Codec Audio",
-        "interactive_speed": "Viteză Interactivă",
         "performer_card": {
             "age": "{age} {years_old}",
             "age_context": "{age} {years_old} în această scenă"

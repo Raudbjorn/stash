@@ -13,16 +13,15 @@ const thumbDirDepth int = 2
 const thumbDirLength int = 2 // thumbDirDepth * thumbDirLength must be smaller than the length of checksum
 
 type generatedPaths struct {
-	Screenshots        string
-	Thumbnails         string
-	Vtt                string
-	Markers            string
-	Clips              string
-	Transcodes         string
-	Downloads          string
-	Tmp                string
-	InteractiveHeatmap string
-	GalleryCovers      string
+	Screenshots   string
+	Thumbnails    string
+	Vtt           string
+	Markers       string
+	Clips         string
+	Transcodes    string
+	Downloads     string
+	Tmp           string
+	GalleryCovers string
 }
 
 func newGeneratedPaths(path string) *generatedPaths {
@@ -35,7 +34,6 @@ func newGeneratedPaths(path string) *generatedPaths {
 	gp.Transcodes = filepath.Join(path, "transcodes")
 	gp.Downloads = filepath.Join(path, "download_stage")
 	gp.Tmp = filepath.Join(path, "tmp")
-	gp.InteractiveHeatmap = filepath.Join(path, "interactive_heatmaps")
 	gp.GalleryCovers = filepath.Join(path, "gallery_covers")
 	return &gp
 }

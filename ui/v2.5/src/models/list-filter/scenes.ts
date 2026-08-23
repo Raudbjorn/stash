@@ -19,7 +19,6 @@ import { TranscodeBenefitCriterionOption } from "./criteria/transcode-benefit";
 import { PerformersCriterionOption } from "./criteria/performers";
 import { ResolutionCriterionOption } from "./criteria/resolution";
 import { StudiosCriterionOption } from "./criteria/studios";
-import { InteractiveCriterionOption } from "./criteria/interactive";
 import {
   PerformerTagsCriterionOption,
   // StudioTagsCriterionOption,
@@ -57,8 +56,6 @@ const sortByOptions = [
   "resume_time",
   "play_duration",
   "play_count",
-  "interactive",
-  "interactive_speed",
   "transcode_benefit",
   "perceptual_similarity",
   "performer_age",
@@ -147,9 +144,7 @@ const criterionOptions = [
   createStringCriterionOption("url"),
   StashIDCriterionOption,
   createMandatoryNumberCriterionOption("stash_id_count"),
-  InteractiveCriterionOption,
   CaptionsCriterionOption,
-  createMandatoryNumberCriterionOption("interactive_speed"),
   createMandatoryNumberCriterionOption("file_count"),
   createDateCriterionOption("date"),
   createMandatoryTimestampCriterionOption("created_at"),

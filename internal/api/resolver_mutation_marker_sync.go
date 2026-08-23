@@ -18,9 +18,3 @@ func (r *mutationResolver) MarkerSyncSubmit(ctx context.Context, input manager.M
 	jobID := manager.GetInstance().MarkerSyncSubmit(ctx, input)
 	return strconv.Itoa(jobID), nil
 }
-
-// MarkerSyncFunscriptIndex launches the funscript index+match job and returns the job id.
-func (r *mutationResolver) MarkerSyncFunscriptIndex(ctx context.Context) (string, error) {
-	jobID := manager.GetInstance().MarkerSyncFunscriptIndex(ctx)
-	return strconv.Itoa(jobID), nil
-}

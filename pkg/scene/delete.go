@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 
 	"github.com/stashapp/stash/pkg/file"
-	"github.com/stashapp/stash/pkg/file/video"
 	"github.com/stashapp/stash/pkg/fsutil"
 	"github.com/stashapp/stash/pkg/logger"
 	"github.com/stashapp/stash/pkg/models"
@@ -68,12 +67,6 @@ func (d *FileDeleter) MarkGeneratedFiles(scene *models.Scene) error {
 	exists, _ = fsutil.FileExists(vttPath)
 	if exists {
 		files = append(files, vttPath)
-	}
-
-	heatmapPath := d.Paths.Scene.GetInteractiveHeatmapPath(sceneHash)
-	exists, _ = fsutil.FileExists(heatmapPath)
-	if exists {
-		files = append(files, heatmapPath)
 	}
 
 	return d.FilesWithoutTrash(files)
@@ -169,16 +162,6 @@ func (s *Service) deleteFiles(ctx context.Context, scene *models.Scene, fileDele
 			return err
 		}
 
-		// don't delete files in zip archives
-		if f.ZipFileID == nil {
-			funscriptPath := video.GetFunscriptPath(f.Path)
-			funscriptExists, _ := fsutil.FileExists(funscriptPath)
-			if funscriptExists {
-				if err := fileDeleter.Files([]string{funscriptPath}); err != nil {
-					return err
-				}
-			}
-		}
 	}
 
 	return nil

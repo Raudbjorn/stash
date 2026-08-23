@@ -1187,8 +1187,6 @@ var sceneSortOptions = sortOptions{
 	"framerate",
 	"group_scene_number",
 	"id",
-	"interactive",
-	"interactive_speed",
 	"last_o_at",
 	"last_played_at",
 	"movie_scene_number",
@@ -1315,9 +1313,6 @@ func (qb *SceneStore) setSceneSort(query *queryBuilder, findFilter *models.FindF
 		addVideoFileTable()
 		query.sortAndPagination += fmt.Sprintf(" ORDER BY MIN(%s.width, %s.height) %s", videoFileTable, videoFileTable, getSortDirection(direction))
 	case "duration":
-		addVideoFileTable()
-		query.sortAndPagination += getSort(sort, direction, videoFileTable)
-	case "interactive", "interactive_speed":
 		addVideoFileTable()
 		query.sortAndPagination += getSort(sort, direction, videoFileTable)
 	case "title":

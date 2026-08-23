@@ -60,7 +60,6 @@
         "created_entity": "Izveidots {entity_type}: {entity_name}",
         "customise": "Pielāgot",
         "delete_file": "Dzēst failu",
-        "delete_file_and_funscript": "Dzēst failu (un funskriptu)",
         "add_sub_groups": "Pievienot apakšgrupas",
         "from_file": "No Faila…",
         "from_url": "No URL…",

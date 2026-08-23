@@ -344,12 +344,6 @@ func (t *LibraryTranscodeTask) rewrite(ctx context.Context, primary *models.Vide
 		return fmt.Errorf("loading captions: %w", err)
 	}
 
-	if dest, err := librarytranscode.RelocateFunscript(srcPath, finalPath); err != nil {
-		return fmt.Errorf("copying funscript: %w", err)
-	} else if dest != "" {
-		copiedSidecars = append(copiedSidecars, dest)
-	}
-
 	var newCaps []*models.VideoCaption
 	for _, cap := range oldCaps {
 		if cap == nil {

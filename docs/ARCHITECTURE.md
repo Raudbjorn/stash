@@ -411,7 +411,7 @@ func (qb *SceneStore) Find(ctx context.Context, id int) (*models.Scene, error) {
 
 7. File handlers process each file type: videos become Scenes, images become Images, zip files become Galleries, and folders get Folder records
 
-8. For each video file, the system calculates checksums (MD5, oshash, phash), extracts metadata via FFmpeg, creates File and Scene records, and generates thumbnails, sprites, previews, and interactive heatmaps
+8. For each video file, the system calculates checksums (MD5, oshash, phash), extracts metadata via FFmpeg, creates File and Scene records, and generates thumbnails, sprites, and previews
 
 9. Progress updates flow via GraphQL subscription with real-time updates on files processed
 

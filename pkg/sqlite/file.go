@@ -85,23 +85,21 @@ func (r *basicFileRow) fromBasicFile(o models.BaseFile) {
 }
 
 type videoFileRow struct {
-	FileID           models.FileID `db:"file_id"`
-	Format           string        `db:"format"`
-	Width            int           `db:"width"`
-	Height           int           `db:"height"`
-	Duration         float64       `db:"duration"`
-	VideoCodec       string        `db:"video_codec"`
-	AudioCodec       string        `db:"audio_codec"`
-	FrameRate        float64       `db:"frame_rate"`
-	BitRate          int64         `db:"bit_rate"`
-	Interactive      bool          `db:"interactive"`
-	InteractiveSpeed null.Int      `db:"interactive_speed"`
-	CreationTime     NullTimestamp `db:"creation_time"`
-	Title            null.String   `db:"title"`
-	Comment          null.String   `db:"comment"`
-	Encoder          null.String   `db:"encoder"`
-	Tags             stringMap     `db:"tags"`
-	MetadataProbed   bool          `db:"metadata_probed"`
+	FileID         models.FileID `db:"file_id"`
+	Format         string        `db:"format"`
+	Width          int           `db:"width"`
+	Height         int           `db:"height"`
+	Duration       float64       `db:"duration"`
+	VideoCodec     string        `db:"video_codec"`
+	AudioCodec     string        `db:"audio_codec"`
+	FrameRate      float64       `db:"frame_rate"`
+	BitRate        int64         `db:"bit_rate"`
+	CreationTime   NullTimestamp `db:"creation_time"`
+	Title          null.String   `db:"title"`
+	Comment        null.String   `db:"comment"`
+	Encoder        null.String   `db:"encoder"`
+	Tags           stringMap     `db:"tags"`
+	MetadataProbed bool          `db:"metadata_probed"`
 }
 
 func (f *videoFileRow) fromVideoFile(ff models.VideoFile) {
@@ -114,8 +112,6 @@ func (f *videoFileRow) fromVideoFile(ff models.VideoFile) {
 	f.AudioCodec = ff.AudioCodec
 	f.FrameRate = ff.FrameRate
 	f.BitRate = ff.BitRate
-	f.Interactive = ff.Interactive
-	f.InteractiveSpeed = intFromPtr(ff.InteractiveSpeed)
 	if !ff.CreationTime.IsZero() {
 		f.CreationTime = NullTimestamp{Timestamp: ff.CreationTime, Valid: true}
 	}
@@ -143,43 +139,39 @@ func (f *imageFileRow) fromImageFile(ff models.ImageFile) {
 // we redefine this to change the columns around
 // otherwise, we collide with the image file columns
 type videoFileQueryRow struct {
-	FileID           null.Int      `db:"file_id_video"`
-	Format           null.String   `db:"video_format"`
-	Width            null.Int      `db:"video_width"`
-	Height           null.Int      `db:"video_height"`
-	Duration         null.Float    `db:"duration"`
-	VideoCodec       null.String   `db:"video_codec"`
-	AudioCodec       null.String   `db:"audio_codec"`
-	FrameRate        null.Float    `db:"frame_rate"`
-	BitRate          null.Int      `db:"bit_rate"`
-	Interactive      null.Bool     `db:"interactive"`
-	InteractiveSpeed null.Int      `db:"interactive_speed"`
-	CreationTime     NullTimestamp `db:"creation_time"`
-	Title            null.String   `db:"video_title"`
-	Comment          null.String   `db:"video_comment"`
-	Encoder          null.String   `db:"video_encoder"`
-	Tags             stringMap     `db:"video_tags"`
-	MetadataProbed   null.Bool     `db:"video_metadata_probed"`
+	FileID         null.Int      `db:"file_id_video"`
+	Format         null.String   `db:"video_format"`
+	Width          null.Int      `db:"video_width"`
+	Height         null.Int      `db:"video_height"`
+	Duration       null.Float    `db:"duration"`
+	VideoCodec     null.String   `db:"video_codec"`
+	AudioCodec     null.String   `db:"audio_codec"`
+	FrameRate      null.Float    `db:"frame_rate"`
+	BitRate        null.Int      `db:"bit_rate"`
+	CreationTime   NullTimestamp `db:"creation_time"`
+	Title          null.String   `db:"video_title"`
+	Comment        null.String   `db:"video_comment"`
+	Encoder        null.String   `db:"video_encoder"`
+	Tags           stringMap     `db:"video_tags"`
+	MetadataProbed null.Bool     `db:"video_metadata_probed"`
 }
 
 func (f *videoFileQueryRow) resolve() *models.VideoFile {
 	return &models.VideoFile{
-		Format:           f.Format.String,
-		Width:            int(f.Width.Int64),
-		Height:           int(f.Height.Int64),
-		Duration:         f.Duration.Float64,
-		VideoCodec:       f.VideoCodec.String,
-		AudioCodec:       f.AudioCodec.String,
-		FrameRate:        f.FrameRate.Float64,
-		BitRate:          f.BitRate.Int64,
-		Interactive:      f.Interactive.Bool,
-		InteractiveSpeed: nullIntPtr(f.InteractiveSpeed),
-		CreationTime:     f.CreationTime.Timestamp,
-		Title:            f.Title.String,
-		Comment:          f.Comment.String,
-		Encoder:          f.Encoder.String,
-		Tags:             map[string]string(f.Tags),
-		MetadataProbed:   f.MetadataProbed.Bool,
+		Format:         f.Format.String,
+		Width:          int(f.Width.Int64),
+		Height:         int(f.Height.Int64),
+		Duration:       f.Duration.Float64,
+		VideoCodec:     f.VideoCodec.String,
+		AudioCodec:     f.AudioCodec.String,
+		FrameRate:      f.FrameRate.Float64,
+		BitRate:        f.BitRate.Int64,
+		CreationTime:   f.CreationTime.Timestamp,
+		Title:          f.Title.String,
+		Comment:        f.Comment.String,
+		Encoder:        f.Encoder.String,
+		Tags:           map[string]string(f.Tags),
+		MetadataProbed: f.MetadataProbed.Bool,
 	}
 }
 
@@ -195,8 +187,6 @@ func videoFileQueryColumns() []interface{} {
 		table.Col("audio_codec"),
 		table.Col("frame_rate"),
 		table.Col("bit_rate"),
-		table.Col("interactive"),
-		table.Col("interactive_speed"),
 		table.Col("creation_time"),
 		table.Col("title").As("video_title"),
 		table.Col("comment").As("video_comment"),

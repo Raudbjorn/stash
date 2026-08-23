@@ -1055,49 +1055,6 @@ declare namespace PluginApi {
 
       refetch: () => void;
     };
-    export enum ConnectionState {
-      Missing,
-      Disconnected,
-      Error,
-      Connecting,
-      Syncing,
-      Uploading,
-      Ready,
-    }
-
-    type Handy = typeof import("thehandy").default;
-    export type InteractiveAPI = {
-      readonly _connected: boolean;
-      readonly _playing: boolean;
-      readonly _scriptOffset: number;
-      readonly _handy: Handy;
-      readonly _useStashHostedFunscript: boolean;
-      connect(): Promise<void>;
-      set handyKey(key: string);
-      get handyKey(): string;
-      set useStashHostedFunscript(useStashHostedFunscript: boolean);
-      get useStashHostedFunscript(): boolean;
-      set scriptOffset(offset: number);
-      uploadScript(funscriptPath: string, apiKey?: string): Promise<void>;
-      sync(): Promise<number>;
-      setServerTimeOffset(offset: number): void;
-      play(position: number): Promise<void>;
-      pause(): Promise<void>;
-      ensurePlaying(position: number): Promise<void>;
-      setLooping(looping: boolean): Promise<void>;
-    };
-
-    function useInteractive(): {
-      interactive: InteractiveAPI;
-      state: ConnectionState;
-      serverOffset: number;
-      initialised: boolean;
-      currentScript?: string;
-      error?: string;
-      initialise: () => Promise<void>;
-      uploadScript: (funscriptPath: string) => Promise<void>;
-      sync: () => Promise<void>;
-    };
 
     function useLightbox(): {
       state: any;

@@ -115,7 +115,6 @@
         "view_history": "Geçmişi görüntüle",
         "anonymise": "Anonimleştir",
         "customise": "Özelleştir",
-        "delete_file_and_funscript": "Dosyayı sil (funscript dahil)",
         "disable": "Devre dışı bırak",
         "hide_configuration": "Yapılandırmayı Gizle",
         "logout": "Çıkış yap",
@@ -336,7 +335,6 @@
             "video_ext_head": "Video Uzantıları",
             "video_head": "Video",
             "database": "Veritabanı",
-            "funscript_heatmap_draw_range": "Oluşturulan ısı haritalarına aralığı dahil et",
             "blobs_storage": {
                 "heading": "İkili veri depolama türü"
             },
@@ -394,9 +392,7 @@
             "python_path": {
                 "heading": "Python Yürütülebilir Yolu",
                 "description": "Python yürütülebilir dosyasının yolu (yalnızca klasörün değil). Komut dosyası veri kazıyıcılar ve eklentiler için kullanılır. Boşsa, python ortamdan çözümlenecektir"
-            },
-            "heatmap_generation": "Funscript Isı Haritası Oluşturma",
-            "funscript_heatmap_draw_range_desc": "Oluşturulan ısı haritasının y ekseninde hareket aralığını çizin. Değişiklik yapıldıktan sonra mevcut ısı haritalarının yeniden oluşturulması gerekecektir."
+            }
         },
         "library": {
             "exclusions": "Dışta Tutulanlar",
@@ -603,14 +599,6 @@
                     "label": "Seçili açılır menüde gösterilecek maksimum öğe sayısı"
                 }
             },
-            "funscript_offset": {
-                "description": "Etkileşimli komut oynatmaları için milisaniye cinsinden süre farkı.",
-                "heading": "Funscript Süre Farkı (ms)"
-            },
-            "handy_connection_key": {
-                "description": "Etkileşimli sahneler içinHandy bağlantı anahtarı. Bu anahtarı kullanırsanız, Stash izlediğiniz sahne bilgisini handyfeeling.com ile paylaşacaktır",
-                "heading": "Handy Bağlantı Anahtarı"
-            },
             "images": {
                 "heading": "Resimler",
                 "options": {
@@ -624,7 +612,6 @@
                     }
                 }
             },
-            "interactive_options": "Etkileşimli Seçenekler",
             "language": {
                 "heading": "Dil"
             },
@@ -752,19 +739,6 @@
                 "margin": "Kenar boşluğu (piksel)",
                 "direction": "Yön"
             },
-            "handy_connection": {
-                "connect": "Bağlan",
-                "status": {
-                    "heading": "Handy Bağlantı Durumu"
-                },
-                "server_offset": {
-                    "heading": "Sunucu Zaman Farkı"
-                },
-                "sync": "Senkronize et"
-            },
-            "use_stash_hosted_funscript": {
-                "heading": "Funscript'leri doğrudan sun"
-            },
             "show_tag_card_on_hover": {
                 "heading": "Etiket kartı araç ipuçları"
             },
@@ -861,7 +835,6 @@
             "force_transcodes_tooltip": "Varsayılan olarak, video yalnızca video dosyası tarayıcı tarafından desteklenmediğinde dönüştürülür. Etkinleştirildiğinde, video dosyası tarayıcı tarafından destekleniyorsa bile video dönüştürülür.",
             "image_previews": "Hareketli Resim Önizlemeleri",
             "image_previews_tooltip": "Ayrıca hareketli (webp) önizlemeler oluşturun, yalnızca Sahne/İşaretleyici Duvarı Önizleme Türü, Hareketli Görüntü olarak ayarlandığında gereklidir. Gezinirken video önizlemelerinden daha az CPU kullanırlar, ancak bunlara ek olarak oluşturulurlar ve daha büyük dosyalardır.",
-            "interactive_heatmap_speed": "Etkileşimli sahneler için ısı haritaları ve hız kayıtları oluştur",
             "marker_image_previews": "İşaretleyici Hareketli Resim Önizlemeleri",
             "marker_image_previews_tooltip": "Hareketli Yer İmi WebP önizlemeleri, Önizleme Türü sadece Hareketli Resim olarak seçilmişse gereklidir.",
             "marker_screenshots": "İşaretleyici Ekran Görüntüleri",
@@ -1011,8 +984,6 @@
     "include_sub_studios": "Bağlı stüdyoları da ekle",
     "include_sub_tags": "Alt etiketleri dahil et",
     "instagram": "Instagram",
-    "interactive": "Etkileşimli",
-    "interactive_speed": "Etkileşimli Hız",
     "isMissing": "Eksik",
     "library": "Kütüphane",
     "loading": {
@@ -1025,7 +996,6 @@
     "media_info": {
         "audio_codec": "Ses Kodlayıcı",
         "downloaded_from": "İndirildiği Yer",
-        "interactive_speed": "Etkileşimli Hız",
         "performer_card": {
             "age": "{age} {years_old}",
             "age_context": "Bu sahnede {age} {years_old}"
@@ -1388,14 +1358,6 @@
             "premade_filter": "Hazır Filtre",
             "saved_filter": "Kayıtlı Filtre"
         }
-    },
-    "handy_connection_status": {
-        "connecting": "Bağlanıyor",
-        "disconnected": "Bağlantı kesildi",
-        "error": "Handy'e bağlanırken hata oluştu",
-        "ready": "Hazır",
-        "uploading": "Komut dosyası yükleniyor",
-        "syncing": "Sunucu ile senkronize ediliyor"
     },
     "o_count": "O Sayısı",
     "o_history": "O Geçmişi",

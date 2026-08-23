@@ -29,7 +29,6 @@
         "delete": "刪除",
         "delete_entity": "刪除{entityType}",
         "delete_file": "刪除檔案",
-        "delete_file_and_funscript": "刪除檔案 (及其 Funscript)",
         "delete_generated_supporting_files": "刪除已生成的資訊檔案",
         "disallow": "不允許",
         "download": "下載",
@@ -405,10 +404,7 @@
                 "heading": "插件路徑",
                 "description": "插件設定檔的存放路徑"
             },
-            "funscript_heatmap_draw_range": "產生涵蓋此範圍的熱圖",
-            "funscript_heatmap_draw_range_desc": "將移動範圍描繪在熱圖的Ｙ軸上；變更後需要重新產製現有的熱圖。",
-            "gallery_cover_regex_label": "圖庫封面的表示式",
-            "heatmap_generation": "Funscript 熱圖生成"
+            "gallery_cover_regex_label": "圖庫封面的表示式"
         },
         "library": {
             "exclusions": "白名單",
@@ -639,24 +635,6 @@
                     "label": "在選擇下拉式選單中顯示的最大項目數量"
                 }
             },
-            "funscript_offset": {
-                "description": "互動式腳本的時間偏移量 (毫秒)。",
-                "heading": "Funscript 偏移量 (毫秒)"
-            },
-            "handy_connection": {
-                "connect": "連接",
-                "server_offset": {
-                    "heading": "伺服器誤差值"
-                },
-                "status": {
-                    "heading": "Handy 連線狀態"
-                },
-                "sync": "同步"
-            },
-            "handy_connection_key": {
-                "description": "播放支援互動性的短片時所用的 Handy 連線金鑰。設定此金鑰後，Stash 將可把目前短片中的對應資訊分享至 handyfeeling.com",
-                "heading": "Handy 連線金鑰"
-            },
             "image_lightbox": {
                 "heading": "圖片燈箱"
             },
@@ -673,7 +651,6 @@
                     }
                 }
             },
-            "interactive_options": "互動性選項",
             "language": {
                 "heading": "語言"
             },
@@ -795,10 +772,6 @@
                     "heading": "啟用背景影像"
                 }
             },
-            "use_stash_hosted_funscript": {
-                "description": "啟用後，funscript 將直接從 Stash 傳送至您的 Handy 裝置，而無需使用第三方 Handy 伺服器。要求可從您的 Handy 裝置存取 Stash，且如果 stash 已設定憑證，則會產生 API 金鑰。",
-                "heading": "直接為 funscript 服務"
-            },
             "performer_list": {
                 "options": {
                     "show_links_on_grid_card": {
@@ -910,7 +883,6 @@
             "force_transcodes_tooltip": "預設情況下，只有無法正常於瀏覽器中播放的影片檔會被轉檔成可播放的格式。開啟此設定後，即使是可正常播放的影片檔，也會被視為需轉檔的檔案。",
             "image_previews": "動圖預覽",
             "image_previews_tooltip": "產生 WebP 動圖作為預覽，僅適用於設定為『動圖』的預覽類型。",
-            "interactive_heatmap_speed": "替可互動的短片產生熱圖 (heatmaps) 及速度",
             "marker_image_previews": "章節動圖預覽",
             "marker_image_previews_tooltip": "產生 WebP 動圖作為章節預覽，僅適用於設定為『動圖』的預覽類型。",
             "marker_screenshots": "章節截圖",
@@ -1063,15 +1035,6 @@
         "TRANSGENDER_MALE": "跨型別男性"
     },
     "hair_color": "頭髮顏色",
-    "handy_connection_status": {
-        "connecting": "連線中",
-        "disconnected": "已斷線",
-        "error": "連接至 Handy 時出錯",
-        "missing": "遺失",
-        "ready": "已準備",
-        "syncing": "與伺服器同步中",
-        "uploading": "上傳腳本中"
-    },
     "hasMarkers": "章節標記",
     "height": "身高",
     "height_cm": "高度 (cm)",
@@ -1084,8 +1047,6 @@
     "include_sub_studios": "包含子工作室",
     "include_sub_tags": "包含子標籤",
     "instagram": "Instagram",
-    "interactive": "互動性支援",
-    "interactive_speed": "互動速度",
     "isMissing": "缺失",
     "last_played_at": "上次播放於",
     "library": "收藏庫",
@@ -1099,7 +1060,6 @@
     "media_info": {
         "audio_codec": "音效編碼",
         "downloaded_from": "下載於",
-        "interactive_speed": "互動速度",
         "performer_card": {
             "age": "{age} {years_old}",
             "age_context": "這齣戲時 {age} {years_old}"

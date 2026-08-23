@@ -296,9 +296,6 @@ type VideoFile struct {
 	Tags           map[string]string `json:"tags"`
 	MetadataProbed bool              `json:"metadata_probed"`
 
-	Interactive      bool `json:"interactive"`
-	InteractiveSpeed *int `json:"interactive_speed"`
-
 	// CreationTime is the creation timestamp embedded in the video
 	// container's own metadata (e.g. QuickTime/MP4 creation_time), if
 	// present. Zero value if not present in the source file.

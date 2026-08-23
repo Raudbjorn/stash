@@ -348,10 +348,6 @@ input SceneFilterType {
   stash_id_count: IntCriterionInput
   "Filter by url"
   url: StringCriterionInput
-  "Filter by interactive"
-  interactive: Boolean
-  "Filter by InteractiveSpeed"
-  interactive_speed: IntCriterionInput
   "Filter by captions"
   captions: StringCriterionInput
   "Filter by resume time"
@@ -896,8 +892,6 @@ input VideoFileFilterInput {
 
   captions: StringCriterionInput
 
-  interactive: Boolean
-  interactive_speed: IntCriterionInput
 }
 
 input ImageFileFilterInput {

@@ -29,7 +29,6 @@
         "delete": "Eliminar",
         "delete_entity": "Eliminar {entityType}",
         "delete_file": "Eliminar archivo",
-        "delete_file_and_funscript": "Eliminar archivo (y funscript)",
         "delete_generated_supporting_files": "Eliminar ficheros de soporte generados",
         "disallow": "No permitir/Denegar",
         "download": "Descargar",
@@ -383,8 +382,6 @@
                     "heading": "Ruta del ejecutable FFprobe"
                 }
             },
-            "funscript_heatmap_draw_range": "Inluir rango en los mapas de calor generados",
-            "funscript_heatmap_draw_range_desc": "Dibujar rango de movimiento en el eje \"y\" del mapa de calor generado. Los mapas de calor existentes tendrán que ser generados de nuevo tras el cambio.",
             "gallery_cover_regex_desc": "Expresión regular utilizada para identificar una imagen como carátula de una galería.",
             "gallery_cover_regex_label": "Patrón carátula galería",
             "gallery_ext_desc": "Lista delimitada por comas de extensiones de archivo que serán identificados como archivos de galería en formato ZIP.",
@@ -394,7 +391,6 @@
             "generated_files_location": "Ruta relativa del directorio para los ficheros generados (marcadores de escena, vistas previas de escena, conjuntos de imágenes o “sprites”, etc).",
             "generated_path_head": "Ruta para el directorio de archivos generados",
             "hashing": "Función hash",
-            "heatmap_generation": "Generación mapa de calor Funscript",
             "image_ext_desc": "Lista delimitada por comas de las extensiones de archivo que serán identificadas como imágenes.",
             "image_ext_head": "Extensiones de imagen",
             "include_audio_desc": "Incluye flujo de audio cuando se generen vistas previas.",
@@ -695,24 +691,6 @@
                     }
                 }
             },
-            "funscript_offset": {
-                "description": "Tiempo de compensación en milisegundos para la reproducción de scripts interactivos.",
-                "heading": "Desplazamiento de Funscript (ms)"
-            },
-            "handy_connection": {
-                "connect": "Conectar",
-                "server_offset": {
-                    "heading": "Tiempo compensación servidor"
-                },
-                "status": {
-                    "heading": "Estado conexión móvil"
-                },
-                "sync": "Sincronizar"
-            },
-            "handy_connection_key": {
-                "description": "Clave para conexión práctica que se usará en las escenas interactivas. Configurar esta clave permitirá a Stash compartir la información actual de las escenas con handyfeeling.com.",
-                "heading": "Clave de conexión para Handy"
-            },
             "image_lightbox": {
                 "heading": "Lightbox para imágenes"
             },
@@ -734,7 +712,6 @@
                     }
                 }
             },
-            "interactive_options": "Opciones Interactivas",
             "language": {
                 "heading": "Lenguaje"
             },
@@ -842,10 +819,6 @@
                     "description": "Mostrar siempre el nombre del estudio como texto en las vistas detalladas, en lugar de como icono.",
                     "heading": "Mostrar «estudio» como texto"
                 }
-            },
-            "use_stash_hosted_funscript": {
-                "description": "Cuando se activa, los funscripts se servirán directamente desde Stash a tu dispositivo Handy sin utilizar el servidor Handy de terceros. Requiere que Stash sea accesible desde tu dispositivo Handy, y que se genere una clave API si Stash tiene las credenciales configuradas.",
-                "heading": "Servir funscripts directamente"
             },
             "scroll_attempts_before_change": {
                 "description": "Número de intentos de desplazamiento antes de pasar al siguiente/anterior elemento. Solo se aplica para el modo de desplazamiento Pan Y.",
@@ -994,7 +967,6 @@
             "force_transcodes_tooltip": "Por defecto las transcodificaciones son solo generadas cuando el archivo de vídeo no es soportado por el navegador. Cuando están habilitadas, las transcodificaciones se generarán incluso cuando el fichero de vídeo sea soportado por el navegador.",
             "image_previews": "Vistas previas en formato de imagen animada",
             "image_previews_tooltip": "Generar también vistas previas animadas (webp), solo requeridas cuando el tipo de vista previa del Muro de Escenas/Marcadores está configurado como imagen animada. Al navegar, utilizan menos CPU que las vistas previas de video, pero se generan además de ellas y son archivos más grandes.",
-            "interactive_heatmap_speed": "Generar mapas de calor y velocidades para escenas interactivas",
             "marker_image_previews": "Vistas previas de marcadores en formato de imagen animada",
             "marker_image_previews_tooltip": "Generar también vistas previas animadas (webp), solo requeridas cuando el tipo de vista previa del Muro de Escena/Marcador está configurado como Imagen Animada. Al navegar, consumen menos CPU que las vistas previas de video, pero se generan además de ellas y son archivos más grandes.",
             "marker_screenshots": "Capturas de pantalla de marcadores",
@@ -1158,15 +1130,6 @@
         "TRANSGENDER_MALE": "Varón transgénero"
     },
     "hair_color": "Color de pelo",
-    "handy_connection_status": {
-        "connecting": "Conectando",
-        "disconnected": "Desconectado",
-        "missing": "El archivo no esta disponsible",
-        "ready": "Conexion Preparada",
-        "syncing": "Sincronizando con el servidor",
-        "uploading": "Subiendo script",
-        "error": "Error al conectar con Handy"
-    },
     "hasMarkers": "Marcadores",
     "height": "Estatura",
     "help": "Ayuda",
@@ -1178,8 +1141,6 @@
     "include_sub_studios": "Incluir estudios filiales",
     "include_sub_tags": "Incluir sub-etiquetas",
     "instagram": "Instagram",
-    "interactive": "Interactivo",
-    "interactive_speed": "Velocidad interactiva",
     "isMissing": "Falta",
     "library": "Biblioteca",
     "loading": {
@@ -1192,7 +1153,6 @@
     "media_info": {
         "audio_codec": "Códec de audio",
         "downloaded_from": "Descargado de",
-        "interactive_speed": "Velocidad interactiva",
         "performer_card": {
             "age": "{age} {years_old}",
             "age_context": "{age} {years_old} durante la producción"

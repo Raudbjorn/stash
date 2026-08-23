@@ -29,7 +29,6 @@
         "delete": "Usuń",
         "delete_entity": "Usuń {entityType}",
         "delete_file": "Usuń plik",
-        "delete_file_and_funscript": "Usuń plik (i skrypt funscript)",
         "delete_generated_supporting_files": "Usuń wygenerowane pliki pomocnicze",
         "disallow": "Nie zezwalaj",
         "download": "Pobierz",
@@ -383,8 +382,6 @@
                     "heading": "Ścieżka pliku wykonywalnego FFprobe"
                 }
             },
-            "funscript_heatmap_draw_range": "Bierz pod uwagę zakres dla wygenerowanych heatmap",
-            "funscript_heatmap_draw_range_desc": "Narysuj zakres ruchu na osi y generowanej heatmapy. Istniejące heatmapy będą musiały zostać ponownie wygenerowane po zmianie.",
             "gallery_cover_regex_desc": "Regexp używany do identyfikacji obrazu jako okładki galerii",
             "gallery_cover_regex_label": "Wzór dla okładki galerii",
             "gallery_ext_desc": "Rozdzielona przecinkami lista rozszerzeń plików, które będą identyfikowane jako pliki galerii zip.",
@@ -394,7 +391,6 @@
             "generated_files_location": "Lokalizacja katalogu z wygenerowanymi plikami (znaczniki scen, podglądy scen, sprite'y itp.)",
             "generated_path_head": "Ścieżka wygenerowanych plików",
             "hashing": "Hashowanie",
-            "heatmap_generation": "Generowanie heatmap dla Funscript",
             "image_ext_desc": "Rozdzielona przecinkami lista rozszerzeń plików, które będą identyfikowane jako obrazy.",
             "image_ext_head": "Rozszerzenia obrazów",
             "include_audio_desc": "Uwzględnia strumień audio podczas generowania podglądu.",
@@ -675,24 +671,6 @@
                     }
                 }
             },
-            "funscript_offset": {
-                "description": "Przesunięcie czasowe w milisekundach dla odtwarzania skryptów interaktywnych.",
-                "heading": "Przesunięcie Funscript (ms)"
-            },
-            "handy_connection": {
-                "connect": "Połącz",
-                "server_offset": {
-                    "heading": "Przesunięcie serwera"
-                },
-                "status": {
-                    "heading": "Stan podłączenia Handy"
-                },
-                "sync": "Synchronizuj"
-            },
-            "handy_connection_key": {
-                "description": "Klucz połączenia Handy używany w scenach interaktywnych. Ustawienie tego klucza umożliwi Stash udostępnianie informacji o bieżącej scenie w witrynie handyfeeling.com",
-                "heading": "Klucz połączenia Handy"
-            },
             "image_lightbox": {
                 "heading": "Pole podglądu obrazu"
             },
@@ -714,7 +692,6 @@
                     }
                 }
             },
-            "interactive_options": "Opcje interaktywne",
             "language": {
                 "heading": "Język"
             },
@@ -964,7 +941,6 @@
             "force_transcodes_tooltip": "Domyślnie transkody są generowane tylko wtedy, gdy plik wideo nie jest obsługiwany przez przeglądarkę. Po włączeniu tej funkcji transkod będzie generowany nawet wtedy, gdy plik wideo wydaje się być obsługiwany przez przeglądarkę.",
             "image_previews": "Podglądy - Animowane obrazy",
             "image_previews_tooltip": "Animowane podglądy WebP, wymagane tylko wtedy, gdy opcja Typ podglądu jest ustawiona na Animowane obrazy.",
-            "interactive_heatmap_speed": "Generowanie heatmap i prędkości dla scen interaktywnych",
             "marker_image_previews": "Podgląd znaczników - Animowane obrazy",
             "marker_image_previews_tooltip": "Animowane podglądy znaczników WebP, wymagane tylko wtedy, gdy opcja Typ podglądu jest ustawiony na Animowane obrazy.",
             "marker_screenshots": "Podgląd znaczników - Statyczny obraz",
@@ -1127,15 +1103,6 @@
         "TRANSGENDER_MALE": "Transgenderowy mężczyzna"
     },
     "hair_color": "Kolor włosów",
-    "handy_connection_status": {
-        "connecting": "Podłączanie",
-        "disconnected": "Rozłączono",
-        "error": "Błąd połączenia z Handy",
-        "missing": "Brak",
-        "ready": "Podłączono",
-        "syncing": "Synchronizacja z serwerem",
-        "uploading": "Wgrywanie skryptu"
-    },
     "hasChapters": "Rozdziały",
     "hasMarkers": "Znaczniki",
     "height": "Wzrost",
@@ -1150,8 +1117,6 @@
     "include_sub_studios": "Uwzględnić studia zależne",
     "include_sub_tags": "Uwzględnij podtagi",
     "instagram": "Instagram",
-    "interactive": "Interaktywny",
-    "interactive_speed": "Prędkość interaktywna",
     "isMissing": "Brakuje",
     "last_played_at": "Ostatnio odtwarzano",
     "library": "Biblioteka",
@@ -1165,7 +1130,6 @@
     "media_info": {
         "audio_codec": "Kodek audio",
         "downloaded_from": "Pobrano z",
-        "interactive_speed": "Szybkość interaktywna",
         "performer_card": {
             "age": "{age} {years_old}",
             "age_context": "{age} {years_old} w momencie produkcji"

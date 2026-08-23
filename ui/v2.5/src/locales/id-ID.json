@@ -38,7 +38,6 @@
         "delete": "Hapus",
         "delete_entity": "Hapus {entityType}",
         "delete_file": "Hapus berkas",
-        "delete_file_and_funscript": "Hapus berkas (dan funscript)",
         "delete_generated_supporting_files": "Hapus file pendukung yang dihasilkan",
         "disable": "Matikan",
         "disallow": "Larang",
@@ -339,7 +338,6 @@
                 "description": "Tempat menyimpan data biner seperti gambar sampul adegan, pemain, studio, dan tag. Setelah mengubah nilai ini, data yang ada harus dimigrasikan menggunakan tugas Migrate Blobs. Lihat halaman Tugas untuk migrasi.",
                 "heading": "Tipe penyimpanan data biner"
             },
-            "funscript_heatmap_draw_range_desc": "Gambarkan rentang gerak pada sumbu y dari peta panas yang dihasilkan. Peta panas yang ada perlu dibuat ulang setelah diubah.",
             "gallery_cover_regex_desc": "Regexp digunakan untuk mengidentifikasi gambar sebagai sampul galeri",
             "gallery_cover_regex_label": "Pola sampul galeri",
             "gallery_ext_desc": "Daftar ekstensi berkas yang dibatasi koma yang akan diidentifikasi sebagai berkas zip galeri.",
@@ -354,11 +352,9 @@
                 "description": "Lokasi direktori untuk cadangan berkas pangkalan data SQLite",
                 "heading": "Jalur Direktori Cadangan"
             },
-            "funscript_heatmap_draw_range": "Sertakan rentang dalam peta panas yang dihasilkan",
             "generated_file_naming_hash_head": "Hash penamaan berkas yang dihasilkan",
             "generated_files_location": "Lokasi direktori untuk berkas yang dihasilkan (penanda adegan, pratinjau adegan, sprite, dll.)",
             "generated_path_head": "Jalur yang Dihasilkan",
-            "heatmap_generation": "Pembuatan Peta Panas Funscript",
             "image_ext_head": "Ekstensi Gambar",
             "include_audio_desc": "Termasuk aliran audio saat membuat pratinjau.",
             "include_audio_head": "Sertakan audio",
@@ -498,10 +494,6 @@
                         }
                     }
                 }
-            },
-            "handy_connection": {
-                "connect": "Sambung",
-                "sync": "Singkronisasi"
             },
             "image_wall": {
                 "direction": "Arah"
@@ -739,14 +731,7 @@
     "folder": "Folder",
     "galleries": "Galeri",
     "gallery": "Galeri",
-    "handy_connection_status": {
-        "connecting": "Menghubungkan",
-        "disconnected": "Terputus",
-        "missing": "Hilang",
-        "ready": "Siap"
-    },
     "instagram": "Instagram",
-    "interactive": "Interaktif",
     "library": "Koleksi",
     "loading": {
         "generic": "Memuat…"

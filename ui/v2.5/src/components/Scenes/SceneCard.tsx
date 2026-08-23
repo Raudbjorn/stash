@@ -427,13 +427,6 @@ const SceneCardImage = React.memo(
       [props.scene]
     );
 
-    function maybeRenderInteractiveSpeedOverlay() {
-      return (
-        <div className="scene-interactive-speed-overlay">
-          {props.scene.interactive_speed ?? ""}
-        </div>
-      );
-    }
 
     const onScrubberClick = useCallback(
       (timestamp: number) => {
@@ -471,7 +464,6 @@ const SceneCardImage = React.memo(
         />
         <RatingBanner rating={props.scene.rating100} />
         <SceneSpecsOverlay scene={props.scene} />
-        {maybeRenderInteractiveSpeedOverlay()}
       </>
     );
   })
@@ -521,11 +513,6 @@ export const SceneCard = React.memo(
         thumbnailSectionClassName="video-section"
         resumeTime={props.scene.resume_time ?? undefined}
         duration={file?.duration ?? undefined}
-        interactiveHeatmap={
-          props.scene.interactive_speed
-            ? (props.scene.paths.interactive_heatmap ?? undefined)
-            : undefined
-        }
         image={<SceneCardImage {...props} />}
         overlays={<SceneCardOverlays {...props} />}
         details={<SceneCardDetails {...props} />}

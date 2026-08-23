@@ -142,7 +142,6 @@ func makeConfigGeneralResult() *ConfigGeneralResult {
 		TranscodeOutputArgs:           config.GetTranscodeOutputArgs(),
 		LiveTranscodeInputArgs:        config.GetLiveTranscodeInputArgs(),
 		LiveTranscodeOutputArgs:       config.GetLiveTranscodeOutputArgs(),
-		DrawFunscriptHeatmapRange:     config.GetDrawFunscriptHeatmapRange(),
 		ScraperPackageSources:         config.GetScraperPackageSources(),
 		PluginPackageSources:          config.GetPluginPackageSources(),
 	}
@@ -170,9 +169,6 @@ func makeConfigInterfaceResult() *ConfigInterfaceResult {
 	customLocalesEnabled := config.GetCustomLocalesEnabled()
 	disableCustomizations := config.GetDisableCustomizations()
 	language := config.GetLanguage()
-	handyKey := config.GetHandyKey()
-	scriptOffset := config.GetFunscriptOffset()
-	useStashHostedFunscript := config.GetUseStashHostedFunscript()
 	disableDropdownCreate := config.GetDisableDropdownCreate()
 
 	return &ConfigInterfaceResult{
@@ -199,10 +195,6 @@ func makeConfigInterfaceResult() *ConfigInterfaceResult {
 		Language:                     &language,
 
 		DisableDropdownCreate: disableDropdownCreate,
-
-		HandyKey:                &handyKey,
-		FunscriptOffset:         &scriptOffset,
-		UseStashHostedFunscript: &useStashHostedFunscript,
 	}
 }
 

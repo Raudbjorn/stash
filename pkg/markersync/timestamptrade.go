@@ -104,12 +104,6 @@ type ttSceneResponse struct {
 	// URLs are extra scene URLs.
 	URLs []string `json:"urls"`
 
-	// Funscripts are funscripts associated with the scene. Each is matched to a
-	// locally-indexed funscript by its md5 checksum.
-	Funscripts []struct {
-		MD5 string `json:"md5"`
-	} `json:"funscripts"`
-
 	// Galleries are galleries associated with the scene. Each is matched locally
 	// by its files' md5 checksums.
 	Galleries []struct {
@@ -288,31 +282,6 @@ func (s *TimestampTradeSource) FetchGroups(ctx context.Context, id SceneIdentity
 	return refs, nil
 }
 
-// FetchFunscripts implements FunscriptProvider. It maps each decoded funscript
-// to a FunscriptRef carrying the file md5 (for local matching).
-func (s *TimestampTradeSource) FetchFunscripts(ctx context.Context, id SceneIdentity) ([]FunscriptRef, error) {
-	resp, err := s.fetchSceneData(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if resp == nil {
-		return nil, nil
-	}
-
-	refs := make([]FunscriptRef, 0, len(resp.Funscripts))
-	for _, f := range resp.Funscripts {
-		if f.MD5 == "" {
-			continue
-		}
-		refs = append(refs, FunscriptRef{MD5: f.MD5})
-	}
-
-	if len(refs) == 0 {
-		return nil, nil
-	}
-	return refs, nil
-}
-
 // fetchSceneData resolves the scene's stash ids to a timestamp.trade scene and
 // fetches its /json-scene record. It returns (nil, nil) when no stash id
 // resolves to a timestamp.trade scene.
@@ -475,31 +444,19 @@ type ttWireFile struct {
 	Fingerprints []ttWireFP `json:"fingerprints"`
 }
 
-// ttWireFunscript is a submitted funscript hash. Metadata is the funscript's raw
-// top-level metadata JSON; it is omitted when empty (null on the wire). The json
-// tag MUST be exactly "funscriptHashes" on the enclosing field to match the
-// community plugin's submit payload.
-type ttWireFunscript struct {
-	Filename string          `json:"filename"`
-	Metadata json.RawMessage `json:"metadata,omitempty"`
-	MD5      string          `json:"md5"`
-}
-
 // ttWireScene is the full body posted to /submit-stash. It matches the plugin's
-// GraphQL scene fragment. funscriptHashes is omitted for scenes with no indexed
-// funscripts; the server tolerates its absence.
+// GraphQL scene fragment.
 type ttWireScene struct {
-	Title           string            `json:"title"`
-	Details         string            `json:"details"`
-	URLs            []string          `json:"urls"`
-	Date            string            `json:"date"`
-	Performers      []ttWireNamed     `json:"performers"`
-	Tags            []ttWireTag       `json:"tags"`
-	Studio          *ttWireNamed      `json:"studio,omitempty"`
-	StashIDs        []ttWireStashID   `json:"stash_ids"`
-	SceneMarkers    []ttWireMarker    `json:"scene_markers"`
-	Files           []ttWireFile      `json:"files"`
-	FunscriptHashes []ttWireFunscript `json:"funscriptHashes,omitempty"`
+	Title        string          `json:"title"`
+	Details      string          `json:"details"`
+	URLs         []string        `json:"urls"`
+	Date         string          `json:"date"`
+	Performers   []ttWireNamed   `json:"performers"`
+	Tags         []ttWireTag     `json:"tags"`
+	Studio       *ttWireNamed    `json:"studio,omitempty"`
+	StashIDs     []ttWireStashID `json:"stash_ids"`
+	SceneMarkers []ttWireMarker  `json:"scene_markers"`
+	Files        []ttWireFile    `json:"files"`
 }
 
 // toWireStashIDs maps neutral stash id refs to the wire representation.
@@ -565,30 +522,6 @@ func buildSubmitScene(scene SceneSubmission) ttWireScene {
 		})
 	}
 
-	// funscriptHashes: only populate when present so scenes without funscripts
-	// omit the field entirely (omitempty on a nil slice). Empty metadata is left
-	// as a nil RawMessage so it is omitted (null) on the wire; a non-empty
-	// metadata string is passed through as raw JSON unchanged.
-	if len(scene.FunscriptHashes) > 0 {
-		wire.FunscriptHashes = make([]ttWireFunscript, 0, len(scene.FunscriptHashes))
-		for _, fh := range scene.FunscriptHashes {
-			var meta json.RawMessage
-			// Only pass metadata through when it is valid JSON. Invalid JSON here
-			// would make json.Marshal of the whole payload fail (RawMessage is
-			// re-validated on encode), aborting the entire scene submission; drop
-			// it to null instead. Callers validate + log upstream; this is a
-			// belt-and-suspenders guard at the wire boundary.
-			if fh.Metadata != "" && json.Valid([]byte(fh.Metadata)) {
-				meta = json.RawMessage(fh.Metadata)
-			}
-			wire.FunscriptHashes = append(wire.FunscriptHashes, ttWireFunscript{
-				Filename: fh.Filename,
-				Metadata: meta,
-				MD5:      fh.MD5,
-			})
-		}
-	}
-
 	return wire
 }
 
@@ -609,10 +542,9 @@ func (s *TimestampTradeSource) SubmitScene(ctx context.Context, scene SceneSubmi
 
 // compile-time assertions.
 var (
-	_ Source            = (*TimestampTradeSource)(nil)
-	_ Submitter         = (*TimestampTradeSource)(nil)
-	_ ExtraURLProvider  = (*TimestampTradeSource)(nil)
-	_ GalleryProvider   = (*TimestampTradeSource)(nil)
-	_ GroupProvider     = (*TimestampTradeSource)(nil)
-	_ FunscriptProvider = (*TimestampTradeSource)(nil)
+	_ Source           = (*TimestampTradeSource)(nil)
+	_ Submitter        = (*TimestampTradeSource)(nil)
+	_ ExtraURLProvider = (*TimestampTradeSource)(nil)
+	_ GalleryProvider  = (*TimestampTradeSource)(nil)
+	_ GroupProvider    = (*TimestampTradeSource)(nil)
 )

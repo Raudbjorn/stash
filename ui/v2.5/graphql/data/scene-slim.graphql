@@ -12,8 +12,6 @@ fragment SlimSceneData on Scene {
   favorite
   transcode_benefit
 
-  interactive
-  interactive_speed
   resume_time
   play_duration
   play_count
@@ -29,8 +27,6 @@ fragment SlimSceneData on Scene {
     webp
     vtt
     sprite
-    funscript
-    interactive_heatmap
     caption
   }
 

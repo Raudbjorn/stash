@@ -31,7 +31,6 @@
         "delete": "Apagar",
         "delete_entity": "Apagar {entityType}",
         "delete_file": "Apagar arquivo",
-        "delete_file_and_funscript": "Deletar arquivo (e funscript)",
         "delete_generated_supporting_files": "Apagar arquivos gerados de suporte",
         "disallow": "Não permitir",
         "download": "Download",
@@ -577,24 +576,6 @@
                 },
                 "heading": "Edição"
             },
-            "funscript_offset": {
-                "description": "Compensação de tempo em milissegundos para a reprodução de scripts interativos.",
-                "heading": "Compensação de tempo Funscript (ms)"
-            },
-            "handy_connection": {
-                "connect": "Conectar",
-                "server_offset": {
-                    "heading": "Compensação do Servidor"
-                },
-                "status": {
-                    "heading": "Estado da conexão do Handy"
-                },
-                "sync": "Sincronizar"
-            },
-            "handy_connection_key": {
-                "description": "Chave de conexão para usar em cenas interativas. Ativar esta chave permitirá o Stash a compartilhar as informações da cena atual com handyfeeling.com",
-                "heading": "Chave de conexão"
-            },
             "image_lightbox": {
                 "heading": "Galeria de imagem"
             },
@@ -607,7 +588,6 @@
                     }
                 }
             },
-            "interactive_options": "Opções interativas",
             "language": {
                 "heading": "Idioma"
             },
@@ -772,7 +752,6 @@
             "force_transcodes_tooltip": "Por padrão, transcodificações são geradas apenas quando o arquivo de vídeo não é suportado pelo navegador. Quando ativado, transcodificações serão geradas mesmo quando o vídeo parecer ser suportado no navegador.",
             "image_previews": "Pré-visualizações de imagem animada",
             "image_previews_tooltip": "Pré-visualizações WebP animadas, necessárias somente se o Tipo de Pré-visualização estiver configurado para Imagem Animada.",
-            "interactive_heatmap_speed": "Gerar heatmaps e velocidades para cenas interativas",
             "marker_image_previews": "Pré-visualizações de Imagem Animada para Marcadores",
             "marker_image_previews_tooltip": "Pré-visualizações WebP animadas para marcadores, necessário apenas de o Tipo de Pré-visualização estiver configurado para Imagem Animada.  WEBP utiliza menos CPU do que as pré-visualização de vídeo, mas são geradas em sua adição, e por isso ocupam mais espaço.",
             "marker_screenshots": "Capturas de tela de Marcadores",
@@ -894,15 +873,6 @@
         "TRANSGENDER_MALE": "Transgênero Masculino"
     },
     "hair_color": "Cor do cabelo",
-    "handy_connection_status": {
-        "connecting": "Conectando",
-        "disconnected": "Desconectado",
-        "error": "Erro conectando ao Handy",
-        "missing": "Faltando",
-        "ready": "Pronto",
-        "syncing": "Sincronizando com o servidor",
-        "uploading": "Enviando script"
-    },
     "hasMarkers": "Possui marcadores",
     "height": "Altura",
     "help": "Ajuda",
@@ -914,8 +884,6 @@
     "include_sub_studios": "Incluem estúdios filho",
     "include_sub_tags": "Incluir sub-etiquetas",
     "instagram": "Instagram",
-    "interactive": "Interativo",
-    "interactive_speed": "Velocidade interativa",
     "isMissing": "Está faltando",
     "library": "Biblioteca",
     "loading": {
@@ -927,7 +895,6 @@
     "media_info": {
         "audio_codec": "Codec de áudio",
         "downloaded_from": "Baixado de",
-        "interactive_speed": "Velocidade interativa",
         "performer_card": {
             "age": "{age} {years_old}",
             "age_context": "{age} {years_old} nesta cena"

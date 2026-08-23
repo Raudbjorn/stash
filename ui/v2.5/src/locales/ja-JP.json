@@ -28,7 +28,6 @@
         "delete": "削除",
         "delete_entity": "{entityType}を削除",
         "delete_file": "ファイルを削除",
-        "delete_file_and_funscript": "ファイルを削除 (ファンスクリプトを含む)",
         "delete_generated_supporting_files": "生成済みのサポートファイルを削除",
         "disallow": "拒否",
         "download": "ダウンロード",
@@ -401,19 +400,16 @@
                 "description": "バイナリデータを保存するファイルシステムを指定できます。blobストレージタイプを使用したファイルシステムの場合にのみ適用されます。警告: この設定を変更した場合、既に存在するデータは手動で移動する必要があります。"
             },
             "database": "データベース",
-            "funscript_heatmap_draw_range_desc": "生成されたヒートマップのY軸上に可動範囲を描画します。既存のヒートマップは、変更後に再生成する必要があります。",
             "blobs_storage": {
                 "description": "シーンのカバー画像、出演者・スタジオ・タグの画像などのバイナリデータを保存する場所を指定できます。この値を変更すると、既に存在するデータはBlobsの移行タスクを使用して移行する必要があります。移行については、タスクページを確認してください。",
                 "heading": "バイナリデータのストレージタイプ"
             },
             "gallery_cover_regex_label": "ギャラリーのカバーパターン",
             "gallery_cover_regex_desc": "画像をギャラリーのカバーとして識別するために使用される正規表現",
-            "heatmap_generation": "Funscriptのヒートマップ生成",
             "plugins_path": {
                 "description": "プラグイン設定ファイルのディレクトリ",
                 "heading": "プラグインパス"
             },
-            "funscript_heatmap_draw_range": "生成済みのヒートマップに範囲を含める",
             "delete_trash_path": {
                 "heading": "ゴミ箱のパス"
             }
@@ -645,24 +641,6 @@
                     "label": "選択ドロップダウンメニューに表示するアイテムの最大数"
                 }
             },
-            "funscript_offset": {
-                "description": "インタラクティブスクリプトの実行までのオフセットをミリ秒で指定できます。",
-                "heading": "Funscriptオフセット (ms)"
-            },
-            "handy_connection": {
-                "connect": "接続",
-                "server_offset": {
-                    "heading": "サーバーのオフセット"
-                },
-                "status": {
-                    "heading": "Handy接続状況"
-                },
-                "sync": "同期"
-            },
-            "handy_connection_key": {
-                "description": "Handy connection keyは、インタラクティブなシーンで使用されます。このキーを設定すると、Stashが現在のシーン情報をhandyfeeling.comと共有することを許可します",
-                "heading": "Handy Connection Key"
-            },
             "image_lightbox": {
                 "heading": "画像のLightbox"
             },
@@ -679,7 +657,6 @@
                     }
                 }
             },
-            "interactive_options": "インタラクティブ設定",
             "language": {
                 "heading": "言語"
             },
@@ -925,7 +902,6 @@
             "force_transcodes_tooltip": "初期設定では、トランスコード済みファイルはブラウザーがサポートしていない動画ファイルであった場合にのみ生成されます。有効にすると、ブラウザーがサポートする動画ファイルであった場合でもトランスコード済みファイルを生成します。",
             "image_previews": "アニメーション画像によるプレビュー",
             "image_previews_tooltip": "WebP形式のアニメーションプレビューは、プレビュータイプがアニメーション画像に設定されている場合のみ必要です。",
-            "interactive_heatmap_speed": "インタラクティブなシーン向けにヒートマップとスピードを生成",
             "marker_image_previews": "マーカーにアニメーション画像プレビューを使用",
             "marker_image_previews_tooltip": "WebP形式のアニメーションマーカープレビューは、プレビュータイプがアニメーション画像に設定されている場合のみ必要です。",
             "marker_screenshots": "マーカーのスクリーンショット",
@@ -1054,15 +1030,6 @@
         "TRANSGENDER_MALE": "トランスジェンダーの男性"
     },
     "hair_color": "髪の色",
-    "handy_connection_status": {
-        "connecting": "接続中",
-        "disconnected": "切断済み",
-        "error": "Handyに接続中にエラーが発生しました",
-        "missing": "ありません",
-        "ready": "準備完了",
-        "syncing": "サーバーと同期中",
-        "uploading": "スクリプトをアップロード中"
-    },
     "hasMarkers": "マーカーあり？",
     "height": "身長",
     "height_cm": "身長(cm)",
@@ -1075,8 +1042,6 @@
     "include_sub_studios": "子会社のスタジオを含める",
     "include_sub_tags": "サブタグを含める",
     "instagram": "Instagram",
-    "interactive": "インタラクティブ",
-    "interactive_speed": "インタラクティブ速度",
     "isMissing": "見つからない？",
     "last_played_at": "前回再生した日時",
     "library": "ライブラリー",
@@ -1089,7 +1054,6 @@
     "media_info": {
         "audio_codec": "音声コーデック",
         "downloaded_from": "ダウンロード元",
-        "interactive_speed": "インタラクティブ速度",
         "performer_card": {
             "age": "{age}{years_old}",
             "age_context": "{age} {years_old}(撮影当時)"

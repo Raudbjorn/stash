@@ -88,9 +88,6 @@ type VideoFile struct {
 	AudioCodec string  `json:"audio_codec,omitempty"`
 	FrameRate  float64 `json:"frame_rate,omitempty"`
 	BitRate    int64   `json:"bitrate,omitempty"`
-
-	Interactive      bool `json:"interactive,omitempty"`
-	InteractiveSpeed *int `json:"interactive_speed,omitempty"`
 }
 
 type ImageFile struct {

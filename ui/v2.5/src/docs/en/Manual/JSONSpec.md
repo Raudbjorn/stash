@@ -179,8 +179,6 @@ video_codec
 audio_codec
 frame
 bitrate
-interactive (bool)
-interactive_speed (integer)
 created_at
 updated_at
 ```

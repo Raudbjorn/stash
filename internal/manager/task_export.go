@@ -451,17 +451,15 @@ func fileToJSON(f models.File) jsonschema.DirEntry {
 	case *models.VideoFile:
 		base.Type = jsonschema.DirEntryTypeVideo
 		return jsonschema.VideoFile{
-			BaseFile:         &base,
-			Format:           ff.Format,
-			Width:            ff.Width,
-			Height:           ff.Height,
-			Duration:         ff.Duration,
-			VideoCodec:       ff.VideoCodec,
-			AudioCodec:       ff.AudioCodec,
-			FrameRate:        ff.FrameRate,
-			BitRate:          ff.BitRate,
-			Interactive:      ff.Interactive,
-			InteractiveSpeed: ff.InteractiveSpeed,
+			BaseFile:   &base,
+			Format:     ff.Format,
+			Width:      ff.Width,
+			Height:     ff.Height,
+			Duration:   ff.Duration,
+			VideoCodec: ff.VideoCodec,
+			AudioCodec: ff.AudioCodec,
+			FrameRate:  ff.FrameRate,
+			BitRate:    ff.BitRate,
 		}
 	case *models.ImageFile:
 		base.Type = jsonschema.DirEntryTypeImage

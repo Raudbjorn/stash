@@ -2,7 +2,6 @@ package manager
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -43,7 +42,7 @@ func toStashIDRefs(ids []models.StashID) []markersync.StashIDRef {
 // neutral markersync.SceneSubmission. It must be called inside a read
 // transaction (it issues repository reads). Relationship loaders short-circuit
 // when a relationship is already loaded, so pre-loading in the caller is safe.
-func buildSceneSubmission(ctx context.Context, r models.Repository, s *models.Scene, submitFunscriptHashes bool) (markersync.SceneSubmission, error) {
+func buildSceneSubmission(ctx context.Context, r models.Repository, s *models.Scene) (markersync.SceneSubmission, error) {
 	sr := r.Scene
 
 	if err := s.LoadStashIDs(ctx, sr); err != nil {
@@ -171,33 +170,6 @@ func buildSceneSubmission(ctx context.Context, r models.Repository, s *models.Sc
 		})
 	}
 
-	// Funscript hashes: attach the scene's indexed funscripts (basename, raw
-	// metadata JSON, md5) so the source can match funscripts across users. Gated
-	// by config; a scene with no indexed funscripts yields an empty slice, which
-	// the adapter omits from the wire payload.
-	if submitFunscriptHashes {
-		rows, err := r.FunscriptIndex.FindBySceneID(ctx, s.ID)
-		if err != nil {
-			return markersync.SceneSubmission{}, fmt.Errorf("loading funscript hashes for scene %d: %w", s.ID, err)
-		}
-		sub.FunscriptHashes = make([]markersync.FunscriptHash, 0, len(rows))
-		for _, row := range rows {
-			// Guard against a corrupt stored metadata blob: invalid JSON would
-			// otherwise abort the whole scene submission when the payload is
-			// marshalled. Omit just this funscript's metadata (send null) and log.
-			meta := row.Metadata
-			if meta != "" && !json.Valid([]byte(meta)) {
-				logger.Warnf("Marker Sync Submit: scene %d: funscript %q has invalid metadata JSON; omitting its metadata", s.ID, row.Filename)
-				meta = ""
-			}
-			sub.FunscriptHashes = append(sub.FunscriptHashes, markersync.FunscriptHash{
-				Filename: filepath.Base(row.Filename),
-				Metadata: meta,
-				MD5:      row.MD5,
-			})
-		}
-	}
-
 	return sub, nil
 }
 
@@ -223,9 +195,6 @@ func buildMarkerSyncSubmitters() []markersync.Submitter {
 type markerSyncSubmitTask struct {
 	scene      *models.Scene
 	submitters []markersync.Submitter
-	// submitFunscriptHashes gates attaching the scene's indexed funscript hashes
-	// to the submission payload.
-	submitFunscriptHashes bool
 }
 
 // GetDescription implements Task.
@@ -241,7 +210,7 @@ func (t *markerSyncSubmitTask) Start(ctx context.Context) {
 	r := instance.Repository
 	if err := r.WithReadTxn(ctx, func(ctx context.Context) error {
 		var err error
-		sub, err = buildSceneSubmission(ctx, r, t.scene, t.submitFunscriptHashes)
+		sub, err = buildSceneSubmission(ctx, r, t.scene)
 		return err
 	}); err != nil {
 		logger.Errorf("Marker Sync Submit: scene %d: building submission: %v", t.scene.ID, err)
@@ -267,7 +236,6 @@ func (s *Manager) MarkerSyncSubmit(ctx context.Context, input MarkerSyncSubmitIn
 	j := job.MakeJobExec(func(ctx context.Context, progress *job.Progress) error {
 		logger.Infof("Initiating marker sync submit")
 
-		cfg := config.GetInstance().GetMarkerSyncConfig()
 		submitters := buildMarkerSyncSubmitters()
 
 		scenes, err := s.markerSyncSubmitScenes(ctx, input)
@@ -290,9 +258,8 @@ func (s *Manager) MarkerSyncSubmit(ctx context.Context, input MarkerSyncSubmitIn
 			}
 
 			task := &markerSyncSubmitTask{
-				scene:                 sc,
-				submitters:            submitters,
-				submitFunscriptHashes: cfg.SubmitFunscriptHash,
+				scene:      sc,
+				submitters: submitters,
 			}
 			progress.ExecuteTask(task.GetDescription(), func() {
 				task.Start(ctx)

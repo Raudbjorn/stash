@@ -19,7 +19,6 @@ import SceneFilenameParser from "src/docs/en/Manual/SceneFilenameParser.md";
 import KeyboardShortcuts from "src/docs/en/Manual/KeyboardShortcuts.md";
 import Help from "src/docs/en/Manual/Help.md";
 import Deduplication from "src/docs/en/Manual/Deduplication.md";
-import Interactive from "src/docs/en/Manual/Interactive.md";
 import Captions from "src/docs/en/Manual/Captions.md";
 import Identify from "src/docs/en/Manual/Identify.md";
 import Browsing from "src/docs/en/Manual/Browsing.md";
@@ -137,11 +136,6 @@ export const Manual: React.FC<IManualProps> = ({
       key: "Deduplication.md",
       title: "Dupe Checker",
       content: Deduplication,
-    },
-    {
-      key: "Interactive.md",
-      title: "Interactivity",
-      content: Interactive,
     },
     {
       key: "Captions.md",

@@ -12,8 +12,6 @@ fragment SceneData on Scene {
   favorite
   transcode_benefit
 
-  interactive
-  interactive_speed
   captions {
     language_code
     caption_type
@@ -39,8 +37,6 @@ fragment SceneData on Scene {
     webp
     vtt
     sprite
-    funscript
-    interactive_heatmap
     caption
   }
 

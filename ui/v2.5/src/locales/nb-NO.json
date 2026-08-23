@@ -12,7 +12,6 @@
         "delete_generated_supporting_files": "Slett genererte støttende filer",
         "select_entity": "Velg {entityType}",
         "copy_to_clipboard": "Kopier til utklippstavle",
-        "delete_file_and_funscript": "Slett fil (og funscript)",
         "clear_front_image": "Fjern front bilde",
         "next_action": "Neste",
         "tasks": {
@@ -351,8 +350,6 @@
             "scraping": "Scraping",
             "logging": "Logging",
             "maximum_transcode_size_head": "Maksimal transkodingsstørrelse",
-            "funscript_heatmap_draw_range": "Inkluder område i genererte varmekart",
-            "funscript_heatmap_draw_range_desc": "Tegn bevegelsesområde på y-aksen i det genererte varmekartet. Eksisterende varmekart må genereres på nytt etter endring.",
             "generated_file_naming_hash_head": "Hash for generert filnavngivning",
             "generated_path_head": "Generert bane",
             "maximum_streaming_transcode_size_head": "Maksimal størrelse for strømmingstranskoding",
@@ -372,7 +369,6 @@
                 "heading": "Python kjørbar filbane"
             },
             "generated_file_naming_hash_desc": "Bruk MD5 eller oshash for generert filnavngivning. Endring av dette krever at alle scener har den aktuelle MD5/oshash-verdien fylt ut. Etter å ha endret denne verdien, må eksisterende genererte filer migreres eller genereres på nytt. Se Oppgaver-siden for migrering.",
-            "heatmap_generation": "Funscript-varmekartgenerering",
             "number_of_parallel_task_for_scan_generation_desc": "Sett til 0 for automatisk deteksjon. Advarsel: Å kjøre flere oppgaver enn nødvendig for å oppnå 100 % CPU-utnyttelse vil redusere ytelsen og kan potensielt forårsake andre problemer.",
             "sqlite_location": "Filplassering for SQLite-databasen (krever omstart). ADVARSEL: Å lagre databasen på et annet system enn der Stash-serveren kjører (f.eks. over nettverket) støttes ikke!",
             "image_ext_desc": "Kommaseparert liste over filendelser som vil bli identifisert som bilder.",
@@ -557,7 +553,6 @@
                     }
                 }
             },
-            "interactive_options": "Interaktive alternativer",
             "studio_panel": {
                 "options": {
                     "show_child_studio_content": {
@@ -616,24 +611,6 @@
                     "description": "Når den er aktivert, vises alle innholdsdetaljer som standard, og hvert detaljelement får plass under én kolonne",
                     "heading": "Vis alle detaljer"
                 }
-            },
-            "funscript_offset": {
-                "heading": "Funksjonsskriptforskyvning (ms)",
-                "description": "Tidsforskyvning i millisekunder for avspilling av interaktive skript."
-            },
-            "handy_connection": {
-                "connect": "Koble til",
-                "server_offset": {
-                    "heading": "Serveroffset"
-                },
-                "status": {
-                    "heading": "Praktisk tilkoblingsstatus"
-                },
-                "sync": "Synkroniser"
-            },
-            "handy_connection_key": {
-                "heading": "Handy tilkoblingsnøkkel",
-                "description": "Praktisk tilkoblingsnøkkel for bruk for interaktive scener. Hvis du angir denne knappen, kan Stash dele informasjon om gjeldende scene med handyfeeling.com"
             },
             "image_lightbox": {
                 "heading": "Bilde lysboks"
@@ -713,11 +690,7 @@
                 "description": "Lysbildefremvisning er tilgjengelig i gallerier i veggvisningsmodus",
                 "heading": "Forsinkelse av lysbildefremvisning (sekunder)"
             },
-            "title": "Brukergrensesnitt",
-            "use_stash_hosted_funscript": {
-                "heading": "Server funscripts direkte",
-                "description": "Når dette er aktivert, vil funscripts bli servert direkte fra Stash til Handy-enheten din uten å bruke tredjeparts Handy-serveren. Krever at Stash er tilgjengelig fra Handy-enheten din, og at en API-nøkkel genereres hvis stash har konfigurert legitimasjon."
-            }
+            "title": "Brukergrensesnitt"
         },
         "scraping": {
             "available_scrapers": "Tilgjengelige scrapers",
@@ -815,7 +788,6 @@
         "video_codec": "Video Kodek",
         "audio_codec": "Lydkodek",
         "downloaded_from": "Lastet ned fra",
-        "interactive_speed": "Interaktiv hastighet",
         "o_count": "0 Antall",
         "phash": "PHash",
         "play_count": "Avspilt",
@@ -948,7 +920,6 @@
             "image_previews": "Forhåndsvisninger av animerte bilder",
             "image_previews_tooltip": "Generer også animerte (webp) forhåndsvisninger, som bare er nødvendig når Forhåndsvisningstype for scene/markørvegg er satt til Animert bilde. Når du surfer, bruker de mindre CPU enn videoforhåndsvisningene, men genereres i tillegg til dem og er større filer.",
             "image_thumbnails": "Miniatyrbilder",
-            "interactive_heatmap_speed": "Generer varmekart og hastigheter for interaktive scener",
             "marker_image_previews": "Forhåndsvisning av animerte bilder for markører",
             "marker_screenshots_tooltip": "Marker statiske JPG-bilder",
             "markers": "Marker forhåndsvisning",
@@ -1342,15 +1313,6 @@
     },
     "group": "Gruppe",
     "group_count": "Gruppetall",
-    "handy_connection_status": {
-        "connecting": "Kobler til",
-        "disconnected": "Koblet fra",
-        "missing": "Mangler",
-        "ready": "Klar",
-        "syncing": "Synkroniserer med server",
-        "uploading": "Laster opp skript",
-        "error": "Feil ved tilkobling til Handy"
-    },
     "hasChapters": "Har Kapitler",
     "hasMarkers": "Har Markører",
     "height": "Høyde",
@@ -1364,8 +1326,6 @@
     "include_sub_groups": "Inkluder undergrupper",
     "index_of_total": "{indeks} av {totalt}",
     "instagram": "Instagram",
-    "interactive": "Interaktiv",
-    "interactive_speed": "Interaktiv hastighet",
     "isMissing": "Mangler",
     "last_played_at": "Sist Spilt",
     "loading": {

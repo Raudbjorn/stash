@@ -29,7 +29,6 @@ type Repository struct {
 	Tag               TagReaderWriter
 	SavedFilter       SavedFilterReaderWriter
 	Playlist          PlaylistReaderWriter
-	FunscriptIndex    FunscriptIndexReaderWriter
 	SceneMetadataPlan SceneMetadataPlanReaderWriter
 }
 

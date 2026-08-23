@@ -29,7 +29,6 @@
         "delete": "Cancella",
         "delete_entity": "Cancella {entityType}",
         "delete_file": "Cancella file",
-        "delete_file_and_funscript": "Cancella file (e funscript)",
         "delete_generated_supporting_files": "Cancella file di supporto creati",
         "disallow": "Non Acconsentire",
         "download": "Scarica",
@@ -584,24 +583,6 @@
                     }
                 }
             },
-            "funscript_offset": {
-                "description": "Offset in millisecondi per gli script interattivi.",
-                "heading": "Funscript Offset (ms)"
-            },
-            "handy_connection": {
-                "connect": "Connetti",
-                "server_offset": {
-                    "heading": "Offset del Server"
-                },
-                "status": {
-                    "heading": "Stato Connessione Handy"
-                },
-                "sync": "Sincronizza"
-            },
-            "handy_connection_key": {
-                "description": "Chiave di connessione Handy per l'uso con scene interattive. Impostare questa chiave permetterà a Stash di condividere le informazioni della scena attuale con handyfeeling.com",
-                "heading": "Chiave Connessione Handy"
-            },
             "image_lightbox": {
                 "heading": "Immagine Lightbox"
             },
@@ -614,7 +595,6 @@
                     }
                 }
             },
-            "interactive_options": "Opzioni Interattive",
             "language": {
                 "heading": "Lingua"
             },
@@ -809,7 +789,6 @@
             "force_transcodes_tooltip": "Per standard, le transcodifiche vengono generate solamente quando il file video non è supportato dal browser. Quando abilitato, le transcodifiche verranno generate anche quando il file sembra essere supportato dal browser.",
             "image_previews": "Anteprime Immagini Animate",
             "image_previews_tooltip": "Anteprime Animate WebP, richiesto solamente se Immagine Animata è selezionata come Tipo Anteprima.",
-            "interactive_heatmap_speed": "Crea le mappe di calore e velocità per le scene interattive",
             "marker_image_previews": "Marcatori Anteprime Immagini Animate",
             "marker_image_previews_tooltip": "Anteprime marcatore animato WebP, richiesto solo se Immagine Animata è selezionata come Tipo Anteprima.",
             "marker_screenshots": "Schermate Marcatori",
@@ -939,15 +918,6 @@
         "TRANSGENDER_MALE": "Uomo Transgender"
     },
     "hair_color": "Colore Capelli",
-    "handy_connection_status": {
-        "connecting": "In connessione",
-        "disconnected": "Disconnesso",
-        "error": "Errore di connessione a Handy",
-        "missing": "Mancante",
-        "ready": "Pronto",
-        "syncing": "Sincronizzando col server",
-        "uploading": "Script in upload"
-    },
     "hasMarkers": "Ha Marcatori",
     "height": "Altezza",
     "height_cm": "Altezza (cm)",
@@ -960,8 +930,6 @@
     "include_sub_studios": "Includi Studi sussidiari",
     "include_sub_tags": "Include sotto-tags",
     "instagram": "Instagram",
-    "interactive": "Interattivo",
-    "interactive_speed": "Velocità interattiva",
     "isMissing": "Manca di",
     "last_played_at": "Ultima Visualizzazione Al",
     "library": "Libreria",
@@ -974,7 +942,6 @@
     "media_info": {
         "audio_codec": "Codec Audio",
         "downloaded_from": "Scaricato Da",
-        "interactive_speed": "Velocità interattiva",
         "performer_card": {
             "age": "{age} {years_old}",
             "age_context": "{age} {years_old} in questa scena"

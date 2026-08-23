@@ -143,8 +143,6 @@ input ConfigGeneralInput {
   """
   liveTranscodeOutputArgs: [String!]
 
-  "whether to include range in generated funscript heatmaps"
-  drawFunscriptHeatmapRange: Boolean
 
   "Write image thumbnails to disk when generating on the fly"
   writeImageThumbnails: Boolean
@@ -291,8 +289,6 @@ type ConfigGeneralResult {
   """
   liveTranscodeOutputArgs: [String!]!
 
-  "whether to include range in generated funscript heatmaps"
-  drawFunscriptHeatmapRange: Boolean!
 
   "Write image thumbnails to disk when generating on the fly"
   writeImageThumbnails: Boolean!
@@ -375,9 +371,6 @@ input MarkerSyncConfigInput {
   sync_urls: Boolean
   sync_galleries: Boolean
   sync_groups: Boolean
-  funscript_path: String
-  match_funscripts: Boolean
-  submit_funscript_hash: Boolean
   theporndb: MarkerSyncSourceConfigInput
   timestamp_trade: MarkerSyncSourceConfigInput
 }
@@ -398,9 +391,6 @@ type MarkerSyncConfig {
   sync_urls: Boolean!
   sync_galleries: Boolean!
   sync_groups: Boolean!
-  funscript_path: String!
-  match_funscripts: Boolean!
-  submit_funscript_hash: Boolean!
   theporndb: MarkerSyncSourceConfig!
   timestamp_trade: MarkerSyncSourceConfig!
 }
@@ -464,12 +454,6 @@ input ConfigInterfaceInput {
   "Set to true to disable creating new objects via the dropdown menus"
   disableDropdownCreate: ConfigDisableDropdownCreateInput
 
-  "Handy Connection Key"
-  handyKey: String
-  "Funscript Time Offset"
-  funscriptOffset: Int
-  "Whether to use Stash Hosted Funscript"
-  useStashHostedFunscript: Boolean
   "True if we should not auto-open a browser window on startup"
   noBrowser: Boolean
   "True if we should send notifications to the desktop"
@@ -539,12 +523,6 @@ type ConfigInterfaceResult {
   "Fields are true if creating via dropdown menus are disabled"
   disableDropdownCreate: ConfigDisableDropdownCreate!
 
-  "Handy Connection Key"
-  handyKey: String
-  "Funscript Time Offset"
-  funscriptOffset: Int
-  "Whether to use Stash Hosted Funscript"
-  useStashHostedFunscript: Boolean
 }
 
 input ConfigDLNAInput {

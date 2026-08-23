@@ -27,7 +27,6 @@
         "delete": "Verwijderen",
         "delete_entity": "{entityType} verwijderen",
         "delete_file": "Bestand verwijderen",
-        "delete_file_and_funscript": "Bestand (en funscript) verwijderen",
         "delete_generated_supporting_files": "Gegenereerde ondersteuningsbestanden verwijderen",
         "disallow": "Niet toestaan",
         "download": "Downloaden",
@@ -397,15 +396,12 @@
                 "description": "Locatie in het bestandssysteem waar binaire gegevens worden opgeslagen. Alleen van toepassing bij gebruik van het Bestandssysteem blob-opslagtype. WAARSCHUWING: om dit te wijzigen, moeten bestaande gegevens handmatig worden verplaatst.",
                 "heading": "Pad naar binair gegevensbestandssysteem"
             },
-            "heatmap_generation": "Funscript Heatmap Generatie",
             "gallery_cover_regex_desc": "Regexp gebruikt om een afbeelding te identificeren als galerijomslag",
             "plugins_path": {
                 "description": "Map locatie van plugin-configuratiebestanden",
                 "heading": "Plugin Pad"
             },
-            "gallery_cover_regex_label": "Galerie omslagpatroon",
-            "funscript_heatmap_draw_range": "Bereik opnemen in gegenereerde heatmaps",
-            "funscript_heatmap_draw_range_desc": "Teken het bewegingsbereik op de y-as van de gegenereerde heatmap. Bestaande heatmaps moeten na wijziging opnieuw worden gegenereerd."
+            "gallery_cover_regex_label": "Galerie omslagpatroon"
         },
         "library": {
             "exclusions": "Uitzonderingen",
@@ -603,24 +599,6 @@
                     }
                 }
             },
-            "funscript_offset": {
-                "description": "Time Offset in milliseconden voor het afspelen van interactieve scripts.",
-                "heading": ""
-            },
-            "handy_connection": {
-                "connect": "Connecteer",
-                "server_offset": {
-                    "heading": "Server-offset"
-                },
-                "status": {
-                    "heading": "Handige verbindings status"
-                },
-                "sync": "Synchroniseer"
-            },
-            "handy_connection_key": {
-                "description": "Handy connection key om te gebruiken voor interactieve scènes. Instellen van deze sleutel staat Stash toe om uw huidige scène-informatie met HandyFeeling.com te delen",
-                "heading": ""
-            },
             "image_lightbox": {
                 "heading": "Afbeelding Lightbox"
             },
@@ -633,7 +611,6 @@
                     }
                 }
             },
-            "interactive_options": "Interactieve Opties",
             "language": {
                 "heading": "Taal"
             },
@@ -807,7 +784,6 @@
             "force_transcodes_tooltip": "Standaard worden transcodes alleen gegenereerd als het videobestand niet wordt ondersteund in de browser. Indien ingeschakeld, worden transcodes gegenereerd, zelfs als het videobestand in de browser lijkt te worden ondersteund.",
             "image_previews": "Geanimeerde afbeelding voorbeelden",
             "image_previews_tooltip": "Geanimeerde WebP-voorbeelden, alleen vereist als Voorbeeldtype is ingesteld op Geanimeerde afbeelding.",
-            "interactive_heatmap_speed": "Genereer heatmaps en snelheden voor interactieve scènes",
             "marker_image_previews": "Voorvertoningen van geanimeerde markeringen",
             "marker_image_previews_tooltip": "Geanimeerde markering WebP-voorbeelden, alleen vereist als Voorbeeldtype is ingesteld op Geanimeerde afbeelding.",
             "marker_screenshots": "Markeer Screenshots",
@@ -944,15 +920,6 @@
         "TRANSGENDER_MALE": "Transgender Man"
     },
     "hair_color": "Haarkleur",
-    "handy_connection_status": {
-        "connecting": "Verbinden",
-        "disconnected": "Verbinding verbroken",
-        "error": "Fout bij het verbinden met Handy",
-        "missing": "Ontbrekend",
-        "ready": "Klaar",
-        "syncing": "Synchroniseren met server",
-        "uploading": "Script uploaden"
-    },
     "hasMarkers": "Markeringen",
     "height": "Hoogte",
     "help": "Help",
@@ -964,8 +931,6 @@
     "include_sub_studios": "Dochteronderneming studio's opnemen",
     "include_sub_tags": "Neem sub-tags op",
     "instagram": "Instagram",
-    "interactive": "Interactief",
-    "interactive_speed": "Interactieve snelheid",
     "isMissing": "Is Missende",
     "library": "Bibliotheek",
     "loading": {
@@ -978,7 +943,6 @@
     "media_info": {
         "audio_codec": "Audio Codec",
         "downloaded_from": "Gedownload van",
-        "interactive_speed": "Interactieve snelheid",
         "performer_card": {
             "age": "{age} {years_old}",
             "age_context": "{age} {years_old} bij productie"

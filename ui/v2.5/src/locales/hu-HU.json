@@ -95,7 +95,6 @@
         "create_parent_studio": "Szülő stúdió létrehozása",
         "created_entity": "Létrehozott {entity_type}: {entity_name}",
         "customise": "Testreszabás",
-        "delete_file_and_funscript": "Fájl törlése (és funscript)",
         "download_anonymised": "Letöltés névtelenül",
         "encoding_image": "Kép kódolása…",
         "hash_migration": "hash-migráció",
@@ -321,13 +320,9 @@
             "editing": {
                 "heading": "Szerkesztés"
             },
-            "handy_connection": {
-                "connect": "Csatlakozás"
-            },
             "images": {
                 "heading": "Képek"
             },
-            "interactive_options": "Interaktív Beállítások",
             "language": {
                 "heading": "Nyelv"
             },
@@ -464,21 +459,12 @@
         "MALE": "Férfi"
     },
     "hair_color": "Hajszín",
-    "handy_connection_status": {
-        "connecting": "Kapcsolódás",
-        "disconnected": "Szétkapcsolt",
-        "missing": "Hiányzó",
-        "ready": "Kész",
-        "uploading": "Szkript feltöltése"
-    },
     "height": "Magasság",
     "help": "Segítség",
     "image": "Kép",
     "image_count": "Képek Száma",
     "images": "Képek",
     "instagram": "Instagram",
-    "interactive": "Interaktív",
-    "interactive_speed": "Interaktív sebesség",
     "isMissing": "Hiányzik",
     "library": "Könyvtár",
     "loading": {
@@ -486,7 +472,6 @@
     },
     "media_info": {
         "downloaded_from": "Letöltés Forrása",
-        "interactive_speed": "Interaktív sebesség",
         "performer_card": {
             "age": "{age} {years_old}"
         }

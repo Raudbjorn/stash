@@ -35,11 +35,6 @@ import {
 import * as GQL from "src/core/generated-graphql";
 import { ScenePlayerScrubber } from "./ScenePlayerScrubber";
 import { useConfigurationContext } from "src/hooks/Config";
-import {
-  ConnectionState,
-  InteractiveContext,
-} from "src/hooks/Interactive/context";
-import { SceneInteractiveStatus } from "src/hooks/Interactive/status";
 import { languageMap } from "src/utils/caption";
 import { VIDEO_PLAYER_ID } from "./util";
 
@@ -256,13 +251,6 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
     const [time, setTime] = useState(0);
     const [ready, setReady] = useState(false);
 
-    const {
-      interactive: interactiveClient,
-      uploadScript,
-      currentScript,
-      initialised: interactiveInitialised,
-      state: interactiveState,
-    } = React.useContext(InteractiveContext);
 
     const [fullscreen, setFullscreen] = useState(false);
     const [showScrubber, setShowScrubber] = useState(false);
@@ -274,7 +262,6 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
     const autostartIntent = useRef(false);
     const userPaused = useRef(false);
     const playbackRequested = useRef(false);
-    const interactiveReady = useRef(false);
     const minimumPlayPercent = uiConfig?.minimumPlayPercent ?? 0;
     const trackActivity = uiConfig?.trackActivity ?? true;
     const vrTag = uiConfig?.vrTag ?? undefined;
@@ -462,27 +449,6 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
       skipButtons.setBackwardHandler(onPrevious);
     }, [getPlayer, onNext, onPrevious]);
 
-    useEffect(() => {
-      if (scene.interactive && interactiveInitialised) {
-        interactiveReady.current = false;
-        uploadScript(scene.paths.funscript || "").then(() => {
-          interactiveReady.current = true;
-        });
-      }
-    }, [
-      uploadScript,
-      interactiveInitialised,
-      scene.interactive,
-      scene.paths.funscript,
-    ]);
-
-    // play the script if video started before script upload finished
-    useEffect(() => {
-      if (interactiveState !== ConnectionState.Ready) return;
-      const player = getPlayer();
-      if (!player || player.paused()) return;
-      interactiveClient.ensurePlaying(player.currentTime());
-    }, [interactiveState, getPlayer, interactiveClient]);
 
     useEffect(() => {
       const player = getPlayer();
@@ -570,32 +536,17 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
       };
     }, [getPlayer]);
 
-    // delay before second play event after a play event to adjust for video player issues
-    const DELAY_FOR_SECOND_PLAY_MS = 1000;
-    const playingTimer = useRef<number>();
 
     useEffect(() => {
       const player = getPlayer();
       if (!player) return;
 
-      function playing(this: VideoJsPlayer) {
-        if (scene.interactive && interactiveReady.current) {
-          interactiveClient.play(this.currentTime());
-          // trigger a second script play event to adjust for video player issues
-          clearTimeout(playingTimer.current);
-          playingTimer.current = window.setTimeout(() => {
-            if (this.paused()) return;
-            interactiveClient.play(this.currentTime());
-          }, DELAY_FOR_SECOND_PLAY_MS);
-        }
-      }
 
       function pause() {
         playbackRequested.current = false;
         userPaused.current = started.current;
         autostartIntent.current = false;
         auto.current = false;
-        interactiveClient.pause();
       }
 
       function timeupdate(this: VideoJsPlayer) {
@@ -603,17 +554,14 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
         setTime(this.currentTime());
       }
 
-      player.on("playing", playing);
       player.on("pause", pause);
       player.on("timeupdate", timeupdate);
 
       return () => {
-        player.off("playing", playing);
         player.off("pause", pause);
         player.off("timeupdate", timeupdate);
-        clearTimeout(playingTimer.current);
       };
-    }, [getPlayer, interactiveClient, scene]);
+    }, [getPlayer]);
 
     useEffect(() => {
       const player = getPlayer();
@@ -627,8 +575,6 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
       // reset on new scene
       player.trackActivity().reset();
 
-      // always stop the interactive client on initialisation
-      interactiveClient.pause();
 
       const isSafari = UAParser().browser.name?.includes("Safari");
       const isLandscape = file.height && file.width && file.width > file.height;
@@ -784,7 +730,6 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
       getPlayer,
       file,
       scene,
-      interactiveClient,
       autoplay,
       interfaceConfig?.autostartVideo,
       uiConfig?.alwaysStartFromBeginning,
@@ -792,12 +737,6 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
       _initialTimestamp,
     ]);
 
-    useEffect(() => {
-      return () => {
-        // stop the interactive client on unmount
-        interactiveClient.pause();
-      };
-    }, [interactiveClient]);
 
     const loadMarkers = useCallback(() => {
       const player = getPlayer();
@@ -942,8 +881,7 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
       if (!player) return;
 
       player.loop(looping);
-      interactiveClient.setLooping(looping);
-    }, [getPlayer, interactiveClient, looping]);
+    }, [getPlayer, looping]);
 
     useEffect(() => {
       const player = getPlayer();
@@ -951,18 +889,10 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
         return;
       }
 
-      // check if we're waiting for the interactive client
-      if (
-        scene.interactive &&
-        interactiveClient.handyKey &&
-        currentScript !== scene.paths.funscript
-      ) {
-        return;
-      }
 
       player.play();
       auto.current = false;
-    }, [getPlayer, scene, ready, interactiveClient, currentScript]);
+    }, [getPlayer, ready]);
 
     // Attach handler for onComplete event
     useEffect(() => {
@@ -1045,9 +975,6 @@ export const ScenePlayer: React.FC<IScenePlayerProps> = PatchComponent(
         onKeyDownCapture={onKeyDown}
       >
         <div className="video-wrapper" ref={videoRef} />
-        {scene.interactive &&
-          (interactiveState !== ConnectionState.Ready ||
-            getPlayer()?.paused()) && <SceneInteractiveStatus />}
         {file && showScrubber && (
           <ScenePlayerScrubber
             file={file}
