@@ -7,6 +7,7 @@ import { sortPerformers } from "src/core/performers";
 import { HoverPopover } from "./HoverPopover";
 import { Icon } from "./Icon";
 import { PerformerLink, PerformerLinkType } from "./TagLink";
+import { PerformerImage } from "../Performers/PerformerImage";
 
 interface IProps {
   performers: Pick<
@@ -27,11 +28,7 @@ export const PerformerPopoverButton: React.FC<IProps> = ({
         to={`/performers/${performer.id}`}
         className="performer-tag col m-auto zoom-2"
       >
-        <img
-          className="image-thumbnail"
-          alt={performer.name ?? ""}
-          src={performer.image_path ?? ""}
-        />
+        <PerformerImage performer={performer} className="image-thumbnail" />
       </Link>
       <PerformerLink
         key={performer.id}

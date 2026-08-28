@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Button, ButtonGroup, OverlayTrigger, Tooltip } from "react-bootstrap";
 import { useHistory } from "react-router-dom";
 import cx from "classnames";
@@ -33,6 +39,10 @@ import { GroupTag } from "../Groups/GroupTag";
 import { FileSize } from "../Shared/FileSize";
 import { OCounterButton } from "../Shared/CountButton";
 import { defaultPreviewVolume } from "src/core/config";
+import {
+  SceneCardMarkerDialog,
+  SceneCardTagDialog,
+} from "./SceneCardPopoverDialog";
 
 interface IScenePreviewProps {
   isPortrait: boolean;
@@ -139,6 +149,8 @@ const Description: React.FC<{
 
 const SceneCardPopovers = React.memo(
   PatchComponent("SceneCard.Popovers", (props: ISceneCardProps) => {
+    const intl = useIntl();
+    const [dialog, setDialog] = useState<"tags" | "markers" | null>(null);
     const file = useMemo(
       () => (props.scene.files.length > 0 ? props.scene.files[0] : undefined),
       [props.scene]
@@ -164,11 +176,26 @@ const SceneCardPopovers = React.memo(
 
       return (
         <HoverPopover
+          disabled={dialog !== null}
           className="tag-count"
           placement="bottom"
           content={popoverContent}
         >
-          <Button className="minimal">
+          <Button
+            className="minimal"
+            onClick={(event) => {
+              event.stopPropagation();
+              setDialog("tags");
+            }}
+            title={intl.formatMessage(
+              { id: "countables.tags" },
+              { count: props.scene.tags.length }
+            )}
+            aria-label={intl.formatMessage(
+              { id: "countables.tags" },
+              { count: props.scene.tags.length }
+            )}
+          >
             <Icon icon={faTag} />
             <span>{props.scene.tags.length}</span>
           </Button>
@@ -218,11 +245,26 @@ const SceneCardPopovers = React.memo(
 
       return (
         <HoverPopover
+          disabled={dialog !== null}
           className="marker-count"
           placement="bottom"
           content={popoverContent}
         >
-          <Button className="minimal">
+          <Button
+            className="minimal"
+            onClick={(event) => {
+              event.stopPropagation();
+              setDialog("markers");
+            }}
+            title={intl.formatMessage(
+              { id: "countables.markers" },
+              { count: props.scene.scene_markers.length }
+            )}
+            aria-label={intl.formatMessage(
+              { id: "countables.markers" },
+              { count: props.scene.scene_markers.length }
+            )}
+          >
             <Icon icon={faMapMarkerAlt} />
             <span>{props.scene.scene_markers.length}</span>
           </Button>
@@ -319,6 +361,20 @@ const SceneCardPopovers = React.memo(
               {maybeRenderOrganized()}
               {maybeRenderDupeCopies()}
             </ButtonGroup>
+            {props.scene.tags.length > 0 && (
+              <SceneCardTagDialog
+                show={dialog === "tags"}
+                scene={props.scene}
+                onHide={() => setDialog(null)}
+              />
+            )}
+            {props.scene.scene_markers.length > 0 && (
+              <SceneCardMarkerDialog
+                show={dialog === "markers"}
+                scene={props.scene}
+                onHide={() => setDialog(null)}
+              />
+            )}
           </>
         );
       }
@@ -426,7 +482,6 @@ const SceneCardImage = React.memo(
       () => (props.scene.files.length > 0 ? props.scene.files[0] : undefined),
       [props.scene]
     );
-
 
     const onScrubberClick = useCallback(
       (timestamp: number) => {

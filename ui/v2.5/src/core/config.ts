@@ -40,6 +40,21 @@ export type FrontPageContent = ISavedFilterRow | ICustomFilter;
 
 export const defaultMaxOptionsShown = 200;
 export const defaultPreviewVolume = 25;
+export type PerformerCardStyle = "classic" | "portrait" | "spotlight";
+export const performerCardStyles: readonly PerformerCardStyle[] = [
+  "classic",
+  "portrait",
+  "spotlight",
+];
+export const defaultPerformerCardStyle: PerformerCardStyle = "classic";
+
+export function normalizePerformerCardStyle(
+  value: unknown
+): PerformerCardStyle {
+  return performerCardStyles.includes(value as PerformerCardStyle)
+    ? (value as PerformerCardStyle)
+    : defaultPerformerCardStyle;
+}
 
 // determines how existing list values are combined with scraped list values
 // in the scrape dialogs
@@ -52,6 +67,7 @@ export interface IUIConfig {
   showChildTagContent?: boolean;
   showChildStudioContent?: boolean;
   showLinksOnPerformerCard?: boolean;
+  performerCardStyle?: PerformerCardStyle;
   showTagCardOnHover?: boolean;
   sortFavoritedTagsFirst?: boolean;
 

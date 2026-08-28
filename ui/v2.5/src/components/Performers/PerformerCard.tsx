@@ -16,6 +16,7 @@ import {
 } from "src/models/list-filter/criteria/criterion";
 import { PopoverCountButton } from "../Shared/PopoverCountButton";
 import GenderIcon from "./GenderIcon";
+import { PerformerImage } from "./PerformerImage";
 import { faLink, faTag } from "@fortawesome/free-solid-svg-icons";
 import { faInstagram, faTwitter } from "@fortawesome/free-brands-svg-icons";
 import { RatingBanner } from "../Shared/RatingBanner";
@@ -26,6 +27,9 @@ import { PatchComponent } from "src/patch";
 import { ExternalLinksButton } from "../Shared/ExternalLinksButton";
 import { useConfigurationContext } from "src/hooks/Config";
 import { OCounterButton } from "../Shared/CountButton";
+import { normalizePerformerCardStyle } from "src/core/config";
+import { useMediaQuery } from "src/utils/screen";
+import { usePointerTilt } from "src/hooks/usePointerTilt";
 
 export interface IPerformerCardExtraCriteria {
   scenes?: ModifierCriterion<CriterionValue>[];
@@ -342,12 +346,7 @@ const PerformerCardImage: React.FC<IPerformerCardProps> = PatchComponent(
   "PerformerCard.Image",
   ({ performer }) => {
     return (
-      <img
-        loading="lazy"
-        className="performer-card-image"
-        alt={performer.name ?? ""}
-        src={performer.image_path ?? ""}
-      />
+      <PerformerImage performer={performer} className="performer-card-image" />
     );
   }
 );
@@ -379,10 +378,20 @@ export const PerformerCard: React.FC<IPerformerCardProps> = PatchComponent(
       onSelectedChanged,
       zoomIndex,
     } = props;
+    const { configuration } = useConfigurationContext();
+    const cardStyle = normalizePerformerCardStyle(
+      configuration.ui.performerCardStyle
+    );
+    const motionEnabled = useMediaQuery(
+      "(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)"
+    );
+    const pointerTilt = usePointerTilt<HTMLDivElement>(
+      cardStyle === "spotlight" && motionEnabled
+    );
 
-    return (
+    const card = (
       <GridCard
-        className={`performer-card zoom-${zoomIndex}`}
+        className={`performer-card performer-card--${cardStyle} zoom-${zoomIndex}`}
         url={`/performers/${performer.id}`}
         width={cardWidth}
         pretitleIcon={
@@ -397,6 +406,14 @@ export const PerformerCard: React.FC<IPerformerCardProps> = PatchComponent(
         selecting={selecting}
         onSelectedChanged={onSelectedChanged}
       />
+    );
+
+    return cardStyle === "spotlight" ? (
+      <div className="performer-card-motion" {...pointerTilt}>
+        {card}
+      </div>
+    ) : (
+      card
     );
   }
 );

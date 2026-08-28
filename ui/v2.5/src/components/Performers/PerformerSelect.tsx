@@ -35,6 +35,7 @@ import { PerformerPopover } from "./PerformerPopover";
 import { Placement } from "react-bootstrap/esm/Overlay";
 import { isUUID } from "src/utils/stashIds";
 import { filterByStashID } from "src/models/list-filter/utils";
+import { PerformerImage } from "./PerformerImage";
 
 export type SelectObject = {
   id: string;
@@ -181,10 +182,9 @@ const _PerformerSelect: React.FC<
               target="_blank"
               className="performer-select-image-link"
             >
-              <img
+              <PerformerImage
+                performer={object}
                 className="performer-select-image"
-                src={object.image_path ?? ""}
-                loading="lazy"
               />
             </Link>
             <span className="performer-select-details">

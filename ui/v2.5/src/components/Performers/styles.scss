@@ -152,6 +152,97 @@
   }
 }
 
+/* stylelint-disable selector-class-pattern */
+.performer-card--portrait {
+  .performer-card-image {
+    aspect-ratio: 4 / 5;
+  }
+
+  .card-section {
+    background: linear-gradient(to bottom, transparent, $card-bg 2rem);
+    margin-top: -5rem;
+    padding: 2rem 0.75rem 0.75rem;
+    position: relative;
+    z-index: 2;
+  }
+
+  @media (max-width: 576px) {
+    .card-section {
+      background: $card-bg;
+      margin-top: 0;
+      padding: 0.5rem 1rem 0;
+    }
+  }
+}
+
+.performer-card-motion {
+  --performer-glow-x: 50%;
+  --performer-glow-y: 50%;
+  --performer-tilt-x: 0deg;
+  --performer-tilt-y: 0deg;
+
+  margin: 5px;
+  max-width: calc(100% - 10px);
+  width: max-content;
+
+  .performer-card--spotlight {
+    background:
+      radial-gradient(
+        circle at var(--performer-glow-x) var(--performer-glow-y),
+        rgba($primary, 0.18),
+        transparent 42%
+      ),
+      $card-bg;
+    margin: 0;
+    max-width: 100%;
+    position: relative;
+
+    .thumbnail-section > a {
+      display: block;
+    }
+
+    .performer-card-image {
+      aspect-ratio: 1 / 1;
+      border-radius: 50%;
+      display: block;
+      margin: 1.5rem auto 0.5rem;
+      min-width: 0;
+      object-position: top center;
+      width: calc(100% - 3rem);
+    }
+
+    .card-section {
+      text-align: center;
+    }
+
+    .card-section-title {
+      justify-content: center;
+    }
+  }
+
+  &:has(:focus-visible) .performer-card--spotlight {
+    box-shadow:
+      0 0 0 2px rgba($primary, 0.85),
+      0 0 1.25rem rgba($primary, 0.28);
+  }
+
+  @media (max-width: 576px) {
+    width: calc(100% - 10px);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .performer-card-motion {
+    transform: perspective(900px) rotateX(var(--performer-tilt-x))
+      rotateY(var(--performer-tilt-y)) scale(1.015);
+    transform-style: preserve-3d;
+    transition: transform 140ms ease-out;
+    will-change: transform;
+  }
+}
+/* stylelint-enable selector-class-pattern */
+
+
 .card {
   &.performer-card {
     padding: 0 0 1rem 0;

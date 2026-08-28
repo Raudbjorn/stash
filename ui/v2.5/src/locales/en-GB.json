@@ -1177,6 +1177,13 @@
       "performer_list": {
         "heading": "Performer List",
         "options": {
+          "card_style": {
+            "classic": "Classic",
+            "heading": "Performer card style",
+            "label_current": "Performer card style: {current}",
+            "portrait": "Portrait",
+            "spotlight": "Spotlight"
+          },
           "show_links_on_grid_card": {
             "heading": "Display links on performer grid cards"
           }

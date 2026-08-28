@@ -58,6 +58,7 @@ import { FavoritePerformerCriterionOption } from "src/models/list-filter/criteri
 import { SidebarBooleanFilter } from "../List/Filters/BooleanFilter";
 import { SidebarOptionFilter } from "../List/Filters/OptionFilter";
 import { GenderCriterionOption } from "src/models/list-filter/criteria/gender";
+import { PerformerCardStyleSelector } from "./PerformerCardStyleSelector";
 
 export const FormatHeight = (height?: number | null) => {
   const intl = useIntl();
@@ -559,14 +560,19 @@ export const FilteredPerformerList = PatchComponent(
     if (sidebarStateLoading) return null;
 
     const operations = (
-      <ListOperations
-        items={items.length}
-        hasSelection={hasSelection}
-        operations={otherOperations}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        operationsMenuClassName="gallery-list-operations-dropdown"
-      />
+      <div className="d-flex align-items-center">
+        {filter.displayMode === DisplayMode.Grid && (
+          <PerformerCardStyleSelector />
+        )}
+        <ListOperations
+          items={items.length}
+          hasSelection={hasSelection}
+          operations={otherOperations}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          operationsMenuClassName="gallery-list-operations-dropdown"
+        />
+      </div>
     );
 
     return (

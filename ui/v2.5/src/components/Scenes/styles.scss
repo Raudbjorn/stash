@@ -14,6 +14,76 @@
   }
 }
 
+.scene-card-dialog {
+  .modal-body {
+    overflow-x: hidden;
+  }
+}
+
+.scene-card-dialog-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+}
+
+a.scene-card-dialog-tile {
+  background-color: darken($card-bg, 3%);
+  border: 1px solid rgba($primary, 0.25);
+  border-radius: 0.25rem;
+  color: $text-color;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  text-decoration: none;
+  transition:
+    background-color 120ms ease-out,
+    border-color 120ms ease-out;
+
+  &:hover {
+    background-color: lighten($card-bg, 4%);
+    border-color: rgba($primary, 0.65);
+  }
+
+  &:focus-visible {
+    outline: 2px solid $primary;
+    outline-offset: 2px;
+  }
+}
+
+.scene-card-dialog-thumbnail,
+.scene-card-dialog-placeholder {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+}
+
+.scene-card-dialog-thumbnail {
+  display: block;
+  object-fit: cover;
+}
+
+.scene-card-dialog-placeholder {
+  align-items: center;
+  background-color: darken($card-bg, 8%);
+  color: $text-muted;
+  display: flex;
+  font-size: 2rem;
+  justify-content: center;
+}
+
+.scene-card-dialog-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  padding: 0.65rem 0.75rem 0.15rem;
+}
+
+.scene-card-dialog-timestamp {
+  color: $text-muted;
+  font-size: 0.875rem;
+  margin-top: auto;
+  padding: 0.15rem 0.75rem 0.65rem;
+}
+
 .video-section {
   position: relative;
 }
